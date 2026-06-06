@@ -32,6 +32,7 @@ yarn-error.log*
 .localtunnel*.log
 .cloudflared-tunnel*.log
 .playwright-mcp/
+.codex-automation/
 
 # local devcontainer SSH material
 .devcontainer/ssh/*_ed25519
