@@ -95,6 +95,12 @@ export default async function JobsPage({
                   </div>
                   <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
                   <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
+                  <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-4">
+                    <JobMeta label="単価" value={job.rate} />
+                    <JobMeta label="稼働率" value={job.workload} />
+                    <JobMeta label="契約期間" value={job.contractPeriod} />
+                    <JobMeta label="勤務地" value={job.location} />
+                  </div>
                   <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{job.description}</p>
                 </div>
                 <Link className="btn btn-secondary shrink-0" href={`/jobs/${job.id}`}>
@@ -112,5 +118,14 @@ export default async function JobsPage({
         </div>
       </div>
     </Shell>
+  );
+}
+
+function JobMeta({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="rounded border border-stone-200 bg-stone-50 px-3 py-2">
+      <p className="text-xs text-stone-500">{label}</p>
+      <p className="mt-1 truncate font-semibold">{value || "未設定"}</p>
+    </div>
   );
 }
