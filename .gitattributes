@@ -1,0 +1,4 @@
+*.cron text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+.devcontainer/ssh/authorized_keys text eol=lf
