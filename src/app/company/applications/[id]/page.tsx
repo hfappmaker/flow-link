@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { saveScreeningNote, screenApplication } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
+import { getFreelancerReadiness } from "@/lib/readiness";
 import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
 
@@ -23,6 +24,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   if (!application) {
     return <Shell><TopNav sessionRole={session?.user?.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>応募情報が見つかりません。</Card></div></Shell>;
   }
+  const readiness = getFreelancerReadiness(application.freelancerProfile);
+
   return (
     <Shell>
       <TopNav sessionRole={session?.user?.role} />
@@ -76,22 +79,49 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </div>
             </Card>
           </div>
-          <Card className="h-fit">
-            <h2 className="font-semibold">書類選考</h2>
-            <div className="mt-4 grid gap-3">
-              <form action={screenApplication}>
-                <input type="hidden" name="applicationId" value={application.id} />
-                <input type="hidden" name="status" value="screening_passed" />
-                <button className="btn btn-primary w-full" type="submit">書類選考OK</button>
-              </form>
-              <form action={screenApplication}>
-                <input type="hidden" name="applicationId" value={application.id} />
-                <input type="hidden" name="status" value="screening_rejected" />
-                <button className="btn btn-danger w-full" type="submit">書類選考NG</button>
-              </form>
-              {application.interviewThread && <Link className="btn btn-secondary" href={`/interviews/${application.interviewThread.id}`}>面談チャット</Link>}
-            </div>
-          </Card>
+          <div className="grid h-fit gap-5">
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">応募書類チェック</h2>
+                  <p className="mt-1 text-sm text-stone-600">選考前に確認する情報の充足状況です。</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold">{readiness.percent}%</p>
+                  <p className="text-xs text-stone-500">{readiness.completed}/{readiness.total}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {readiness.items.map((item) => (
+                  <div
+                    className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${
+                      item.done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+                    }`}
+                    key={item.key}
+                  >
+                    <span className="font-medium">{item.label}</span>
+                    <span className="text-xs font-semibold">{item.done ? "完了" : "未完了"}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <h2 className="font-semibold">書類選考</h2>
+              <div className="mt-4 grid gap-3">
+                <form action={screenApplication}>
+                  <input type="hidden" name="applicationId" value={application.id} />
+                  <input type="hidden" name="status" value="screening_passed" />
+                  <button className="btn btn-primary w-full" type="submit">書類選考OK</button>
+                </form>
+                <form action={screenApplication}>
+                  <input type="hidden" name="applicationId" value={application.id} />
+                  <input type="hidden" name="status" value="screening_rejected" />
+                  <button className="btn btn-danger w-full" type="submit">書類選考NG</button>
+                </form>
+                {application.interviewThread && <Link className="btn btn-secondary" href={`/interviews/${application.interviewThread.id}`}>面談チャット</Link>}
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </Shell>
