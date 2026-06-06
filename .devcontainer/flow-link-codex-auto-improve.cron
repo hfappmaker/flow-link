@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+*/20 * * * * node /workspaces/flow-link/scripts/codex-auto-improve.sh
