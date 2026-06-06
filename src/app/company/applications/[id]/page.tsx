@@ -81,6 +81,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           </div>
           <div className="grid h-fit gap-5">
             <Card>
+              <h2 className="font-semibold">応募概要</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <SummaryInfo label="応募日時" value={formatDateTime(application.appliedAt)} />
+                <SummaryInfo label="選考日時" value={formatDateTime(application.screenedAt)} />
+                <SummaryInfo label="稼働条件" value={application.freelancerProfile.availability} />
+                <SummaryInfo label="勤務地希望" value={application.freelancerProfile.preferredLocation} />
+                <SummaryInfo label="稼働開始" value={application.freelancerProfile.availableFrom} />
+              </dl>
+            </Card>
+            <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="font-semibold">応募書類チェック</h2>
@@ -133,6 +143,15 @@ function Info({ label, value }: { label: string; value?: string | null }) {
     <div>
       <dt className="text-stone-500">{label}</dt>
       <dd className="mt-1 font-medium">{value || "未設定"}</dd>
+    </div>
+  );
+}
+
+function SummaryInfo({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="rounded border border-stone-200 bg-stone-50 p-3">
+      <dt className="text-xs text-stone-500">{label}</dt>
+      <dd className="mt-1 break-words font-semibold">{value || "未設定"}</dd>
     </div>
   );
 }
