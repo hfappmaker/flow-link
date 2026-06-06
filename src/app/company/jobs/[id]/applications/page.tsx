@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { LinkProps } from "next/link";
 import type { JobApplicationStatus, Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -94,10 +95,7 @@ export default async function JobApplicationsPage({
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {statusTabs.map((tab) => {
-                const href =
-                  tab.value === "all"
-                    ? `/company/jobs/${job.id}/applications${keyword ? `?q=${encodeURIComponent(keyword)}` : ""}`
-                    : `/company/jobs/${job.id}/applications?status=${tab.value}${keyword ? `&q=${encodeURIComponent(keyword)}` : ""}`;
+                const href = applicationsHref(job.id, tab.value, keyword);
                 const count = tab.value === "all" ? total : countByStatus.get(tab.value) ?? 0;
                 return (
                   <Link
@@ -149,4 +147,14 @@ export default async function JobApplicationsPage({
       </div>
     </Shell>
   );
+}
+
+function applicationsHref(jobId: string, status: JobApplicationStatus | "all", keyword: string): LinkProps["href"] {
+  return {
+    pathname: `/company/jobs/${jobId}/applications`,
+    query: {
+      ...(status !== "all" ? { status } : {}),
+      ...(keyword ? { q: keyword } : {}),
+    },
+  };
 }
