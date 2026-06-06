@@ -1,0 +1,23 @@
+FROM node:24-bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        openssh-server \
+        postgresql-client \
+        procps \
+        ripgrep \
+        sudo \
+    && mkdir -p /var/run/sshd /etc/ssh/sshd_config.d \
+    && echo "node ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/node \
+    && chmod 0440 /etc/sudoers.d/node \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g vercel
+
+COPY sshd_config.conf /etc/ssh/sshd_config.d/flow-link.conf
+COPY entrypoint.sh /usr/local/bin/flow-link-devcontainer-entrypoint
+RUN chmod +x /usr/local/bin/flow-link-devcontainer-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/flow-link-devcontainer-entrypoint"]
+CMD ["/usr/sbin/sshd", "-D", "-e"]

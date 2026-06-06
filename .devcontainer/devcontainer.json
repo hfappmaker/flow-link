@@ -1,0 +1,33 @@
+{
+  "name": "flow-link",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/flow-link",
+  "remoteUser": "node",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [3000, 5555, 2222],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js dev server"
+    },
+    "5555": {
+      "label": "Prisma Studio"
+    },
+    "2222": {
+      "label": "SSH for Codex App"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "bradlc.vscode-tailwindcss",
+        "dbaeumer.vscode-eslint",
+        "Prisma.prisma"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

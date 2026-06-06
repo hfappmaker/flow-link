@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  freelancer
+  company_user
+}
+
+enum CompanyMemberRole {
+  admin
+  member
+}
+
+enum ResumeDocumentType {
+  resume
+  career_history
+}
+
+enum JobPostStatus {
+  draft
+  published
+  private
+  closed
+}
+
+enum ApplicationStatus {
+  open
+  paused
+}
+
+enum JobApplicationStatus {
+  applied
+  screening_passed
+  screening_rejected
+  withdrawn
+}
+
+enum NotificationType {
+  screening_passed
+  screening_rejected
+}
+
+enum InterviewThreadStatus {
+  open
+  scheduled
+  closed
+}
+
+enum InterviewMessageType {
+  text
+  proposed_time
+  accepted_time
+  meeting_url
+}
+
+model User {
+  id            String             @id @default(cuid())
+  email         String             @unique
+  passwordHash  String             @map("password_hash")
+  role          UserRole
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  freelancer    FreelancerProfile?
+  companyUser   CompanyUser?
+  notifications Notification[]
+  messages      InterviewMessage[]
+
+  @@map("users")
+}
+
+model FreelancerProfile {
+  id                  String           @id @default(cuid())
+  userId              String           @unique @map("user_id")
+  fullName            String           @map("full_name")
+  desiredOccupation   String?          @map("desired_occupation")
+  skills              String?
+  yearsOfExperience   Int?             @map("years_of_experience")
+  desiredRate         String?          @map("desired_rate")
+  availability        String?
+  availableFrom       String?          @map("available_from")
+  preferredLocation   String?          @map("preferred_location")
+  remotePreference    String?          @map("remote_preference")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents           ResumeDocument[]
+  careerHistory       CareerHistory?
+  applications        JobApplication[]
+
+  @@map("freelancer_profiles")
+}
+
+model ResumeDocument {
+  id                  String             @id @default(cuid())
+  freelancerProfileId String             @map("freelancer_profile_id")
+  documentType        ResumeDocumentType @map("document_type")
+  fileUrl             String             @map("file_url")
+  originalFilename    String             @map("original_filename")
+  uploadedAt          DateTime           @default(now()) @map("uploaded_at")
+  freelancerProfile   FreelancerProfile  @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([freelancerProfileId, documentType])
+  @@map("resume_documents")
+}
+
+model CareerHistory {
+  id                  String            @id @default(cuid())
+  freelancerProfileId String            @unique @map("freelancer_profile_id")
+  summary             String?
+  workExperiences     String?           @map("work_experiences")
+  projects            String?
+  certifications      String?
+  education           String?
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("career_histories")
+}
+
+model CompanyProfile {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  websiteUrl  String?       @map("website_url")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  users       CompanyUser[]
+  jobPosts    JobPost[]
+
+  @@map("company_profiles")
+}
+
+model CompanyUser {
+  id               String            @id @default(cuid())
+  userId           String            @unique @map("user_id")
+  companyProfileId String            @map("company_profile_id")
+  role             CompanyMemberRole @default(admin)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyProfile   CompanyProfile    @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  screenedApps     JobApplication[]  @relation("ScreenedBy")
+  notes            ScreeningNote[]
+
+  @@map("company_users")
+}
+
+model JobPost {
+  id                String               @id @default(cuid())
+  companyProfileId  String               @map("company_profile_id")
+  title             String
+  description       String
+  requiredSkills    String?              @map("required_skills")
+  preferredSkills   String?              @map("preferred_skills")
+  rate              String?
+  workload          String?
+  contractPeriod    String?              @map("contract_period")
+  location          String?
+  remotePolicy      String?              @map("remote_policy")
+  openings          Int?
+  status            JobPostStatus        @default(draft)
+  applicationStatus ApplicationStatus    @default(open) @map("application_status")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  companyProfile    CompanyProfile       @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  applications      JobApplication[]
+
+  @@map("job_posts")
+}
+
+model JobApplication {
+  id                      String               @id @default(cuid())
+  jobPostId               String               @map("job_post_id")
+  freelancerProfileId     String               @map("freelancer_profile_id")
+  status                  JobApplicationStatus @default(applied)
+  appliedAt               DateTime             @default(now()) @map("applied_at")
+  screenedAt              DateTime?            @map("screened_at")
+  screenedByCompanyUserId String?              @map("screened_by_company_user_id")
+  createdAt               DateTime             @default(now()) @map("created_at")
+  updatedAt               DateTime             @updatedAt @map("updated_at")
+  jobPost                 JobPost              @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  freelancerProfile       FreelancerProfile    @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  screenedBy              CompanyUser?         @relation("ScreenedBy", fields: [screenedByCompanyUserId], references: [id])
+  notes                   ScreeningNote[]
+  interviewThread         InterviewThread?
+
+  @@unique([jobPostId, freelancerProfileId])
+  @@map("job_applications")
+}
+
+model ScreeningNote {
+  id               String         @id @default(cuid())
+  jobApplicationId String         @map("job_application_id")
+  companyUserId    String         @map("company_user_id")
+  note             String
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  jobApplication   JobApplication @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+  companyUser      CompanyUser    @relation(fields: [companyUserId], references: [id], onDelete: Cascade)
+
+  @@map("screening_notes")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model InterviewThread {
+  id               String                @id @default(cuid())
+  jobApplicationId String                @unique @map("job_application_id")
+  status           InterviewThreadStatus @default(open)
+  scheduledAt      DateTime?             @map("scheduled_at")
+  meetingUrl       String?               @map("meeting_url")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  jobApplication   JobApplication        @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+  messages         InterviewMessage[]
+
+  @@map("interview_threads")
+}
+
+model InterviewMessage {
+  id                String               @id @default(cuid())
+  interviewThreadId String               @map("interview_thread_id")
+  senderUserId      String               @map("sender_user_id")
+  messageType       InterviewMessageType @default(text) @map("message_type")
+  body              String
+  proposedAt        DateTime?            @map("proposed_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  interviewThread   InterviewThread      @relation(fields: [interviewThreadId], references: [id], onDelete: Cascade)
+  sender            User                 @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+
+  @@map("interview_messages")
+}
