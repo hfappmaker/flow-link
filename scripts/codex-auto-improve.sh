@@ -73,7 +73,7 @@ PROMPT_EOF
 log "Running Codex CLI"
 "$CODEX_BIN" exec \
   --cd "$REPO_DIR" \
-  --sandbox workspace-write \
+  --dangerously-bypass-approvals-and-sandbox \
   --output-last-message "$LAST_MESSAGE_FILE" \
   "$PROMPT"
 
