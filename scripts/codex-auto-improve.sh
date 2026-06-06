@@ -49,6 +49,10 @@ fi
 git fetch "$REMOTE" "$BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
 
+if ! git push --dry-run "$REMOTE" "HEAD:$BRANCH" >/dev/null; then
+  fail "Git push dry-run failed. Configure GitHub push auth before running automation."
+fi
+
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   log "DRY_RUN=1; prerequisites passed. Skipping Codex, commit, and push."
   exit 0

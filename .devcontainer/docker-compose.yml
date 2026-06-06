@@ -14,6 +14,7 @@ services:
       - flow-link-codex-home:/home/node/.codex
       - flow-link-claude-home:/home/node/.claude
       - flow-link-npm-cache:/home/node/.npm
+      - flow-link-ssh-host-keys:/etc/ssh/flow-link-host-keys
     ports:
       - "127.0.0.1:2222:22"
       - "127.0.0.1:3000:3000"
@@ -28,3 +29,4 @@ volumes:
   flow-link-codex-home:
   flow-link-claude-home:
   flow-link-npm-cache:
+  flow-link-ssh-host-keys:
