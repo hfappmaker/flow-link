@@ -13,7 +13,7 @@ RUN apt-get update \
     && chmod 0440 /etc/sudoers.d/node \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g vercel
+RUN npm install -g vercel @openai/codex
 
 COPY sshd_config.conf /etc/ssh/sshd_config.d/flow-link.conf
 COPY entrypoint.sh /usr/local/bin/flow-link-devcontainer-entrypoint
