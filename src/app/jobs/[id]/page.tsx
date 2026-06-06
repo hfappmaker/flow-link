@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { applyToJob } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
+import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,17 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         })
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
+  const existingApplication = freelancerProfile
+    ? await prisma.jobApplication.findUnique({
+        where: {
+          jobPostId_freelancerProfileId: {
+            jobPostId: id,
+            freelancerProfileId: freelancerProfile.id,
+          },
+        },
+        include: { interviewThread: true },
+      })
+    : null;
 
   if (!job) {
     return (
@@ -59,7 +71,23 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </dl>
           </Card>
           <Card>
-            {session?.user?.role === "freelancer" && job.applicationStatus === "open" && readiness.isReady ? (
+            {existingApplication ? (
+              <div>
+                <StatusBadge tone={existingApplication.status === "screening_passed" ? "good" : existingApplication.status === "screening_rejected" ? "bad" : "neutral"}>
+                  {applicationStatusLabel(existingApplication.status)}
+                </StatusBadge>
+                <p className="mt-3 font-semibold">この案件には応募済みです</p>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  応募日時: {formatDateTime(existingApplication.appliedAt)}
+                </p>
+                <div className="mt-4 grid gap-2">
+                  {existingApplication.interviewThread && (
+                    <Link className="btn btn-primary" href={`/interviews/${existingApplication.interviewThread.id}`}>面談チャット</Link>
+                  )}
+                  <Link className="btn btn-secondary" href="/freelancer/applications">応募済み案件を見る</Link>
+                </div>
+              </div>
+            ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" && readiness.isReady ? (
               <form action={applyToJob} className="grid gap-3">
                 <input type="hidden" name="jobPostId" value={job.id} />
                 <button className="btn btn-primary" type="submit">この案件に応募</button>

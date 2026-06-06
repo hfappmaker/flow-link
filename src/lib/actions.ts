@@ -263,6 +263,17 @@ export async function applyToJob(formData: FormData) {
   if (!job || job.status !== "published" || job.applicationStatus !== "open") {
     throw new Error("この案件には応募できません。");
   }
+  const existingApplication = await prisma.jobApplication.findUnique({
+    where: {
+      jobPostId_freelancerProfileId: {
+        jobPostId,
+        freelancerProfileId: profile.id,
+      },
+    },
+  });
+  if (existingApplication) {
+    throw new Error("この案件には応募済みです。");
+  }
 
   await prisma.jobApplication.create({
     data: {
