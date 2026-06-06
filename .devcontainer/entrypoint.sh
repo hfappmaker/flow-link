@@ -33,13 +33,4 @@ chown -R node:node "$node_ssh_dir"
 chmod 700 "$node_ssh_dir"
 chmod 600 "$node_authorized_keys"
 
-if [ -f "$workspace/.devcontainer/flow-link-codex-auto-improve.cron" ]; then
-  cp "$workspace/.devcontainer/flow-link-codex-auto-improve.cron" /etc/cron.d/flow-link-codex-auto-improve
-  chmod 0644 /etc/cron.d/flow-link-codex-auto-improve
-fi
-if command -v crontab >/dev/null 2>&1; then
-  su node -s /bin/bash -c "crontab -l 2>/dev/null | grep -v 'flow-link-codex-auto-improve' | crontab -" >/dev/null 2>&1 || true
-fi
-service cron start >/dev/null 2>&1 || true
-
 exec "$@"
