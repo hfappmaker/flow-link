@@ -10,14 +10,16 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; remote?: string }>;
+  searchParams: Promise<{ q?: string; remote?: string; accepting?: string }>;
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
   const remote = filters.remote === "remote";
+  const accepting = filters.accepting === "open";
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const where: Prisma.JobPostWhereInput = {
     status: "published",
+    ...(accepting ? { applicationStatus: "open" } : {}),
     ...(remote
       ? {
           remotePolicy: {
@@ -55,7 +57,7 @@ export default async function JobsPage({
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="公開中のフリーランス案件を確認できます。応募にはログインが必要です。" />
         <Card className="mt-6">
-          <form className="grid gap-3 md:grid-cols-[1fr_180px_auto_auto]" action="/jobs">
+          <form className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto_auto]" action="/jobs">
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               キーワード
               <input
@@ -76,11 +78,22 @@ export default async function JobsPage({
                 <option value="remote">リモート可</option>
               </select>
             </label>
+            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+              応募受付
+              <select
+                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                name="accepting"
+                defaultValue={accepting ? "open" : ""}
+              >
+                <option value="">すべて</option>
+                <option value="open">受付中のみ</option>
+              </select>
+            </label>
             <button className="btn btn-primary self-end" type="submit">検索</button>
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}
+            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}
           </p>
         </Card>
         <div className="mt-6 grid gap-4">
