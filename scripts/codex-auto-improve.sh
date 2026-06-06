@@ -9,6 +9,7 @@ LOCK_FILE="${LOCK_FILE:-$REPO_DIR/.codex-automation/auto-improve.lock}"
 LAST_MESSAGE_FILE="${LAST_MESSAGE_FILE:-$REPO_DIR/.codex-automation/last-message.md}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 NODE_BIN_DIR="${NODE_BIN_DIR:-/usr/local/bin}"
+ENV_FILE="${ENV_FILE:-$REPO_DIR/.devcontainer/.env}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_FILE="$LOG_DIR/$TIMESTAMP.log"
 
@@ -31,6 +32,14 @@ cd "$REPO_DIR"
 
 log "Starting Codex auto-improve run in $REPO_DIR"
 
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+  log "Loaded environment from $ENV_FILE"
+fi
+
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   log "Another auto-improve run is already active; exiting."
@@ -48,6 +57,13 @@ fi
 
 git fetch "$REMOTE" "$BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
+
+if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
+  git config --global credential.helper store
+  printf 'protocol=https\nhost=github.com\npath=hfappmaker/flow-link.git\nusername=%s\npassword=%s\n\n' \
+    "${GITHUB_USERNAME:-x-access-token}" \
+    "${GITHUB_TOKEN:-${GH_TOKEN:-}}" | git credential approve
+fi
 
 if ! git push --dry-run "$REMOTE" "HEAD:$BRANCH" >/dev/null; then
   fail "Git push dry-run failed. Configure GitHub push auth before running automation."

@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    env_file:
+      - .env
     init: true
     volumes:
       - ..:/workspaces/flow-link:cached
