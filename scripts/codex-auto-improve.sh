@@ -74,7 +74,7 @@ if [[ "${DRY_RUN:-0}" == "1" ]]; then
   exit 0
 fi
 
-PROMPT=$(cat <<'PROMPT_EOF'
+PROMPT=$(cat <<PROMPT_EOF
 You are running as a scheduled local automation for this repository.
 
 Goal:
@@ -84,7 +84,10 @@ Goal:
 - Keep the change narrowly scoped.
 - If you touch Next.js code, first read the relevant guide in node_modules/next/dist/docs/ because this project uses a Next.js version with breaking changes.
 - Run relevant verification commands such as npm run typecheck, npm run lint, and/or npm run build when appropriate.
-- Do not commit or push; the wrapper script will handle git.
+- If you make changes, commit and push them yourself from inside this Codex run.
+- Use commit subject: chore: automated improvement $TIMESTAMP
+- Push with: git push $REMOTE HEAD:$BRANCH
+- Do not amend existing commits.
 
 If there is no safe worthwhile change, leave the working tree unchanged and explain why.
 PROMPT_EOF
@@ -98,36 +101,17 @@ log "Running Codex CLI"
   "$PROMPT"
 
 if [[ -z "$(git status --porcelain)" ]]; then
-  log "Codex made no changes."
-  exit 0
-fi
-
-log "Changes after Codex run:"
-git status --short
-
-if npm run typecheck; then
-  log "typecheck passed"
+  log "Codex left the working tree clean."
 else
-  fail "typecheck failed; leaving changes uncommitted for inspection."
+  log "Codex left uncommitted changes:"
+  git status --short
+  fail "Codex must commit and push its own changes."
 fi
 
-if npm run lint; then
-  log "lint passed"
-else
-  fail "lint failed; leaving changes uncommitted for inspection."
+local_head="$(git rev-parse HEAD)"
+remote_head="$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" | awk '{print $1}')"
+if [[ "$local_head" != "$remote_head" ]]; then
+  fail "Local HEAD $local_head is not pushed to $REMOTE/$BRANCH ($remote_head)."
 fi
 
-git add -A
-
-if git diff --cached --quiet; then
-  log "No staged changes after git add."
-  exit 0
-fi
-
-commit_subject="chore: automated improvement $TIMESTAMP"
-commit_body="$(cat "$LAST_MESSAGE_FILE" 2>/dev/null || true)"
-
-git commit -m "$commit_subject" -m "$commit_body"
-git push "$REMOTE" "HEAD:$BRANCH"
-
-log "Committed and pushed to $REMOTE/$BRANCH"
+log "Codex completed with HEAD pushed to $REMOTE/$BRANCH"
