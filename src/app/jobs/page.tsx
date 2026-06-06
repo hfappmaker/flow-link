@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { skillPreview } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -84,30 +85,7 @@ export default async function JobsPage({
         </Card>
         <div className="mt-6 grid gap-4">
           {jobs.map((job) => (
-            <Card key={job.id}>
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="flex flex-wrap gap-2">
-                    <StatusBadge tone={job.applicationStatus === "open" ? "good" : "warn"}>
-                      {job.applicationStatus === "open" ? "受付中" : "受付停止"}
-                    </StatusBadge>
-                    <StatusBadge>{job.remotePolicy ?? "勤務形態未設定"}</StatusBadge>
-                  </div>
-                  <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
-                  <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
-                  <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-4">
-                    <JobMeta label="単価" value={job.rate} />
-                    <JobMeta label="稼働率" value={job.workload} />
-                    <JobMeta label="契約期間" value={job.contractPeriod} />
-                    <JobMeta label="勤務地" value={job.location} />
-                  </div>
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{job.description}</p>
-                </div>
-                <Link className="btn btn-secondary shrink-0" href={`/jobs/${job.id}`}>
-                  詳細 {icons.arrow}
-                </Link>
-              </div>
-            </Card>
+            <JobCard job={job} key={job.id} />
           ))}
           {jobs.length === 0 && (
             <Card>
@@ -118,6 +96,48 @@ export default async function JobsPage({
         </div>
       </div>
     </Shell>
+  );
+}
+
+type JobWithCompany = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+
+function JobCard({ job }: { job: JobWithCompany }) {
+  const requiredSkills = skillPreview(job.requiredSkills);
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={job.applicationStatus === "open" ? "good" : "warn"}>
+              {job.applicationStatus === "open" ? "受付中" : "受付停止"}
+            </StatusBadge>
+            <StatusBadge>{job.remotePolicy ?? "勤務形態未設定"}</StatusBadge>
+          </div>
+          <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
+          <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
+          <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-4">
+            <JobMeta label="単価" value={job.rate} />
+            <JobMeta label="稼働率" value={job.workload} />
+            <JobMeta label="契約期間" value={job.contractPeriod} />
+            <JobMeta label="勤務地" value={job.location} />
+          </div>
+          {requiredSkills.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {requiredSkills.map((skill, index) => (
+                <span className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700" key={`${skill}-${index}`}>
+                  {skill}
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{job.description}</p>
+        </div>
+        <Link className="btn btn-secondary shrink-0" href={`/jobs/${job.id}`}>
+          詳細 {icons.arrow}
+        </Link>
+      </div>
+    </Card>
   );
 }
 

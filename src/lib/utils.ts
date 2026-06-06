@@ -21,6 +21,15 @@ export function formatDateTime(value: Date | string | null | undefined) {
   }).format(new Date(value));
 }
 
+export function skillPreview(value: string | null | undefined, limit = 3) {
+  if (!value) return [];
+  return value
+    .split(/[\n,、／/]+/)
+    .map((skill) => skill.trim())
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 export function applicationStatusLabel(status: string) {
   const labels: Record<string, string> = {
     applied: "応募済み",
