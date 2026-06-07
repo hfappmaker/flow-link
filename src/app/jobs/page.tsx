@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { skillPreview } from "@/lib/utils";
+import { formatOpenings, skillPreview } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -129,11 +129,12 @@ function JobCard({ job }: { job: JobWithCompany }) {
           </div>
           <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
           <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
-          <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-5">
             <JobMeta label="単価" value={job.rate} />
             <JobMeta label="稼働率" value={job.workload} />
             <JobMeta label="契約期間" value={job.contractPeriod} />
             <JobMeta label="勤務地" value={job.location} />
+            <JobMeta label="募集人数" value={formatOpenings(job.openings)} />
           </div>
           {requiredSkills.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">

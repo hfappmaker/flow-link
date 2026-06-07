@@ -30,6 +30,10 @@ export function skillPreview(value: string | null | undefined, limit = 3) {
     .slice(0, limit);
 }
 
+export function formatOpenings(value: number | null | undefined) {
+  return value ? `${value}名` : "未設定";
+}
+
 export function applicationStatusLabel(status: string) {
   const labels: Record<string, string> = {
     applied: "応募済み",

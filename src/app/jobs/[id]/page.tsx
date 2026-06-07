@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { applyToJob } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
+import { applicationStatusLabel, formatDateTime, formatOpenings } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +68,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <Info label="稼働率" value={job.workload} />
               <Info label="契約期間" value={job.contractPeriod} />
               <Info label="勤務地" value={job.location} />
+              <Info label="募集人数" value={formatOpenings(job.openings)} />
             </dl>
           </Card>
           <Card>
