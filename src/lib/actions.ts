@@ -14,7 +14,7 @@ import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth, signIn, signOut } from "@/lib/auth";
+import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { toOptionalText, toText } from "@/lib/utils";
@@ -97,11 +97,20 @@ export async function registerUser(formData: FormData) {
 }
 
 export async function loginUser(formData: FormData) {
+  const email = toText(formData.get("email")).toLowerCase();
+  const password = toText(formData.get("password"));
+  const callbackUrl = toText(formData.get("callbackUrl")) || "/";
+
+  const user = await authorizeCredentials({ email, password });
+  if (!user) {
+    redirect("/login?error=CredentialsSignin");
+  }
+
   try {
     await signIn("credentials", {
-      email: toText(formData.get("email")).toLowerCase(),
-      password: toText(formData.get("password")),
-      redirectTo: toText(formData.get("callbackUrl")) || "/",
+      email,
+      password,
+      redirectTo: callbackUrl,
     });
   } catch (error) {
     if (error instanceof AuthError) {

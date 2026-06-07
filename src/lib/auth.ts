@@ -10,6 +10,26 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
+export async function authorizeCredentials(credentials: unknown) {
+  const parsed = credentialsSchema.safeParse(credentials);
+  if (!parsed.success) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { email: parsed.data.email.toLowerCase() },
+  });
+  if (!user) return null;
+
+  const valid = await compare(parsed.data.password, user.passwordHash);
+  if (!valid) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.email,
+  };
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt" },
@@ -23,23 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: {},
       },
       async authorize(credentials) {
-        const parsed = credentialsSchema.safeParse(credentials);
-        if (!parsed.success) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email.toLowerCase() },
-        });
-        if (!user) return null;
-
-        const valid = await compare(parsed.data.password, user.passwordHash);
-        if (!valid) return null;
-
-        return {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          name: user.email,
-        };
+        return authorizeCredentials(credentials);
       },
     }),
   ],
