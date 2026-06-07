@@ -100,7 +100,7 @@ export default async function CompanyDashboard() {
             <EmptyState
               title="連絡待ちの応募者はいません。"
               description="公開中かつ受付中の案件に未選考の応募が届くと、ここに優先順で表示されます。"
-              action={<Link className="btn btn-primary" href="/company/jobs/new">案件を作成</Link>}
+              action={<Link className="btn btn-primary" href="/company/jobs/create">案件を作成</Link>}
             />
           )}
         </section>

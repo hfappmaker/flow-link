@@ -18,7 +18,7 @@ export default async function CompanyJobsPage() {
     <Shell>
       <TopNav sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
-        <PageHeader title="案件一覧" action={<Link className="btn btn-primary" href="/company/jobs/new">案件作成</Link>} />
+        <PageHeader title="案件一覧" action={<Link className="btn btn-primary" href="/company/jobs/create">案件作成</Link>} />
         <div className="mt-6 grid gap-4">
           {jobs.map((job) => {
             const pendingApplications = job.applications.filter((application) => application.status === "applied").length;
@@ -50,7 +50,7 @@ export default async function CompanyJobsPage() {
             <EmptyState
               title="案件はまだありません。"
               description="最初の案件を作成すると、公開状態や応募状況をここで確認できます。"
-              action={<Link className="btn btn-primary" href="/company/jobs/new">案件作成</Link>}
+              action={<Link className="btn btn-primary" href="/company/jobs/create">案件作成</Link>}
             />
           )}
         </div>

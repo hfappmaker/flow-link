@@ -3,7 +3,7 @@ import { saveJobPost } from "@/lib/actions";
 import { Shell, TopNav, PageHeader, Card } from "@/components/ui";
 import { JobPostForm } from "../parts";
 
-export default async function NewJobPage() {
+export default async function CreateJobPage() {
   const session = await auth();
   return (
     <Shell>
