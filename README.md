@@ -24,7 +24,7 @@ npm run dev
 `.env.local` に以下を設定してください。
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/flow_link?schema=public"
+DATABASE_URL="postgresql://flowlink:flowlink@db:5432/flow_link?schema=public"
 AUTH_SECRET="replace-with-a-long-random-secret"
 AUTH_TRUST_HOST="true"
 BLOB_READ_WRITE_TOKEN="vercel-blob-token"

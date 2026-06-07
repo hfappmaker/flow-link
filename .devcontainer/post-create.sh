@@ -14,6 +14,16 @@ fi
 
 npm run prisma:generate
 
+if [ -n "${DATABASE_URL:-}" ]; then
+  for _ in $(seq 1 30); do
+    if pg_isready -d "$DATABASE_URL" >/dev/null 2>&1; then
+      npx prisma migrate deploy
+      break
+    fi
+    sleep 1
+  done
+fi
+
 if command -v gh >/dev/null 2>&1; then
   github_token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
   if [ -n "$github_token" ] && ! gh auth status >/dev/null 2>&1; then
