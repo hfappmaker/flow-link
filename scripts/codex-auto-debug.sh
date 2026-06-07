@@ -95,7 +95,7 @@ Required investigation:
   - run npm run typecheck and npm run lint as needed
   - run NODE_ENV=production npm run build when relevant
   - start the app locally with npm run dev or npm run start when feasible
-- Exercise realistic flows in a browser when browser automation is available. Prefer Playwright or another real browser automation path if available in the environment. If a browser is unavailable, use HTTP checks as a fallback and explain that limitation.
+- Exercise realistic flows in a real browser with Playwright. The repository includes @playwright/test; use Playwright scripts or npx playwright where appropriate. In this devcontainer, launch Chromium with headless mode and sandbox disabled, for example `chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] })`. If the browser cannot launch, capture the failure and use HTTP checks only as a fallback.
 - Cover at least the high-risk flows when feasible: register, login, public jobs list/detail, freelancer profile/document upload, company job create/edit, application submit, and document access.
 
 Fix policy:

@@ -12,6 +12,9 @@ else
   npm install
 fi
 
+sudo npx playwright install-deps chromium
+npx playwright install chromium
+
 npm run prisma:generate
 
 if [ -n "${DATABASE_URL:-}" ]; then
