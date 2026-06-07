@@ -38,6 +38,38 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const company = jobPost.companyProfile;
   const readiness = getFreelancerReadiness(freelancer);
   const requiredSkillMatches = matchedSkills(jobPost.requiredSkills, freelancer.skills);
+  const directDealChecks = [
+    {
+      label: "双方の基本情報",
+      detail: company.websiteUrl ? "企業サイトとフリーランスプロフィールを確認できます。" : "企業サイトが未登録です。",
+      done: Boolean(company.websiteUrl && freelancer.fullName),
+    },
+    {
+      label: "応募時の提案条件",
+      detail:
+        thread.jobApplication.proposedStart && thread.jobApplication.contactPreference
+          ? "開始目安と連絡希望が応募時に共有されています。"
+          : "開始目安または連絡希望が未設定です。",
+      done: Boolean(thread.jobApplication.proposedStart && thread.jobApplication.contactPreference),
+    },
+    {
+      label: "契約・支払い条件",
+      detail: jobPost.contractTerms ? "企業が直接契約の前提を公開しています。" : "契約・支払い条件が未設定です。",
+      done: Boolean(jobPost.contractTerms),
+    },
+    {
+      label: "面談日時",
+      detail: thread.scheduledAt ? `${formatDateTime(thread.scheduledAt)}で確定済みです。` : "候補日時の提案または承諾が必要です。",
+      done: Boolean(thread.scheduledAt),
+    },
+    {
+      label: "会議URL",
+      detail: thread.meetingUrl ? "会議URLが共有されています。" : "確定後に会議URLを共有してください。",
+      done: Boolean(thread.meetingUrl),
+    },
+  ];
+  const completedDealChecks = directDealChecks.filter((item) => item.done).length;
+  const dealReadinessPercent = Math.round((completedDealChecks / directDealChecks.length) * 100);
   const nextAction =
     thread.status === "scheduled"
       ? hasMeetingUrl
@@ -161,6 +193,28 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             )}
 
             <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">直接成約レディネス</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    面談から直接契約へ進む前に、双方で揃える情報を確認できます。
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold">{dealReadinessPercent}%</p>
+                  <p className="text-xs text-stone-500">
+                    {completedDealChecks}/{directDealChecks.length}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {directDealChecks.map((item) => (
+                  <DealReadinessItem detail={item.detail} done={item.done} key={item.label} label={item.label} />
+                ))}
+              </div>
+            </Card>
+
+            <Card>
               <h2 className="font-semibold">次のアクション</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">{nextAction}</p>
               <dl className="mt-4 grid gap-3 text-sm">
@@ -230,6 +284,22 @@ function TrustSignal({ label, value, done }: { label: string; value: string; don
     >
       <span className="font-medium">{label}</span>
       <span className="text-xs font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function DealReadinessItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs font-semibold">{done ? "完了" : "要確認"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{detail}</p>
     </div>
   );
 }
