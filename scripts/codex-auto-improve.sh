@@ -85,7 +85,9 @@ Goal:
 - If you touch Next.js code, first read the relevant guide in node_modules/next/dist/docs/ because this project uses a Next.js version with breaking changes.
 - Run relevant verification commands such as npm run typecheck, npm run lint, and/or npm run build when appropriate.
 - If you make changes, commit and push them yourself from inside this Codex run.
-- Use commit subject: chore: automated improvement $TIMESTAMP
+- Choose a concise, specific commit subject yourself after reviewing the final diff.
+- Use Conventional Commit style when it fits, such as "fix:", "feat:", "refactor:", "docs:", "test:", or "chore:".
+- Do not use a generic timestamp-only or "automated improvement" commit subject.
 - Push with: git push $REMOTE HEAD:$BRANCH
 - Do not amend existing commits.
 
