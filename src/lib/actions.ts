@@ -6,6 +6,7 @@ import {
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
+  Prisma,
   ResumeDocumentType,
   UserRole,
 } from "@prisma/client";
@@ -52,33 +53,41 @@ export async function registerUser(formData: FormData) {
     throw new Error("登録内容を確認してください。");
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash: await hash(password, 12),
-      role,
-      freelancer:
-        role === "freelancer"
-          ? {
-              create: {
-                fullName: toText(formData.get("name")) || email,
-              },
-            }
-          : undefined,
-      companyUser:
-        role === "company_user"
-          ? {
-              create: {
-                companyProfile: {
-                  create: {
-                    name: toText(formData.get("name")) || "未設定の企業",
+  let user;
+  try {
+    user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash: await hash(password, 12),
+        role,
+        freelancer:
+          role === "freelancer"
+            ? {
+                create: {
+                  fullName: toText(formData.get("name")) || email,
+                },
+              }
+            : undefined,
+        companyUser:
+          role === "company_user"
+            ? {
+                create: {
+                  companyProfile: {
+                    create: {
+                      name: toText(formData.get("name")) || "未設定の企業",
+                    },
                   },
                 },
-              },
-            }
-          : undefined,
-    },
-  });
+              }
+            : undefined,
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      redirect("/register?error=email-exists");
+    }
+    throw error;
+  }
 
   await signIn("credentials", {
     email: user.email,
