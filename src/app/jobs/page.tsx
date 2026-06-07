@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { formatOpenings, skillPreview } from "@/lib/utils";
+import { getFreelancerReadiness } from "@/lib/readiness";
+import { formatOpenings, matchedSkills, parseSkills, skillPreview } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,30 @@ export default async function JobsPage({
         })
         .catch(() => [])
     : [];
+  const freelancerProfile =
+    process.env.DATABASE_URL && session?.user?.role === "freelancer"
+      ? await prisma.freelancerProfile
+          .findUnique({
+            where: { userId: session.user.id },
+            include: { documents: true, careerHistory: true },
+          })
+          .catch(() => null)
+      : null;
+  const readiness = getFreelancerReadiness(freelancerProfile);
+  const appliedJobIds =
+    freelancerProfile && jobs.length > 0
+      ? new Set(
+          (
+            await prisma.jobApplication.findMany({
+              where: {
+                freelancerProfileId: freelancerProfile.id,
+                jobPostId: { in: jobs.map((job) => job.id) },
+              },
+              select: { jobPostId: true },
+            })
+          ).map((application) => application.jobPostId),
+        )
+      : new Set<string>();
 
   return (
     <Shell>
@@ -98,7 +123,13 @@ export default async function JobsPage({
         </Card>
         <div className="mt-6 grid gap-4">
           {jobs.map((job) => (
-            <JobCard job={job} key={job.id} />
+            <JobCard
+              applied={appliedJobIds.has(job.id)}
+              freelancerProfile={freelancerProfile}
+              job={job}
+              key={job.id}
+              readinessPercent={readiness.percent}
+            />
           ))}
           {jobs.length === 0 && (
             <EmptyState
@@ -114,9 +145,26 @@ export default async function JobsPage({
 }
 
 type JobWithCompany = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
 
-function JobCard({ job }: { job: JobWithCompany }) {
+function JobCard({
+  applied,
+  freelancerProfile,
+  job,
+  readinessPercent,
+}: {
+  applied: boolean;
+  freelancerProfile: FreelancerForMatch | null;
+  job: JobWithCompany;
+  readinessPercent: number;
+}) {
   const requiredSkills = skillPreview(job.requiredSkills);
+  const requiredSkillCount = parseSkills(job.requiredSkills).length;
+  const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
+  const matchPercent =
+    freelancerProfile && requiredSkillCount > 0
+      ? Math.round((requiredSkillMatches.length / requiredSkillCount) * 100)
+      : null;
 
   return (
     <Card>
@@ -147,6 +195,30 @@ function JobCard({ job }: { job: JobWithCompany }) {
             </div>
           )}
           <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{job.description}</p>
+          {freelancerProfile && (
+            <div className="mt-4 rounded border border-emerald-100 bg-emerald-50/60 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone={applied ? "good" : job.applicationStatus === "open" ? "neutral" : "warn"}>
+                  {applied ? "応募済み" : job.applicationStatus === "open" ? "直接応募可" : "受付停止"}
+                </StatusBadge>
+                <StatusBadge tone={readinessPercent === 100 ? "good" : "warn"}>
+                  応募準備 {readinessPercent}%
+                </StatusBadge>
+                {matchPercent !== null && (
+                  <StatusBadge tone={matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
+                    必須一致 {matchPercent}%
+                  </StatusBadge>
+                )}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-stone-700">
+                {requiredSkillCount === 0
+                  ? "必須スキル未設定のため、詳細画面で条件を確認して企業へ直接提案できます。"
+                  : requiredSkillMatches.length > 0
+                    ? `一致: ${requiredSkillMatches.slice(0, 4).join("、")}`
+                    : "プロフィールのスキルと必須スキルの一致はまだ見つかっていません。"}
+              </p>
+            </div>
+          )}
         </div>
         <Link className="btn btn-secondary shrink-0" href={`/jobs/${job.id}`}>
           詳細 {icons.arrow}

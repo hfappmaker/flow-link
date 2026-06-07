@@ -22,12 +22,20 @@ export function formatDateTime(value: Date | string | null | undefined) {
 }
 
 export function skillPreview(value: string | null | undefined, limit = 3) {
+  return parseSkills(value).slice(0, limit);
+}
+
+export function parseSkills(value: string | null | undefined) {
   if (!value) return [];
-  return value
+  return Array.from(new Set(value
     .split(/[\n,、／/]+/)
     .map((skill) => skill.trim())
-    .filter(Boolean)
-    .slice(0, limit);
+    .filter(Boolean)));
+}
+
+export function matchedSkills(requiredSkills: string | null | undefined, freelancerSkills: string | null | undefined) {
+  const freelancerSkillSet = new Set(parseSkills(freelancerSkills).map((skill) => skill.toLowerCase()));
+  return parseSkills(requiredSkills).filter((skill) => freelancerSkillSet.has(skill.toLowerCase()));
 }
 
 export function formatOpenings(value: number | null | undefined) {

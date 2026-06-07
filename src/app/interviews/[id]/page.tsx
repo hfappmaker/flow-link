@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { sendInterviewMessage } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { formatDateTime, formatOpenings, skillPreview } from "@/lib/utils";
+import { formatDateTime, formatOpenings, matchedSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const jobPost = thread.jobApplication.jobPost;
   const company = jobPost.companyProfile;
   const readiness = getFreelancerReadiness(freelancer);
-  const matchedSkills = getMatchedSkills(jobPost.requiredSkills, freelancer.skills);
+  const requiredSkillMatches = matchedSkills(jobPost.requiredSkills, freelancer.skills);
   const nextAction =
     thread.status === "scheduled"
       ? hasMeetingUrl
@@ -110,11 +110,11 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                 <TrustSignal label="職務経歴フォーム" value={freelancer.careerHistory ? "登録済み" : "未登録"} done={Boolean(freelancer.careerHistory)} />
               </div>
 
-              {matchedSkills.length > 0 && (
+              {requiredSkillMatches.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-medium text-stone-500">必須スキルとの一致</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {matchedSkills.map((skill) => (
+                    {requiredSkillMatches.map((skill) => (
                       <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800" key={skill}>
                         {skill}
                       </span>
@@ -214,9 +214,4 @@ function TrustSignal({ label, value, done }: { label: string; value: string; don
       <span className="text-xs font-semibold">{value}</span>
     </div>
   );
-}
-
-function getMatchedSkills(requiredSkills: string | null, freelancerSkills: string | null | undefined) {
-  const freelancerSkillSet = new Set(skillPreview(freelancerSkills, 20).map((skill) => skill.toLowerCase()));
-  return skillPreview(requiredSkills, 20).filter((skill) => freelancerSkillSet.has(skill.toLowerCase()));
 }
