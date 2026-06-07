@@ -3,7 +3,7 @@ import type { LinkProps } from "next/link";
 import type { JobApplicationStatus, Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
+import { applicationStatusLabel, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -116,33 +116,7 @@ export default async function JobApplicationsPage({
         )}
         <div className="mt-6 grid gap-4">
           {job?.applications.map((application) => (
-            <Card key={application.id}>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <StatusBadge tone={application.status === "screening_passed" ? "good" : application.status === "screening_rejected" ? "bad" : "neutral"}>
-                    {applicationStatusLabel(application.status)}
-                  </StatusBadge>
-                  <h2 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h2>
-                  <p className="text-sm text-stone-500">{application.freelancerProfile.desiredOccupation ?? "希望職種未設定"}</p>
-                  {application.proposalMessage && (
-                    <p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <StatusBadge tone={application.freelancerProfile.documents.length >= 2 ? "good" : "warn"}>
-                      PDF {application.freelancerProfile.documents.length}/2
-                    </StatusBadge>
-                    <StatusBadge tone={application.freelancerProfile.careerHistory ? "good" : "warn"}>
-                      職務経歴{application.freelancerProfile.careerHistory ? "あり" : "未登録"}
-                    </StatusBadge>
-                    <StatusBadge tone={application.proposalMessage ? "good" : "warn"}>
-                      直接提案{application.proposalMessage ? "あり" : "未登録"}
-                    </StatusBadge>
-                    <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
-                  </div>
-                </div>
-                <Link className="btn btn-primary" href={`/company/applications/${application.id}`}>詳細</Link>
-              </div>
-            </Card>
+            <ApplicationCard application={application} job={job} key={application.id} />
           ))}
           {job?.applications.length === 0 && (
             <EmptyState
@@ -155,6 +129,79 @@ export default async function JobApplicationsPage({
         </div>
       </div>
     </Shell>
+  );
+}
+
+type JobWithApplications = Prisma.JobPostGetPayload<{
+  include: {
+    applications: {
+      include: {
+        freelancerProfile: {
+          include: {
+            careerHistory: true;
+            documents: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+type ApplicationWithProfile = JobWithApplications["applications"][number];
+
+function ApplicationCard({ application, job }: { application: ApplicationWithProfile; job: JobWithApplications }) {
+  const requiredSkills = parseSkills(job.requiredSkills);
+  const requiredSkillMatches = matchedSkills(job.requiredSkills, application.freelancerProfile.skills);
+  const matchPercent = skillMatchPercent(job.requiredSkills, application.freelancerProfile.skills);
+  const directFitSignals = [
+    requiredSkills.length === 0 || requiredSkillMatches.length > 0,
+    application.freelancerProfile.documents.length >= 2,
+    Boolean(application.freelancerProfile.careerHistory),
+    Boolean(application.proposalMessage),
+    Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability),
+  ];
+  const directFitPercent = Math.round((directFitSignals.filter(Boolean).length / directFitSignals.length) * 100);
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge tone={application.status === "screening_passed" ? "good" : application.status === "screening_rejected" ? "bad" : "neutral"}>
+              {applicationStatusLabel(application.status)}
+            </StatusBadge>
+            <StatusBadge tone={directFitPercent >= 80 ? "good" : directFitPercent >= 50 ? "neutral" : "warn"}>
+              直接選考 {directFitPercent}%
+            </StatusBadge>
+            <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
+              必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
+            </StatusBadge>
+          </div>
+          <h2 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h2>
+          <p className="text-sm text-stone-500">{application.freelancerProfile.desiredOccupation ?? "希望職種未設定"}</p>
+          {application.proposalMessage && (
+            <p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
+          )}
+          {requiredSkillMatches.length > 0 && (
+            <p className="mt-2 text-sm leading-6 text-stone-700">
+              一致: {requiredSkillMatches.slice(0, 4).join("、")}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <StatusBadge tone={application.freelancerProfile.documents.length >= 2 ? "good" : "warn"}>
+              PDF {application.freelancerProfile.documents.length}/2
+            </StatusBadge>
+            <StatusBadge tone={application.freelancerProfile.careerHistory ? "good" : "warn"}>
+              職務経歴{application.freelancerProfile.careerHistory ? "あり" : "未登録"}
+            </StatusBadge>
+            <StatusBadge tone={application.proposalMessage ? "good" : "warn"}>
+              直接提案{application.proposalMessage ? "あり" : "未登録"}
+            </StatusBadge>
+            <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
+          </div>
+        </div>
+        <Link className="btn btn-primary shrink-0" href={`/company/applications/${application.id}`}>詳細</Link>
+      </div>
+    </Card>
   );
 }
 

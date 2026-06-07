@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { saveScreeningNote, screenApplication } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
+import { applicationStatusLabel, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,37 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     return <Shell><TopNav sessionRole={session?.user?.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>応募情報が見つかりません。</Card></div></Shell>;
   }
   const readiness = getFreelancerReadiness(application.freelancerProfile);
+  const requiredSkills = parseSkills(application.jobPost.requiredSkills);
+  const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
+  const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
+  const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
+  const hasRateSignal = Boolean(application.freelancerProfile.desiredRate || application.jobPost.rate);
+  const directFitItems = [
+    {
+      label: "必須スキル",
+      value: requiredSkills.length > 0 ? `${requiredSkillMatches.length}/${requiredSkills.length}` : "未設定",
+      done: requiredSkills.length === 0 || requiredSkillMatches.length > 0,
+    },
+    {
+      label: "応募準備",
+      value: `${readiness.percent}%`,
+      done: readiness.isReady,
+    },
+    {
+      label: "開始条件",
+      value: application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability || "未設定",
+      done: hasStartSignal,
+    },
+    {
+      label: "単価情報",
+      value: application.freelancerProfile.desiredRate || application.jobPost.rate || "未設定",
+      done: hasRateSignal,
+    },
+  ];
+  const directFitCompleted = directFitItems.filter((item) => item.done).length;
+  const directFitPercent = Math.round((directFitCompleted / directFitItems.length) * 100);
 
   return (
     <Shell>
@@ -100,6 +131,41 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           </div>
           <div className="grid h-fit gap-5">
             <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">直接選考ブリーフ</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    仲介担当の補足なしで、応募者との面談判断に必要な一致点と確認点を整理します。
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-semibold">{directFitPercent}%</p>
+                  <p className="text-xs text-stone-500">
+                    {directFitCompleted}/{directFitItems.length}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {directFitItems.map((item) => (
+                  <FitSignal done={item.done} key={item.label} label={item.label} value={item.value} />
+                ))}
+              </div>
+              <div className="mt-4 grid gap-3">
+                <SkillReview
+                  empty="必須スキルが未設定です。職務経歴と応募提案から判断してください。"
+                  label={`一致スキル${matchPercent === null ? "" : ` (${matchPercent}%)`}`}
+                  skills={requiredSkillMatches}
+                  tone="good"
+                />
+                <SkillReview
+                  empty="必須スキルの未一致項目はありません。"
+                  label="面談で確認したいギャップ"
+                  skills={requiredSkillGaps.slice(0, 6)}
+                  tone="warn"
+                />
+              </div>
+            </Card>
+            <Card>
               <h2 className="font-semibold">応募概要</h2>
               <dl className="mt-4 grid gap-3 text-sm">
                 <SummaryInfo label="応募日時" value={formatDateTime(application.appliedAt)} />
@@ -156,6 +222,53 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         </div>
       </div>
     </Shell>
+  );
+}
+
+function FitSignal({ label, value, done }: { label: string; value: string; done: boolean }) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}
+    >
+      <span className="font-medium">{label}</span>
+      <span className="text-right text-xs font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function SkillReview({
+  label,
+  skills,
+  tone,
+  empty,
+}: {
+  label: string;
+  skills: string[];
+  tone: "good" | "warn";
+  empty: string;
+}) {
+  const chipClass =
+    tone === "good"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-amber-200 bg-amber-50 text-amber-800";
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-stone-500">{label}</p>
+      {skills.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {skills.map((skill) => (
+            <span className={`rounded border px-2 py-1 text-xs font-medium ${chipClass}`} key={skill}>
+              {skill}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">{empty}</p>
+      )}
+    </div>
   );
 }
 
