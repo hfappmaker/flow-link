@@ -17,6 +17,8 @@ Goal:
 - Continuously improve this product so it can compete with freelance/job matching services such as Levatech and Findy.
 - Prioritize the product's core differentiation: companies and freelancers can communicate and proceed directly without an agency or sales agent in the middle.
 - Consider improvements to direct matching, job discovery, application flow, company/freelancer profiles, messaging/contact handoff, trust signals, onboarding, conversion, UI/UX quality, and maintainability.
+- Before choosing the improvement, research current public competitor information when network access is available. Check official or high-quality sources for Levatech, Findy, and adjacent freelance/job matching services; use the findings to pick a concrete gap or advantage to address.
+- In your final message, briefly name the competitor insight that motivated the change and include source URLs when you used web research.
 - Pick exactly one safe, high-value improvement that fits the existing codebase. Medium-sized changes are allowed when they clearly strengthen the core direct-matching experience.
 - Implement it completely.
 - Keep the change coherently scoped. Avoid broad rewrites, speculative platform pivots, or partially finished multi-area changes.
