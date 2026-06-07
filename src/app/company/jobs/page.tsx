@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jobStatusLabel } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +46,13 @@ export default async function CompanyJobsPage() {
               </Card>
             );
           })}
-          {jobs.length === 0 && <Card>案件はまだありません。</Card>}
+          {jobs.length === 0 && (
+            <EmptyState
+              title="案件はまだありません。"
+              description="最初の案件を作成すると、公開状態や応募状況をここで確認できます。"
+              action={<Link className="btn btn-primary" href="/company/jobs/new">案件作成</Link>}
+            />
+          )}
         </div>
       </div>
     </Shell>

@@ -50,6 +50,26 @@ export function Card({ children, className }: { children: React.ReactNode; class
   return <section className={cn("rounded-md border border-stone-200 bg-white p-5 shadow-sm", className)}>{children}</section>;
 }
 
+export function EmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Card className="border-dashed bg-stone-50/60 text-center">
+      <div className="mx-auto max-w-md">
+        <p className="font-semibold">{title}</p>
+        {description && <p className="mt-2 text-sm leading-6 text-stone-600">{description}</p>}
+        {action && <div className="mt-4 flex justify-center">{action}</div>}
+      </div>
+    </Card>
+  );
+}
+
 export function StatCard({ label, value, icon }: { label: string; value: string | number; icon?: React.ReactNode }) {
   return (
     <Card>

@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatOpenings, skillPreview } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge, icons } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -101,10 +101,11 @@ export default async function JobsPage({
             <JobCard job={job} key={job.id} />
           ))}
           {jobs.length === 0 && (
-            <Card>
-              <p className="font-semibold">条件に合う公開案件はありません。</p>
-              <p className="mt-2 text-sm text-stone-600">キーワードを短くするか、勤務形態の条件を外して再検索してください。</p>
-            </Card>
+            <EmptyState
+              title="条件に合う公開案件はありません。"
+              description="キーワードを短くするか、勤務形態の条件を外して再検索してください。"
+              action={<Link className="btn btn-secondary" href="/jobs">条件をクリア</Link>}
+            />
           )}
         </div>
       </div>

@@ -4,7 +4,7 @@ import type { JobApplicationStatus, Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusLabel, formatDateTime } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -137,12 +137,13 @@ export default async function JobApplicationsPage({
             </Card>
           ))}
           {job?.applications.length === 0 && (
-            <Card>
-              <p className="font-semibold">条件に合う応募者はいません。</p>
-              <p className="mt-2 text-sm text-stone-600">ステータスや検索キーワードを変えて確認してください。</p>
-            </Card>
+            <EmptyState
+              title="条件に合う応募者はいません。"
+              description="ステータスや検索キーワードを変えて確認してください。"
+              action={<Link className="btn btn-secondary" href={`/company/jobs/${job.id}/applications`}>条件をクリア</Link>}
+            />
           )}
-          {!job && <Card>案件が見つかりません。</Card>}
+          {!job && <EmptyState title="案件が見つかりません。" description="案件が削除されたか、閲覧権限がない可能性があります。" />}
         </div>
       </div>
     </Shell>

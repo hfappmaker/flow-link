@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusLabel } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,13 @@ export default async function FreelancerApplicationsPage() {
               </div>
             </Card>
           ))}
-          {profile?.applications.length === 0 && <Card>応募はまだありません。</Card>}
+          {profile?.applications.length === 0 && (
+            <EmptyState
+              title="応募はまだありません。"
+              description="気になる案件を見つけたら、詳細ページから応募できます。"
+              action={<Link className="btn btn-primary" href="/jobs">案件を見る</Link>}
+            />
+          )}
         </div>
       </div>
     </Shell>

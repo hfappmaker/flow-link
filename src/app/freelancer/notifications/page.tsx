@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { markNotificationRead } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,9 @@ export default async function NotificationsPage() {
               </div>
             </Card>
           ))}
-          {notifications.length === 0 && <Card>通知はまだありません。</Card>}
+          {notifications.length === 0 && (
+            <EmptyState title="通知はまだありません。" description="応募結果や面談調整の更新が届くと、ここに表示されます。" />
+          )}
         </div>
       </div>
     </Shell>
