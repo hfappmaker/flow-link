@@ -32,6 +32,7 @@ COPY sshd_config.conf /etc/ssh/sshd_config.d/flow-link.conf
 COPY flow-link-codex-auto-improve.cron /etc/cron.d/flow-link-codex-auto-improve
 COPY entrypoint.sh /usr/local/bin/flow-link-devcontainer-entrypoint
 RUN chmod 0644 /etc/cron.d/flow-link-codex-auto-improve \
+    && ln -sf /usr/bin/bwrap /usr/local/bin/bubblewrap \
     && chmod +x /usr/local/bin/flow-link-devcontainer-entrypoint
 
 ENTRYPOINT ["/usr/local/bin/flow-link-devcontainer-entrypoint"]
