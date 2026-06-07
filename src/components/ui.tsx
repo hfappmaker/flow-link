@@ -99,6 +99,8 @@ export function TextField({
   type = "text",
   required,
   minLength,
+  maxLength,
+  placeholder,
 }: {
   name: string;
   label: string;
@@ -106,6 +108,8 @@ export function TextField({
   type?: string;
   required?: boolean;
   minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
 }) {
   return (
     <label className="grid gap-1.5 text-sm font-medium text-stone-700">
@@ -117,6 +121,8 @@ export function TextField({
         defaultValue={defaultValue ?? ""}
         required={required}
         minLength={minLength}
+        maxLength={maxLength}
+        placeholder={placeholder}
       />
     </label>
   );
@@ -127,11 +133,17 @@ export function TextArea({
   label,
   defaultValue,
   required,
+  minLength,
+  maxLength,
+  placeholder,
 }: {
   name: string;
   label: string;
   defaultValue?: string | null;
   required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
 }) {
   return (
     <label className="grid gap-1.5 text-sm font-medium text-stone-700">
@@ -141,6 +153,9 @@ export function TextArea({
         name={name}
         defaultValue={defaultValue ?? ""}
         required={required}
+        minLength={minLength}
+        maxLength={maxLength}
+        placeholder={placeholder}
       />
     </label>
   );

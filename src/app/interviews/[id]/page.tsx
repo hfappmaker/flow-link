@@ -122,6 +122,13 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
               )}
+
+              {thread.jobApplication.proposalMessage && (
+                <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+                  <p className="text-xs font-medium text-stone-500">応募時の直接提案</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">{thread.jobApplication.proposalMessage}</p>
+                </div>
+              )}
             </Card>
 
             <Card>
@@ -142,6 +149,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                 <SummaryRow label="最新候補" value={latestProposed?.proposedAt ? formatDateTime(latestProposed.proposedAt) : "未提案"} />
                 <SummaryRow label="確定日時" value={thread.scheduledAt ? formatDateTime(thread.scheduledAt) : "未確定"} />
                 <SummaryRow label="会議URL" value={thread.meetingUrl ?? "未共有"} />
+                <SummaryRow label="応募時の開始目安" value={thread.jobApplication.proposedStart ?? "未設定"} />
+                <SummaryRow label="応募時の連絡希望" value={thread.jobApplication.contactPreference ?? "未設定"} />
               </dl>
             </Card>
 

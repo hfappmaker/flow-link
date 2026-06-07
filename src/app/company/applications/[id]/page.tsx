@@ -47,6 +47,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </dl>
             </Card>
             <Card>
+              <h2 className="font-semibold">応募時の直接提案</h2>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-stone-700">
+                {application.proposalMessage ?? "応募メッセージは未登録です。"}
+              </p>
+              <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+                <SummaryInfo label="稼働開始目安" value={application.proposedStart} />
+                <SummaryInfo label="連絡希望" value={application.contactPreference} />
+              </dl>
+            </Card>
+            <Card>
               <h2 className="font-semibold">職務経歴フォーム</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-stone-700">{application.freelancerProfile.careerHistory?.summary ?? "未登録"}</p>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-stone-700">{application.freelancerProfile.careerHistory?.workExperiences}</p>
@@ -88,6 +98,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <SummaryInfo label="稼働条件" value={application.freelancerProfile.availability} />
                 <SummaryInfo label="勤務地希望" value={application.freelancerProfile.preferredLocation} />
                 <SummaryInfo label="稼働開始" value={application.freelancerProfile.availableFrom} />
+                <SummaryInfo label="応募時の開始目安" value={application.proposedStart} />
+                <SummaryInfo label="応募時の連絡希望" value={application.contactPreference} />
               </dl>
             </Card>
             <Card>

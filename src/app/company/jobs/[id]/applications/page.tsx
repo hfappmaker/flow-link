@@ -37,6 +37,8 @@ export default async function JobApplicationsPage({
             { freelancerProfile: { desiredOccupation: { contains: keyword, mode: "insensitive" } } },
             { freelancerProfile: { skills: { contains: keyword, mode: "insensitive" } } },
             { freelancerProfile: { preferredLocation: { contains: keyword, mode: "insensitive" } } },
+            { proposalMessage: { contains: keyword, mode: "insensitive" } },
+            { proposedStart: { contains: keyword, mode: "insensitive" } },
           ],
         }
       : {}),
@@ -122,12 +124,18 @@ export default async function JobApplicationsPage({
                   </StatusBadge>
                   <h2 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h2>
                   <p className="text-sm text-stone-500">{application.freelancerProfile.desiredOccupation ?? "希望職種未設定"}</p>
+                  {application.proposalMessage && (
+                    <p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <StatusBadge tone={application.freelancerProfile.documents.length >= 2 ? "good" : "warn"}>
                       PDF {application.freelancerProfile.documents.length}/2
                     </StatusBadge>
                     <StatusBadge tone={application.freelancerProfile.careerHistory ? "good" : "warn"}>
                       職務経歴{application.freelancerProfile.careerHistory ? "あり" : "未登録"}
+                    </StatusBadge>
+                    <StatusBadge tone={application.proposalMessage ? "good" : "warn"}>
+                      直接提案{application.proposalMessage ? "あり" : "未登録"}
                     </StatusBadge>
                     <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
                   </div>

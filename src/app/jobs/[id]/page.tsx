@@ -4,7 +4,7 @@ import { applyToJob } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { applicationStatusLabel, formatDateTime, formatOpenings } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +81,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <p className="mt-2 text-sm leading-6 text-stone-600">
                   応募日時: {formatDateTime(existingApplication.appliedAt)}
                 </p>
+                {existingApplication.proposalMessage && (
+                  <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-xs font-medium text-stone-500">送信した応募メッセージ</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">{existingApplication.proposalMessage}</p>
+                  </div>
+                )}
                 <div className="mt-4 grid gap-2">
                   {existingApplication.interviewThread && (
                     <Link className="btn btn-primary" href={`/interviews/${existingApplication.interviewThread.id}`}>面談チャット</Link>
@@ -91,6 +97,32 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" && readiness.isReady ? (
               <form action={applyToJob} className="grid gap-3">
                 <input type="hidden" name="jobPostId" value={job.id} />
+                <div>
+                  <p className="font-semibold">直接応募メッセージ</p>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    仲介担当を挟まず、企業が最初に読む提案として送信されます。
+                  </p>
+                </div>
+                <TextArea
+                  name="proposalMessage"
+                  label="この案件で貢献できること"
+                  required
+                  minLength={40}
+                  maxLength={1200}
+                  placeholder="関連する経験、得意領域、案件条件との合い方を簡潔に入力"
+                />
+                <TextField
+                  name="proposedStart"
+                  label="稼働開始目安"
+                  maxLength={120}
+                  placeholder="例: 7月第1週から / 契約後2週間で開始可"
+                />
+                <TextField
+                  name="contactPreference"
+                  label="連絡希望"
+                  maxLength={120}
+                  placeholder="例: 平日18時以降のオンライン面談を希望"
+                />
                 <button className="btn btn-primary" type="submit">この案件に応募</button>
               </form>
             ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" ? (

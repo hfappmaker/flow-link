@@ -27,6 +27,13 @@ export default async function FreelancerApplicationsPage() {
                   </StatusBadge>
                   <h2 className="mt-2 font-semibold">{application.jobPost.title}</h2>
                   <p className="text-sm text-stone-500">{application.jobPost.companyProfile.name}</p>
+                  {application.proposalMessage && (
+                    <p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {application.proposedStart && <StatusBadge>開始目安: {application.proposedStart}</StatusBadge>}
+                    {application.contactPreference && <StatusBadge>連絡希望: {application.contactPreference}</StatusBadge>}
+                  </div>
                 </div>
                 {application.interviewThread && <Link className="btn btn-primary" href={`/interviews/${application.interviewThread.id}`}>面談チャット</Link>}
               </div>
