@@ -78,10 +78,12 @@ PROMPT=$(cat <<PROMPT_EOF
 You are running as a scheduled local automation for this repository.
 
 Goal:
-- Consider improvements from competitor comparison, UI/UX quality, and maintainability.
-- Pick exactly one small, safe, high-value improvement that fits the existing codebase.
+- Continuously improve this product so it can compete with freelance/job matching services such as Levatech and Findy.
+- Prioritize the product's core differentiation: companies and freelancers can communicate and proceed directly without an agency or sales agent in the middle.
+- Consider improvements to direct matching, job discovery, application flow, company/freelancer profiles, messaging/contact handoff, trust signals, onboarding, conversion, UI/UX quality, and maintainability.
+- Pick exactly one safe, high-value improvement that fits the existing codebase. Medium-sized changes are allowed when they clearly strengthen the core direct-matching experience.
 - Implement it completely.
-- Keep the change narrowly scoped.
+- Keep the change coherently scoped. Avoid broad rewrites, speculative platform pivots, or partially finished multi-area changes.
 - If you touch Next.js code, first read the relevant guide in node_modules/next/dist/docs/ because this project uses a Next.js version with breaking changes.
 - Run relevant verification commands such as npm run typecheck, npm run lint, and/or npm run build when appropriate.
 - If you make changes, commit and push them yourself from inside this Codex run.
