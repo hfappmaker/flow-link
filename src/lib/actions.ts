@@ -347,6 +347,7 @@ export async function screenApplication(formData: FormData) {
   }
 
   const application = await assertOwnsApplication(companyUser.companyProfileId, applicationId);
+  let interviewThreadId: string | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.jobApplication.update({
       where: { id: applicationId },
@@ -368,15 +369,39 @@ export async function screenApplication(formData: FormData) {
       },
     });
     if (status === "screening_passed") {
-      await tx.interviewThread.upsert({
+      const thread = await tx.interviewThread.upsert({
         where: { jobApplicationId: applicationId },
         create: { jobApplicationId: applicationId },
         update: {},
       });
+      interviewThreadId = thread.id;
+
+      const messageCount = await tx.interviewMessage.count({
+        where: { interviewThreadId: thread.id },
+      });
+      if (messageCount === 0) {
+        await tx.interviewMessage.create({
+          data: {
+            interviewThreadId: thread.id,
+            senderUserId: companyUser.userId,
+            messageType: InterviewMessageType.text,
+            body: buildScreeningPassedHandoffMessage({
+              companyName: companyUser.companyProfile.name,
+              freelancerName: application.freelancerProfile.fullName,
+              jobTitle: application.jobPost.title,
+              proposedStart: application.proposedStart,
+              contactPreference: application.contactPreference,
+              selectionFlow: application.jobPost.selectionFlow,
+              contractTerms: application.jobPost.contractTerms,
+            }),
+          },
+        });
+      }
     }
   });
 
   revalidatePath(`/company/applications/${applicationId}`);
+  if (interviewThreadId) revalidatePath(`/interviews/${interviewThreadId}`);
   redirect(`/company/applications/${applicationId}`);
 }
 
@@ -437,6 +462,38 @@ async function assertOwnsApplication(companyProfileId: string, applicationId: st
   });
   if (!application) throw new Error("応募情報を閲覧できません。");
   return application;
+}
+
+function buildScreeningPassedHandoffMessage({
+  companyName,
+  freelancerName,
+  jobTitle,
+  proposedStart,
+  contactPreference,
+  selectionFlow,
+  contractTerms,
+}: {
+  companyName: string;
+  freelancerName: string;
+  jobTitle: string;
+  proposedStart?: string | null;
+  contactPreference?: string | null;
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+}) {
+  return [
+    `${freelancerName}さん`,
+    "",
+    `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と直接面談調整を進めさせてください。`,
+    "",
+    `応募時の開始目安: ${proposedStart || "面談で確認"}`,
+    `応募時の連絡希望: ${contactPreference || "このチャットで調整"}`,
+    `選考フロー: ${selectionFlow || "面談で確認"}`,
+    `直接契約・支払い条件: ${contractTerms || "面談で確認"}`,
+    "",
+    "まずは候補日時と、面談前に確認したい条件があればこのチャットで共有してください。",
+    companyName,
+  ].join("\n");
 }
 
 async function assertCanUseThread(userId: string, threadId: string) {
