@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { sendInterviewMessage } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
-import { formatDateTime } from "@/lib/utils";
+import { getFreelancerReadiness } from "@/lib/readiness";
+import { formatDateTime, formatOpenings, skillPreview } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       messages: { orderBy: { createdAt: "asc" }, include: { sender: true } },
       jobApplication: {
         include: {
-          freelancerProfile: true,
+          freelancerProfile: { include: { careerHistory: true, documents: true } },
           jobPost: { include: { companyProfile: { include: { users: true } } } },
         },
       },
@@ -32,6 +33,11 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const proposedMessages = thread.messages.filter((message) => message.messageType === "proposed_time" && message.proposedAt);
   const latestProposed = proposedMessages.at(-1);
   const hasMeetingUrl = Boolean(thread.meetingUrl);
+  const freelancer = thread.jobApplication.freelancerProfile;
+  const jobPost = thread.jobApplication.jobPost;
+  const company = jobPost.companyProfile;
+  const readiness = getFreelancerReadiness(freelancer);
+  const matchedSkills = getMatchedSkills(jobPost.requiredSkills, freelancer.skills);
   const nextAction =
     thread.status === "scheduled"
       ? hasMeetingUrl
@@ -71,6 +77,64 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             </div>
           </Card>
           <div className="grid h-fit gap-5">
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">直接進行ハンドオフ</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    企業とフリーランスが、面談前に相手情報・条件・信頼材料を同じ画面で確認できます。
+                  </p>
+                </div>
+                <StatusBadge tone="good">仲介なし</StatusBadge>
+              </div>
+
+              <dl className="mt-4 grid gap-3 text-sm">
+                <SummaryRow label="企業" value={company.name} />
+                <SummaryRow label="フリーランス" value={`${freelancer.fullName}${freelancer.desiredOccupation ? ` / ${freelancer.desiredOccupation}` : ""}`} />
+                <SummaryRow label="連絡先" value={thread.messages.length > 0 ? "このチャットで直接調整中" : "このチャットで直接調整開始"} />
+                {company.websiteUrl && (
+                  <div className="rounded border border-stone-200 bg-stone-50 p-3">
+                    <dt className="text-xs text-stone-500">企業サイト</dt>
+                    <dd className="mt-1 break-words font-semibold">
+                      <a className="text-emerald-700" href={company.websiteUrl} target="_blank">
+                        {company.websiteUrl}
+                      </a>
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
+              <div className="mt-4 grid gap-2">
+                <TrustSignal label="プロフィール充足" value={`${readiness.percent}%`} done={readiness.isReady} />
+                <TrustSignal label="PDF書類" value={`${freelancer.documents.length}/2件`} done={freelancer.documents.length >= 2} />
+                <TrustSignal label="職務経歴フォーム" value={freelancer.careerHistory ? "登録済み" : "未登録"} done={Boolean(freelancer.careerHistory)} />
+              </div>
+
+              {matchedSkills.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-stone-500">必須スキルとの一致</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {matchedSkills.map((skill) => (
+                      <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800" key={skill}>
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Card>
+              <h2 className="font-semibold">案件条件</h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <SummaryRow label="単価" value={jobPost.rate ?? "未設定"} />
+                <SummaryRow label="稼働率" value={jobPost.workload ?? "未設定"} />
+                <SummaryRow label="契約期間" value={jobPost.contractPeriod ?? "未設定"} />
+                <SummaryRow label="勤務地/リモート" value={[jobPost.location, jobPost.remotePolicy].filter(Boolean).join(" / ") || "未設定"} />
+                <SummaryRow label="募集人数" value={formatOpenings(jobPost.openings)} />
+              </dl>
+            </Card>
+
             <Card>
               <h2 className="font-semibold">次のアクション</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">{nextAction}</p>
@@ -128,4 +192,22 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 break-words font-semibold">{value}</dd>
     </div>
   );
+}
+
+function TrustSignal({ label, value, done }: { label: string; value: string; done: boolean }) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+      }`}
+    >
+      <span className="font-medium">{label}</span>
+      <span className="text-xs font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function getMatchedSkills(requiredSkills: string | null, freelancerSkills: string | null | undefined) {
+  const freelancerSkillSet = new Set(skillPreview(freelancerSkills, 20).map((skill) => skill.toLowerCase()));
+  return skillPreview(requiredSkills, 20).filter((skill) => freelancerSkillSet.has(skill.toLowerCase()));
 }
