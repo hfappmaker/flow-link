@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+10,40 * * * * node /bin/bash /workspaces/flow-link/scripts/codex-auto-debug.sh
