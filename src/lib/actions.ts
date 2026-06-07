@@ -105,12 +105,13 @@ export async function loginUser(formData: FormData) {
   if (!user) {
     redirect("/login?error=CredentialsSignin");
   }
+  const redirectTo = callbackUrl === "/" ? (user.role === "freelancer" ? "/freelancer" : "/company") : callbackUrl;
 
   try {
     await signIn("credentials", {
       email,
       password,
-      redirectTo: callbackUrl,
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {
