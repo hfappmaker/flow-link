@@ -8,6 +8,8 @@ services:
     env_file:
       - .env
     init: true
+    security_opt:
+      - seccomp=unconfined
     volumes:
       - ..:/workspaces/flow-link:cached
       - flow-link-node-modules:/workspaces/flow-link/node_modules
