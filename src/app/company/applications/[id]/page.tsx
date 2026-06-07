@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { saveScreeningNote, screenApplication } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { applicationStatusLabel, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
+import { applicationStatusLabel, buildScreeningPassedHandoffMessage, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
+  const companyUser = await prisma.companyUser.findUnique({
+    where: { userId: session!.user.id },
+    include: { companyProfile: true },
+  });
   const application = await prisma.jobApplication.findFirst({
     where: { id, jobPost: { companyProfileId: companyUser!.companyProfileId } },
     include: {
@@ -56,6 +59,15 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   ];
   const directFitCompleted = directFitItems.filter((item) => item.done).length;
   const directFitPercent = Math.round((directFitCompleted / directFitItems.length) * 100);
+  const handoffMessageDraft = buildScreeningPassedHandoffMessage({
+    companyName: companyUser!.companyProfile.name,
+    freelancerName: application.freelancerProfile.fullName,
+    jobTitle: application.jobPost.title,
+    proposedStart: application.proposedStart,
+    contactPreference: application.contactPreference,
+    selectionFlow: application.jobPost.selectionFlow,
+    contractTerms: application.jobPost.contractTerms,
+  });
 
   return (
     <Shell>
@@ -203,13 +215,26 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </div>
             </Card>
             <Card>
-              <h2 className="font-semibold">書類選考</h2>
+              <h2 className="font-semibold">直接面談へ進める</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                書類選考OKにすると、面談チャットを作成し、下の初回連絡を企業名義で送信します。
+              </p>
+              <form action={screenApplication} className="mt-4 grid gap-3">
+                <input type="hidden" name="applicationId" value={application.id} />
+                <input type="hidden" name="status" value="screening_passed" />
+                <TextArea
+                  name="handoffMessage"
+                  label="初回連絡文"
+                  defaultValue={handoffMessageDraft}
+                  maxLength={1600}
+                />
+                <button className="btn btn-primary w-full" type="submit">書類選考OK・直接連絡を送る</button>
+              </form>
+            </Card>
+            <Card>
+              <h2 className="font-semibold">見送り</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-600">今回は面談へ進めない場合にステータスを更新します。</p>
               <div className="mt-4 grid gap-3">
-                <form action={screenApplication}>
-                  <input type="hidden" name="applicationId" value={application.id} />
-                  <input type="hidden" name="status" value="screening_passed" />
-                  <button className="btn btn-primary w-full" type="submit">書類選考OK</button>
-                </form>
                 <form action={screenApplication}>
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input type="hidden" name="status" value="screening_rejected" />

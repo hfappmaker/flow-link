@@ -141,3 +141,35 @@ export function jobStatusLabel(status: string) {
   };
   return labels[status] ?? status;
 }
+
+export function buildScreeningPassedHandoffMessage({
+  companyName,
+  freelancerName,
+  jobTitle,
+  proposedStart,
+  contactPreference,
+  selectionFlow,
+  contractTerms,
+}: {
+  companyName: string;
+  freelancerName: string;
+  jobTitle: string;
+  proposedStart?: string | null;
+  contactPreference?: string | null;
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+}) {
+  return [
+    `${freelancerName}さん`,
+    "",
+    `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と直接面談調整を進めさせてください。`,
+    "",
+    `応募時の開始目安: ${proposedStart || "面談で確認"}`,
+    `応募時の連絡希望: ${contactPreference || "このチャットで調整"}`,
+    `選考フロー: ${selectionFlow || "面談で確認"}`,
+    `直接契約・支払い条件: ${contractTerms || "面談で確認"}`,
+    "",
+    "まずは候補日時と、面談前に確認したい条件があればこのチャットで共有してください。",
+    companyName,
+  ].join("\n");
+}

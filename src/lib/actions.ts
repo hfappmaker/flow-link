@@ -17,7 +17,7 @@ import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { toOptionalText, toText } from "@/lib/utils";
+import { buildScreeningPassedHandoffMessage, toOptionalText, toText } from "@/lib/utils";
 
 async function currentUser() {
   const session = await auth();
@@ -342,8 +342,12 @@ export async function screenApplication(formData: FormData) {
   const { companyUser } = await currentCompanyUser();
   const applicationId = toText(formData.get("applicationId"));
   const status = toText(formData.get("status")) as JobApplicationStatus;
+  const handoffMessage = toOptionalText(formData.get("handoffMessage"));
   if (!["screening_passed", "screening_rejected"].includes(status)) {
     throw new Error("選考結果が不正です。");
+  }
+  if ((handoffMessage?.length ?? 0) > 1600) {
+    throw new Error("初回連絡文は1600文字以内で入力してください。");
   }
 
   const application = await assertOwnsApplication(companyUser.companyProfileId, applicationId);
@@ -385,15 +389,17 @@ export async function screenApplication(formData: FormData) {
             interviewThreadId: thread.id,
             senderUserId: companyUser.userId,
             messageType: InterviewMessageType.text,
-            body: buildScreeningPassedHandoffMessage({
-              companyName: companyUser.companyProfile.name,
-              freelancerName: application.freelancerProfile.fullName,
-              jobTitle: application.jobPost.title,
-              proposedStart: application.proposedStart,
-              contactPreference: application.contactPreference,
-              selectionFlow: application.jobPost.selectionFlow,
-              contractTerms: application.jobPost.contractTerms,
-            }),
+            body:
+              handoffMessage ||
+              buildScreeningPassedHandoffMessage({
+                companyName: companyUser.companyProfile.name,
+                freelancerName: application.freelancerProfile.fullName,
+                jobTitle: application.jobPost.title,
+                proposedStart: application.proposedStart,
+                contactPreference: application.contactPreference,
+                selectionFlow: application.jobPost.selectionFlow,
+                contractTerms: application.jobPost.contractTerms,
+              }),
           },
         });
       }
@@ -462,38 +468,6 @@ async function assertOwnsApplication(companyProfileId: string, applicationId: st
   });
   if (!application) throw new Error("応募情報を閲覧できません。");
   return application;
-}
-
-function buildScreeningPassedHandoffMessage({
-  companyName,
-  freelancerName,
-  jobTitle,
-  proposedStart,
-  contactPreference,
-  selectionFlow,
-  contractTerms,
-}: {
-  companyName: string;
-  freelancerName: string;
-  jobTitle: string;
-  proposedStart?: string | null;
-  contactPreference?: string | null;
-  selectionFlow?: string | null;
-  contractTerms?: string | null;
-}) {
-  return [
-    `${freelancerName}さん`,
-    "",
-    `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と直接面談調整を進めさせてください。`,
-    "",
-    `応募時の開始目安: ${proposedStart || "面談で確認"}`,
-    `応募時の連絡希望: ${contactPreference || "このチャットで調整"}`,
-    `選考フロー: ${selectionFlow || "面談で確認"}`,
-    `直接契約・支払い条件: ${contractTerms || "面談で確認"}`,
-    "",
-    "まずは候補日時と、面談前に確認したい条件があればこのチャットで共有してください。",
-    companyName,
-  ].join("\n");
 }
 
 async function assertCanUseThread(userId: string, threadId: string) {
