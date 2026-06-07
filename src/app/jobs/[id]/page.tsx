@@ -75,6 +75,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <Info label="勤務地" value={job.location} />
               <Info label="募集人数" value={formatOpenings(job.openings)} />
             </dl>
+            {(job.selectionFlow || job.contractTerms) && (
+              <div className="mt-6 rounded border border-emerald-100 bg-emerald-50/60 p-4">
+                <h2 className="font-semibold">直接契約の進め方</h2>
+                <dl className="mt-3 grid gap-3 text-sm">
+                  <DirectInfo label="選考フロー" value={job.selectionFlow} />
+                  <DirectInfo label="契約・支払い条件" value={job.contractTerms} />
+                </dl>
+              </div>
+            )}
           </Card>
           <div className="grid h-fit gap-5">
             {freelancerProfile && (
@@ -247,6 +256,15 @@ function Info({ label, value }: { label: string; value?: string | null }) {
     <div>
       <dt className="text-stone-500">{label}</dt>
       <dd className="mt-1 font-medium">{value || "未設定"}</dd>
+    </div>
+  );
+}
+
+function DirectInfo({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className="text-stone-500">{label}</dt>
+      <dd className="mt-1 whitespace-pre-wrap leading-6 text-stone-700">{value || "未設定"}</dd>
     </div>
   );
 }

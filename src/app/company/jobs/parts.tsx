@@ -14,6 +14,20 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
       <TextArea name="preferredSkills" label="歓迎スキル" defaultValue={job?.preferredSkills} />
       <TextField name="workload" label="稼働率" defaultValue={job?.workload} />
       <TextField name="contractPeriod" label="契約期間" defaultValue={job?.contractPeriod} />
+      <TextArea
+        name="selectionFlow"
+        label="選考フロー"
+        defaultValue={job?.selectionFlow}
+        maxLength={800}
+        placeholder="例: 書類確認後、現場担当と30分面談。必要に応じて技術確認を1回実施。"
+      />
+      <TextArea
+        name="contractTerms"
+        label="直接契約・支払い条件"
+        defaultValue={job?.contractTerms}
+        maxLength={800}
+        placeholder="例: 業務委託契約、月末締め翌月末払い、NDA締結後に詳細資料を共有。"
+      />
       <TextField name="location" label="勤務地" defaultValue={job?.location} />
       <TextField name="remotePolicy" label="リモート可否" defaultValue={job?.remotePolicy} />
       <TextField name="openings" label="募集人数" type="number" defaultValue={job?.openings} />

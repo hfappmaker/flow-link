@@ -160,6 +160,8 @@ model JobPost {
   rate              String?
   workload          String?
   contractPeriod    String?              @map("contract_period")
+  selectionFlow     String?              @map("selection_flow")
+  contractTerms     String?              @map("contract_terms")
   location          String?
   remotePolicy      String?              @map("remote_policy")
   openings          Int?

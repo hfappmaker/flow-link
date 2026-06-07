@@ -56,6 +56,15 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <SummaryInfo label="連絡希望" value={application.contactPreference} />
               </dl>
             </Card>
+            {(application.jobPost.selectionFlow || application.jobPost.contractTerms) && (
+              <Card>
+                <h2 className="font-semibold">直接契約の前提</h2>
+                <dl className="mt-4 grid gap-3 text-sm">
+                  <SummaryInfo label="選考フロー" value={application.jobPost.selectionFlow} multiline />
+                  <SummaryInfo label="契約・支払い条件" value={application.jobPost.contractTerms} multiline />
+                </dl>
+              </Card>
+            )}
             <Card>
               <h2 className="font-semibold">職務経歴フォーム</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-stone-700">{application.freelancerProfile.careerHistory?.summary ?? "未登録"}</p>
@@ -159,11 +168,11 @@ function Info({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function SummaryInfo({ label, value }: { label: string; value?: string | null }) {
+function SummaryInfo({ label, value, multiline }: { label: string; value?: string | null; multiline?: boolean }) {
   return (
     <div className="rounded border border-stone-200 bg-stone-50 p-3">
       <dt className="text-xs text-stone-500">{label}</dt>
-      <dd className="mt-1 break-words font-semibold">{value || "未設定"}</dd>
+      <dd className={`mt-1 break-words font-semibold ${multiline ? "whitespace-pre-wrap leading-6" : ""}`}>{value || "未設定"}</dd>
     </div>
   );
 }

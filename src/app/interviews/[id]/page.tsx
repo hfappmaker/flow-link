@@ -142,6 +142,24 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               </dl>
             </Card>
 
+            {(jobPost.selectionFlow || jobPost.contractTerms) && (
+              <Card>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-semibold">直接契約チェック</h2>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      面談前に、仲介なしで合意する流れと契約条件を確認できます。
+                    </p>
+                  </div>
+                  <StatusBadge tone="good">公開済み</StatusBadge>
+                </div>
+                <dl className="mt-4 grid gap-3 text-sm">
+                  <SummaryRow label="選考フロー" value={jobPost.selectionFlow ?? "未設定"} multiline />
+                  <SummaryRow label="契約・支払い条件" value={jobPost.contractTerms ?? "未設定"} multiline />
+                </dl>
+              </Card>
+            )}
+
             <Card>
               <h2 className="font-semibold">次のアクション</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">{nextAction}</p>
@@ -194,11 +212,11 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
   return (
     <div className="rounded border border-stone-200 bg-stone-50 p-3">
       <dt className="text-xs text-stone-500">{label}</dt>
-      <dd className="mt-1 break-words font-semibold">{value}</dd>
+      <dd className={`mt-1 break-words font-semibold ${multiline ? "whitespace-pre-wrap leading-6" : ""}`}>{value}</dd>
     </div>
   );
 }

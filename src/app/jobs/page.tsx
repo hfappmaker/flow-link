@@ -175,6 +175,7 @@ function JobCard({
               {job.applicationStatus === "open" ? "受付中" : "受付停止"}
             </StatusBadge>
             <StatusBadge>{job.remotePolicy ?? "勤務形態未設定"}</StatusBadge>
+            {(job.selectionFlow || job.contractTerms) && <StatusBadge tone="good">直接条件あり</StatusBadge>}
           </div>
           <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
           <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>

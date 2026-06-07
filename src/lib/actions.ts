@@ -228,6 +228,11 @@ export async function saveCompanyProfile(formData: FormData) {
 export async function saveJobPost(formData: FormData) {
   const { companyUser } = await currentCompanyUser();
   const id = toOptionalText(formData.get("id"));
+  const selectionFlow = toOptionalText(formData.get("selectionFlow"));
+  const contractTerms = toOptionalText(formData.get("contractTerms"));
+  if ((selectionFlow?.length ?? 0) > 800 || (contractTerms?.length ?? 0) > 800) {
+    throw new Error("選考フローと直接契約・支払い条件は800文字以内で入力してください。");
+  }
   const data = {
     companyProfileId: companyUser.companyProfileId,
     title: toText(formData.get("title")),
@@ -237,6 +242,8 @@ export async function saveJobPost(formData: FormData) {
     rate: toOptionalText(formData.get("rate")),
     workload: toOptionalText(formData.get("workload")),
     contractPeriod: toOptionalText(formData.get("contractPeriod")),
+    selectionFlow,
+    contractTerms,
     location: toOptionalText(formData.get("location")),
     remotePolicy: toOptionalText(formData.get("remotePolicy")),
     openings: Number(toText(formData.get("openings"))) || null,
