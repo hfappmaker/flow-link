@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const [jobs, companies, applications] = await Promise.all([
-    process.env.DATABASE_URL ? prisma.jobPost.count({ where: { status: "published" } }).catch(() => 0) : 0,
-    process.env.DATABASE_URL ? prisma.companyProfile.count().catch(() => 0) : 0,
-    process.env.DATABASE_URL ? prisma.jobApplication.count().catch(() => 0) : 0,
+    process.env.DATABASE_URL ? prisma.jobPost.count({ where: { status: "published" } }) : 0,
+    process.env.DATABASE_URL ? prisma.companyProfile.count() : 0,
+    process.env.DATABASE_URL ? prisma.jobApplication.count() : 0,
   ]);
 
   return (

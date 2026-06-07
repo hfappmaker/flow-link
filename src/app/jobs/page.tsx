@@ -57,22 +57,18 @@ export default async function JobsPage({
     ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
   const jobs = process.env.DATABASE_URL
-    ? await prisma.jobPost
-        .findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          include: { companyProfile: true },
-        })
-        .catch(() => [])
+    ? await prisma.jobPost.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: { companyProfile: true },
+      })
     : [];
   const freelancerProfile =
     process.env.DATABASE_URL && session?.user?.role === "freelancer"
-      ? await prisma.freelancerProfile
-          .findUnique({
-            where: { userId: session.user.id },
-            include: { documents: true, careerHistory: true },
-          })
-          .catch(() => null)
+      ? await prisma.freelancerProfile.findUnique({
+          where: { userId: session.user.id },
+          include: { documents: true, careerHistory: true },
+        })
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
