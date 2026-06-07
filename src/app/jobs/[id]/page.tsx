@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { applyToJob } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { applicationStatusLabel, formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
+import { applicationStatusLabel, directContractChecklist, formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
+  const contractReadiness = directContractChecklist(job);
 
   return (
     <Shell>
@@ -86,6 +87,23 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             )}
           </Card>
           <div className="grid h-fit gap-5">
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">直接契約準備</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    仲介なしで進む前に、案件側で確認できる条件です。
+                  </p>
+                </div>
+                <StatusBadge tone={contractReadiness.isReady ? "good" : "warn"}>{contractReadiness.percent}%</StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {contractReadiness.items.map((item) => (
+                  <ContractReadinessItem detail={item.detail} done={item.done} key={item.key} label={item.label} />
+                ))}
+              </div>
+            </Card>
+
             {freelancerProfile && (
               <Card>
                 <div className="flex items-start justify-between gap-4">
@@ -247,6 +265,22 @@ function MatchSignal({
     <div className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${toneClasses[tone]}`}>
       <span className="font-medium">{label}</span>
       <span className="text-right text-xs font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function ContractReadinessItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs font-semibold">{done ? "確認可" : "要確認"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{detail}</p>
     </div>
   );
 }

@@ -42,6 +42,62 @@ export function formatOpenings(value: number | null | undefined) {
   return value ? `${value}名` : "未設定";
 }
 
+type DirectContractChecklistInput = {
+  description?: string | null;
+  requiredSkills?: string | null;
+  rate?: string | null;
+  workload?: string | null;
+  contractPeriod?: string | null;
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+  location?: string | null;
+  remotePolicy?: string | null;
+};
+
+export function directContractChecklist(job: DirectContractChecklistInput) {
+  const items = [
+    {
+      key: "scope",
+      label: "業務範囲",
+      detail: "業務内容と必須スキルで、任せたい役割が判断できる",
+      done: Boolean(job.description && job.requiredSkills),
+    },
+    {
+      key: "compensation",
+      label: "報酬・支払い",
+      detail: "単価と直接契約・支払い条件が提示されている",
+      done: Boolean(job.rate && job.contractTerms),
+    },
+    {
+      key: "workload",
+      label: "稼働条件",
+      detail: "稼働率と契約期間が応募前に確認できる",
+      done: Boolean(job.workload && job.contractPeriod),
+    },
+    {
+      key: "process",
+      label: "選考フロー",
+      detail: "面談回数や判断までの流れが明記されている",
+      done: Boolean(job.selectionFlow),
+    },
+    {
+      key: "place",
+      label: "働き方",
+      detail: "勤務地またはリモート条件が明記されている",
+      done: Boolean(job.location || job.remotePolicy),
+    },
+  ];
+  const completed = items.filter((item) => item.done).length;
+
+  return {
+    items,
+    completed,
+    total: items.length,
+    percent: Math.round((completed / items.length) * 100),
+    isReady: completed === items.length,
+  };
+}
+
 export function applicationStatusLabel(status: string) {
   const labels: Record<string, string> = {
     applied: "応募済み",
