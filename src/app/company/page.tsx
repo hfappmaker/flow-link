@@ -1,18 +1,63 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
-import { Shell, TopNav, PageHeader, StatCard, Card, icons } from "@/components/ui";
+import { getFreelancerReadiness } from "@/lib/readiness";
+import { directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyDashboard() {
   const session = await auth();
   const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
-  const [jobs, applications] = await Promise.all([
+  const [jobs, applications, openApplications, contactQueueCandidates] = await Promise.all([
     prisma.jobPost.count({ where: { companyProfileId: companyUser!.companyProfileId } }),
     prisma.jobApplication.count({ where: { jobPost: { companyProfileId: companyUser!.companyProfileId } } }),
+    prisma.jobApplication.count({
+      where: {
+        status: "applied",
+        jobPost: { companyProfileId: companyUser!.companyProfileId },
+      },
+    }),
+    prisma.jobApplication.findMany({
+      where: {
+        status: "applied",
+        jobPost: {
+          companyProfileId: companyUser!.companyProfileId,
+          status: "published",
+          applicationStatus: "open",
+        },
+      },
+      include: {
+        jobPost: true,
+        freelancerProfile: {
+          include: {
+            careerHistory: true,
+            documents: true,
+          },
+        },
+      },
+      orderBy: { appliedAt: "desc" },
+      take: 12,
+    }),
   ]);
+  const contactQueue = contactQueueCandidates
+    .map((application) => {
+      const readiness = getFreelancerReadiness(application.freelancerProfile);
+      const matched = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+      const score = directMatchScore({
+        ...application.jobPost,
+        freelancerReadinessPercent: readiness.percent,
+        freelancerSkills: application.freelancerProfile.skills,
+      });
+
+      return { application, readiness, matched, score };
+    })
+    .sort((a, b) => b.score - a.score || b.application.appliedAt.getTime() - a.application.appliedAt.getTime())
+    .slice(0, 4);
+
   return (
     <Shell>
       <TopNav sessionRole={session?.user?.role} />
@@ -25,14 +70,117 @@ export default async function CompanyDashboard() {
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           <StatCard label="案件数" value={jobs} icon={icons.jobs} />
           <StatCard label="応募者数" value={applications} icon={icons.users} />
-          <StatCard label="選考管理" value="OK/NG" icon={icons.ok} />
+          <StatCard label="未選考" value={openApplications} icon={icons.ok} />
         </div>
+        <section className="mt-6">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">直接連絡キュー</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">
+                仲介担当なしで次に連絡すべき応募者を、案件条件・提案内容・応募準備から優先表示します。
+              </p>
+            </div>
+            <Link className="btn btn-secondary" href="/company/jobs">案件別に見る</Link>
+          </div>
+          {contactQueue.length > 0 ? (
+            <Card className="p-0">
+              <div className="divide-y divide-stone-200">
+                {contactQueue.map(({ application, readiness, matched, score }) => (
+                  <ContactQueueRow
+                    application={application}
+                    key={application.id}
+                    matchedSkills={matched}
+                    readinessPercent={readiness.percent}
+                    score={score}
+                  />
+                ))}
+              </div>
+            </Card>
+          ) : (
+            <EmptyState
+              title="連絡待ちの応募者はいません。"
+              description="公開中かつ受付中の案件に未選考の応募が届くと、ここに優先順で表示されます。"
+              action={<Link className="btn btn-primary" href="/company/jobs/new">案件を作成</Link>}
+            />
+          )}
+        </section>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <ActionCard href="/company/profile" title="企業プロフィール" body="企業名、概要、Webサイトを更新します。" />
           <ActionCard href="/company/jobs" title="案件一覧" body="案件の作成、編集、公開状態、受付状態を管理します。" />
         </div>
       </div>
     </Shell>
+  );
+}
+
+type ContactQueueApplication = Prisma.JobApplicationGetPayload<{
+  include: {
+    jobPost: true;
+    freelancerProfile: {
+      include: {
+        careerHistory: true;
+        documents: true;
+      };
+    };
+  };
+}>;
+
+function ContactQueueRow({
+  application,
+  matchedSkills,
+  readinessPercent,
+  score,
+}: {
+  application: ContactQueueApplication;
+  matchedSkills: string[];
+  readinessPercent: number;
+  score: number;
+}) {
+  const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const hasStartSignal = Boolean(
+    application.proposedStart ||
+      application.freelancerProfile.availableFrom ||
+      application.freelancerProfile.availability,
+  );
+
+  return (
+    <div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div>
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge tone={score >= 80 ? "good" : score >= 55 ? "neutral" : "warn"}>直接優先 {score}%</StatusBadge>
+          <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
+            必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
+          </StatusBadge>
+          <StatusBadge tone={readinessPercent === 100 ? "good" : "warn"}>応募準備 {readinessPercent}%</StatusBadge>
+          <StatusBadge tone={hasStartSignal ? "good" : "warn"}>開始目安{hasStartSignal ? "あり" : "未設定"}</StatusBadge>
+        </div>
+        <h3 className="mt-3 font-semibold">{application.freelancerProfile.fullName}</h3>
+        <p className="mt-1 text-sm text-stone-500">
+          {application.freelancerProfile.desiredOccupation ?? "希望職種未設定"} / {application.jobPost.title}
+        </p>
+        {application.proposalMessage && (
+          <p className="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-600">
+          <span>応募 {formatDateTime(application.appliedAt)}</span>
+          {application.proposedStart && <span>開始: {application.proposedStart}</span>}
+          {application.contactPreference && <span>連絡: {application.contactPreference}</span>}
+        </div>
+        {matchedSkills.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {matchedSkills.slice(0, 5).map((skill) => (
+              <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800" key={skill}>
+                {skill}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:w-40 lg:grid-cols-1">
+        <Link className="btn btn-primary" href={`/company/applications/${application.id}`}>詳細確認</Link>
+        <Link className="btn btn-secondary" href={`/company/jobs/${application.jobPostId}/applications?status=applied`}>同じ案件</Link>
+      </div>
+    </div>
   );
 }
 
