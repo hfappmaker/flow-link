@@ -38,6 +38,12 @@ export function matchedSkills(requiredSkills: string | null | undefined, freelan
   return parseSkills(requiredSkills).filter((skill) => freelancerSkillSet.has(skill.toLowerCase()));
 }
 
+export function skillMatchPercent(requiredSkills: string | null | undefined, freelancerSkills: string | null | undefined) {
+  const requiredSkillCount = parseSkills(requiredSkills).length;
+  if (requiredSkillCount === 0) return null;
+  return Math.round((matchedSkills(requiredSkills, freelancerSkills).length / requiredSkillCount) * 100);
+}
+
 export function formatOpenings(value: number | null | undefined) {
   return value ? `${value}名` : "未設定";
 }
@@ -96,6 +102,24 @@ export function directContractChecklist(job: DirectContractChecklistInput) {
     percent: Math.round((completed / items.length) * 100),
     isReady: completed === items.length,
   };
+}
+
+type DirectMatchScoreInput = DirectContractChecklistInput & {
+  applicationStatus?: string | null;
+  freelancerReadinessPercent?: number | null;
+  freelancerSkills?: string | null;
+};
+
+export function directMatchScore(job: DirectMatchScoreInput) {
+  const skillPercent = skillMatchPercent(job.requiredSkills, job.freelancerSkills);
+  const contractPercent = directContractChecklist(job).percent;
+  const readinessPercent = job.freelancerReadinessPercent ?? 0;
+  const applicationOpenBonus = job.applicationStatus === "open" ? 5 : 0;
+  const weightedSkill = skillPercent === null ? 20 : skillPercent * 0.45;
+  const weightedContract = contractPercent * 0.35;
+  const weightedReadiness = readinessPercent * 0.15;
+
+  return Math.min(100, Math.round(weightedSkill + weightedContract + weightedReadiness + applicationOpenBonus));
 }
 
 export function applicationStatusLabel(status: string) {

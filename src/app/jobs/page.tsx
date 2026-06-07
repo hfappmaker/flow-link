@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { formatOpenings, matchedSkills, parseSkills, skillPreview } from "@/lib/utils";
+import { directContractChecklist, directMatchScore, formatOpenings, matchedSkills, parseSkills, skillMatchPercent, skillPreview } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; remote?: string; accepting?: string }>;
+  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; sort?: string }>;
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
@@ -61,6 +61,24 @@ export default async function JobsPage({
           .catch(() => null)
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
+  const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
+  const rankedJobs = jobs
+    .map((job) => ({
+      job,
+      directScore: directMatchScore({
+        ...job,
+        applicationStatus: job.applicationStatus,
+        freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
+        freelancerSkills: freelancerProfile?.skills,
+      }),
+      contractReadinessPercent: directContractChecklist(job).percent,
+    }))
+    .sort((a, b) => {
+      if (sort === "direct") {
+        return b.directScore - a.directScore || b.job.createdAt.getTime() - a.job.createdAt.getTime();
+      }
+      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
+    });
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -82,7 +100,7 @@ export default async function JobsPage({
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="公開中のフリーランス案件を確認できます。応募にはログインが必要です。" />
         <Card className="mt-6">
-          <form className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto_auto]" action="/jobs">
+          <form className="grid gap-3 md:grid-cols-[1fr_170px_170px_180px_auto_auto]" action="/jobs">
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               キーワード
               <input
@@ -114,17 +132,30 @@ export default async function JobsPage({
                 <option value="open">受付中のみ</option>
               </select>
             </label>
+            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+              並び順
+              <select
+                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                name="sort"
+                defaultValue={sort}
+              >
+                <option value="direct">直接マッチ優先</option>
+                <option value="new">新着順</option>
+              </select>
+            </label>
             <button className="btn btn-primary self-end" type="submit">検索</button>
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}
+            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"} / {sort === "direct" ? "直接マッチ優先" : "新着順"}
           </p>
         </Card>
         <div className="mt-6 grid gap-4">
-          {jobs.map((job) => (
+          {rankedJobs.map(({ job, directScore, contractReadinessPercent }) => (
             <JobCard
               applied={appliedJobIds.has(job.id)}
+              contractReadinessPercent={contractReadinessPercent}
+              directScore={directScore}
               freelancerProfile={freelancerProfile}
               job={job}
               key={job.id}
@@ -149,11 +180,15 @@ type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { docume
 
 function JobCard({
   applied,
+  contractReadinessPercent,
+  directScore,
   freelancerProfile,
   job,
   readinessPercent,
 }: {
   applied: boolean;
+  contractReadinessPercent: number;
+  directScore: number;
   freelancerProfile: FreelancerForMatch | null;
   job: JobWithCompany;
   readinessPercent: number;
@@ -161,10 +196,7 @@ function JobCard({
   const requiredSkills = skillPreview(job.requiredSkills);
   const requiredSkillCount = parseSkills(job.requiredSkills).length;
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
-  const matchPercent =
-    freelancerProfile && requiredSkillCount > 0
-      ? Math.round((requiredSkillMatches.length / requiredSkillCount) * 100)
-      : null;
+  const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
 
   return (
     <Card>
@@ -176,6 +208,9 @@ function JobCard({
             </StatusBadge>
             <StatusBadge>{job.remotePolicy ?? "勤務形態未設定"}</StatusBadge>
             {(job.selectionFlow || job.contractTerms) && <StatusBadge tone="good">直接条件あり</StatusBadge>}
+            <StatusBadge tone={directScore >= 70 ? "good" : directScore >= 45 ? "neutral" : "warn"}>
+              直接マッチ {directScore}%
+            </StatusBadge>
           </div>
           <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
           <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
@@ -211,6 +246,11 @@ function JobCard({
                   </StatusBadge>
                 )}
               </div>
+              <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-3">
+                <ScoreMeta label="スキル一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
+                <ScoreMeta label="直接条件" value={`${contractReadinessPercent}%`} />
+                <ScoreMeta label="応募準備" value={`${readinessPercent}%`} />
+              </div>
               <p className="mt-2 text-sm leading-6 text-stone-700">
                 {requiredSkillCount === 0
                   ? "必須スキル未設定のため、詳細画面で条件を確認して企業へ直接提案できます。"
@@ -226,6 +266,15 @@ function JobCard({
         </Link>
       </div>
     </Card>
+  );
+}
+
+function ScoreMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-emerald-200 bg-white/70 px-2 py-1.5">
+      <p className="text-stone-500">{label}</p>
+      <p className="mt-0.5 font-semibold text-stone-800">{value}</p>
+    </div>
   );
 }
 
