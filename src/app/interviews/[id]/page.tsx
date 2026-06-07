@@ -38,6 +38,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const company = jobPost.companyProfile;
   const readiness = getFreelancerReadiness(freelancer);
   const requiredSkillMatches = matchedSkills(jobPost.requiredSkills, freelancer.skills);
+  const isCompanySender = thread.jobApplication.jobPost.companyProfile.users.some((user) => user.userId === session!.user.id);
   const directDealChecks = [
     {
       label: "双方の基本情報",
@@ -78,6 +79,19 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       : proposedMessages.length > 0
         ? "候補日時を確認し、承諾するか別候補を提案してください。"
         : "最初の候補日時を提案してください。";
+  const starterMessage = buildDirectStarterMessage({
+    isCompanySender,
+    companyName: company.name,
+    freelancerName: freelancer.fullName,
+    jobTitle: jobPost.title,
+    proposedStart: thread.jobApplication.proposedStart,
+    contactPreference: thread.jobApplication.contactPreference,
+    matchedSkills: requiredSkillMatches,
+    selectionFlow: jobPost.selectionFlow,
+    contractTerms: jobPost.contractTerms,
+    hasMessages: thread.messages.length > 0,
+    nextAction,
+  });
 
   return (
     <Shell>
@@ -245,7 +259,10 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             )}
 
             <Card>
-              <h2 className="font-semibold">送信</h2>
+              <h2 className="font-semibold">直接連絡を送る</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                応募情報と案件条件から、仲介担当なしで次に確認すべき内容を下書きしています。
+              </p>
               <form action={sendInterviewMessage} className="mt-4 grid gap-4">
                 <input type="hidden" name="threadId" value={thread.id} />
                 <SelectField name="messageType" label="種別" defaultValue="text">
@@ -255,7 +272,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                   <option value="meeting_url">会議URL</option>
                 </SelectField>
                 <TextField name="proposedAt" label="候補/確定日時" type="datetime-local" />
-                <TextArea name="body" label="本文またはURL" />
+                <TextArea name="body" label="本文またはURL" defaultValue={starterMessage} />
                 <button className="btn btn-primary" type="submit">送信</button>
               </form>
             </Card>
@@ -264,6 +281,63 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       </div>
     </Shell>
   );
+}
+
+function buildDirectStarterMessage({
+  isCompanySender,
+  companyName,
+  freelancerName,
+  jobTitle,
+  proposedStart,
+  contactPreference,
+  matchedSkills,
+  selectionFlow,
+  contractTerms,
+  hasMessages,
+  nextAction,
+}: {
+  isCompanySender: boolean;
+  companyName: string;
+  freelancerName: string;
+  jobTitle: string;
+  proposedStart?: string | null;
+  contactPreference?: string | null;
+  matchedSkills: string[];
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+  hasMessages: boolean;
+  nextAction: string;
+}) {
+  const recipient = isCompanySender ? `${freelancerName}さん` : `${companyName} ご担当者様`;
+  const sender = isCompanySender ? companyName : freelancerName;
+  const intro = hasMessages
+    ? `${jobTitle}の面談調整について、次の確認です。`
+    : `${jobTitle}について、仲介なしで直接面談調整を進めさせてください。`;
+  const skillLine =
+    matchedSkills.length > 0
+      ? `確認済みの一致スキル: ${matchedSkills.slice(0, 5).join("、")}`
+      : "確認済みの一致スキル: 面談で職務経歴とあわせて確認";
+  const startLine = `稼働開始目安: ${proposedStart || "面談で確認"}`;
+  const contactLine = `連絡希望: ${contactPreference || "このチャットで調整"}`;
+  const flowLine = `選考フロー: ${selectionFlow || "面談で確認"}`;
+  const termsLine = `契約・支払い条件: ${contractTerms || "面談で確認"}`;
+
+  return [
+    recipient,
+    "",
+    intro,
+    "",
+    skillLine,
+    startLine,
+    contactLine,
+    flowLine,
+    termsLine,
+    "",
+    `次のアクション: ${nextAction}`,
+    "",
+    "この内容で問題なければ、候補日時または確認したい条件を返信してください。",
+    sender,
+  ].join("\n");
 }
 
 function SummaryRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
