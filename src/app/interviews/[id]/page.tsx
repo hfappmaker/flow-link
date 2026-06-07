@@ -79,6 +79,16 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       : proposedMessages.length > 0
         ? "候補日時を確認し、承諾するか別候補を提案してください。"
         : "最初の候補日時を提案してください。";
+  const meetingBrief = buildMeetingBrief({
+    freelancer,
+    jobPost,
+    companyName: company.name,
+    matchedSkills: requiredSkillMatches,
+    proposedStart: thread.jobApplication.proposedStart,
+    contactPreference: thread.jobApplication.contactPreference,
+    scheduledAt: thread.scheduledAt,
+    meetingUrl: thread.meetingUrl,
+  });
   const starterMessage = buildDirectStarterMessage({
     isCompanySender,
     companyName: company.name,
@@ -91,6 +101,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     contractTerms: jobPost.contractTerms,
     hasMessages: thread.messages.length > 0,
     nextAction,
+    agenda: meetingBrief.agenda,
+    openQuestions: meetingBrief.openQuestions,
   });
 
   return (
@@ -240,6 +252,45 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               </dl>
             </Card>
 
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">直接面談ブリーフ</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    面談前に確認する議題と未決事項を、応募内容と案件条件から整理します。
+                  </p>
+                </div>
+                <StatusBadge tone={meetingBrief.openQuestions.length === 0 ? "good" : "warn"}>
+                  {meetingBrief.openQuestions.length === 0 ? "確認済み" : `${meetingBrief.openQuestions.length}件確認`}
+                </StatusBadge>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <div>
+                  <p className="text-xs font-medium text-stone-500">推奨アジェンダ</p>
+                  <div className="mt-2 grid gap-2">
+                    {meetingBrief.agenda.map((item, index) => (
+                      <BriefItem index={index + 1} key={item} text={item} />
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium text-stone-500">面談で決めること</p>
+                  <div className="mt-2 grid gap-2">
+                    {meetingBrief.openQuestions.map((question) => (
+                      <OpenQuestion key={question} text={question} />
+                    ))}
+                    {meetingBrief.openQuestions.length === 0 && (
+                      <p className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-800">
+                        主要な条件は揃っています。面談では最終確認と開始手続きに集中できます。
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
             {proposedMessages.length > 0 && thread.status !== "scheduled" && (
               <Card>
                 <h2 className="font-semibold">候補日時</h2>
@@ -295,6 +346,8 @@ function buildDirectStarterMessage({
   contractTerms,
   hasMessages,
   nextAction,
+  agenda,
+  openQuestions,
 }: {
   isCompanySender: boolean;
   companyName: string;
@@ -307,6 +360,8 @@ function buildDirectStarterMessage({
   contractTerms?: string | null;
   hasMessages: boolean;
   nextAction: string;
+  agenda: string[];
+  openQuestions: string[];
 }) {
   const recipient = isCompanySender ? `${freelancerName}さん` : `${companyName} ご担当者様`;
   const sender = isCompanySender ? companyName : freelancerName;
@@ -321,6 +376,10 @@ function buildDirectStarterMessage({
   const contactLine = `連絡希望: ${contactPreference || "このチャットで調整"}`;
   const flowLine = `選考フロー: ${selectionFlow || "面談で確認"}`;
   const termsLine = `契約・支払い条件: ${contractTerms || "面談で確認"}`;
+  const agendaLines = agenda.slice(0, 4).map((item, index) => `${index + 1}. ${item}`);
+  const questionLines = openQuestions.length > 0
+    ? openQuestions.slice(0, 4).map((item) => `- ${item}`)
+    : ["- 主要条件は共有済みのため、面談で最終確認"];
 
   return [
     recipient,
@@ -333,11 +392,75 @@ function buildDirectStarterMessage({
     flowLine,
     termsLine,
     "",
+    "面談アジェンダ:",
+    ...agendaLines,
+    "",
+    "面談で決めたいこと:",
+    ...questionLines,
+    "",
     `次のアクション: ${nextAction}`,
     "",
     "この内容で問題なければ、候補日時または確認したい条件を返信してください。",
     sender,
   ].join("\n");
+}
+
+function buildMeetingBrief({
+  freelancer,
+  jobPost,
+  companyName,
+  matchedSkills,
+  proposedStart,
+  contactPreference,
+  scheduledAt,
+  meetingUrl,
+}: {
+  freelancer: {
+    desiredOccupation: string | null;
+    desiredRate: string | null;
+    availability: string | null;
+    availableFrom: string | null;
+    remotePreference: string | null;
+  };
+  jobPost: {
+    title: string;
+    rate: string | null;
+    workload: string | null;
+    contractPeriod: string | null;
+    selectionFlow: string | null;
+    contractTerms: string | null;
+    location: string | null;
+    remotePolicy: string | null;
+  };
+  companyName: string;
+  matchedSkills: string[];
+  proposedStart: string | null;
+  contactPreference: string | null;
+  scheduledAt: Date | null;
+  meetingUrl: string | null;
+}) {
+  const workingStyle = [jobPost.location, jobPost.remotePolicy].filter(Boolean).join(" / ");
+  const agenda = [
+    `${companyName}が${jobPost.title}で任せたい役割と成果物を確認`,
+    matchedSkills.length > 0
+      ? `一致スキル (${matchedSkills.slice(0, 5).join("、")}) と近い実績を確認`
+      : "必須スキルと職務経歴の近さを確認",
+    `稼働開始と稼働量を確認 (${proposedStart || freelancer.availableFrom || freelancer.availability || "未設定"})`,
+    `報酬と契約期間を確認 (${jobPost.rate || freelancer.desiredRate || "単価未設定"} / ${jobPost.contractPeriod || "期間未設定"})`,
+  ];
+
+  const openQuestions = [
+    !scheduledAt ? "面談日時を確定する" : null,
+    scheduledAt && !meetingUrl ? "会議URLを共有する" : null,
+    !jobPost.contractTerms ? "直接契約の支払いサイト、請求方法、契約主体を確認する" : null,
+    !jobPost.selectionFlow ? "面談後の判断期限と次ステップを確認する" : null,
+    !jobPost.rate && !freelancer.desiredRate ? "報酬レンジを確認する" : null,
+    !jobPost.workload && !freelancer.availability ? "週の稼働日数または稼働率を確認する" : null,
+    !workingStyle && !freelancer.remotePreference ? "リモート可否、出社頻度、稼働場所を確認する" : null,
+    !contactPreference ? "面談後の連絡手段と返信目安を確認する" : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return { agenda, openQuestions };
 }
 
 function SummaryRow({ label, value, multiline }: { label: string; value: string; multiline?: boolean }) {
@@ -374,6 +497,23 @@ function DealReadinessItem({ label, detail, done }: { label: string; detail: str
         <span className="text-xs font-semibold">{done ? "完了" : "要確認"}</span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+    </div>
+  );
+}
+
+function BriefItem({ index, text }: { index: number; text: string }) {
+  return (
+    <div className="flex gap-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm">
+      <span className="grid size-6 shrink-0 place-items-center rounded bg-emerald-700 text-xs font-semibold text-white">{index}</span>
+      <p className="leading-6 text-stone-700">{text}</p>
+    </div>
+  );
+}
+
+function OpenQuestion({ text }: { text: string }) {
+  return (
+    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+      {text}
     </div>
   );
 }
