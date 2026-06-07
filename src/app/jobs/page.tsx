@@ -11,13 +11,38 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; directReady?: string; sort?: string }>;
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
   const remote = filters.remote === "remote";
   const accepting = filters.accepting === "open";
+  const directReady = filters.directReady === "ready";
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
+  const andFilters: Prisma.JobPostWhereInput[] = [];
+  if (directReady) {
+    andFilters.push({
+      requiredSkills: { not: null },
+      rate: { not: null },
+      workload: { not: null },
+      contractPeriod: { not: null },
+      selectionFlow: { not: null },
+      contractTerms: { not: null },
+      OR: [{ location: { not: null } }, { remotePolicy: { not: null } }],
+    });
+  }
+  if (keyword) {
+    andFilters.push({
+      OR: [
+        { title: { contains: keyword, mode: "insensitive" } },
+        { description: { contains: keyword, mode: "insensitive" } },
+        { requiredSkills: { contains: keyword, mode: "insensitive" } },
+        { preferredSkills: { contains: keyword, mode: "insensitive" } },
+        { location: { contains: keyword, mode: "insensitive" } },
+        { companyProfile: { name: { contains: keyword, mode: "insensitive" } } },
+      ],
+    });
+  }
   const where: Prisma.JobPostWhereInput = {
     status: "published",
     ...(accepting ? { applicationStatus: "open" } : {}),
@@ -29,18 +54,7 @@ export default async function JobsPage({
           },
         }
       : {}),
-    ...(keyword
-      ? {
-          OR: [
-            { title: { contains: keyword, mode: "insensitive" } },
-            { description: { contains: keyword, mode: "insensitive" } },
-            { requiredSkills: { contains: keyword, mode: "insensitive" } },
-            { preferredSkills: { contains: keyword, mode: "insensitive" } },
-            { location: { contains: keyword, mode: "insensitive" } },
-            { companyProfile: { name: { contains: keyword, mode: "insensitive" } } },
-          ],
-        }
-      : {}),
+    ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
   const jobs = process.env.DATABASE_URL
     ? await prisma.jobPost
@@ -98,9 +112,9 @@ export default async function JobsPage({
     <Shell>
       <TopNav sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
-        <PageHeader title="公開案件" description="公開中のフリーランス案件を確認できます。応募にはログインが必要です。" />
+        <PageHeader title="公開案件" description="仲介なしで進めやすい条件が揃った案件を探し、企業へ直接応募できます。" />
         <Card className="mt-6">
-          <form className="grid gap-3 md:grid-cols-[1fr_170px_170px_180px_auto_auto]" action="/jobs">
+          <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_150px_150px_170px_180px_auto_auto]" action="/jobs">
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               キーワード
               <input
@@ -133,6 +147,17 @@ export default async function JobsPage({
               </select>
             </label>
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+              直接進行
+              <select
+                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                name="directReady"
+                defaultValue={directReady ? "ready" : ""}
+              >
+                <option value="">すべて</option>
+                <option value="ready">直接条件が揃った案件</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               並び順
               <select
                 className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
@@ -147,8 +172,25 @@ export default async function JobsPage({
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"} / {sort === "direct" ? "直接マッチ優先" : "新着順"}
+            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 直接条件が揃った案件"} / {sort === "direct" ? "直接マッチ優先" : "新着順"}
           </p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+            <DiscoverySignal
+              label="直接条件フィルター"
+              value={directReady ? "有効" : "任意"}
+              tone={directReady ? "good" : "neutral"}
+            />
+            <DiscoverySignal
+              label="高スコア案件"
+              value={`${rankedJobs.filter(({ directScore }) => directScore >= 70).length}件`}
+              tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
+            />
+            <DiscoverySignal
+              label="直接契約準備100%"
+              value={`${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`}
+              tone={rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"}
+            />
+          </div>
         </Card>
         <div className="mt-6 grid gap-4">
           {rankedJobs.map(({ job, directScore, contractReadinessPercent }) => (
@@ -165,7 +207,7 @@ export default async function JobsPage({
           {jobs.length === 0 && (
             <EmptyState
               title="条件に合う公開案件はありません。"
-              description="キーワードを短くするか、勤務形態の条件を外して再検索してください。"
+              description="キーワードを短くするか、勤務形態・直接進行の条件を外して再検索してください。"
               action={<Link className="btn btn-secondary" href="/jobs">条件をクリア</Link>}
             />
           )}
@@ -177,6 +219,29 @@ export default async function JobsPage({
 
 type JobWithCompany = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
 type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
+
+function DiscoverySignal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "good" | "warn";
+}) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[tone]}`}>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
+  );
+}
 
 function JobCard({
   applied,
