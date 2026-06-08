@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "vercel-build": "prisma migrate deploy && next build",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
