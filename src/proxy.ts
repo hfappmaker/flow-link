@@ -3,12 +3,18 @@ import { auth } from "@/lib/auth";
 
 const freelancerOnly = ["/freelancer"];
 const companyOnly = ["/company"];
+const authenticatedOnly = ["/interviews"];
 
 export default auth((request) => {
   const { pathname } = request.nextUrl;
   const session = request.auth;
 
-  if ((freelancerOnly.some((path) => pathname.startsWith(path)) || companyOnly.some((path) => pathname.startsWith(path))) && !session?.user) {
+  if (
+    (freelancerOnly.some((path) => pathname.startsWith(path)) ||
+      companyOnly.some((path) => pathname.startsWith(path)) ||
+      authenticatedOnly.some((path) => pathname.startsWith(path))) &&
+    !session?.user
+  ) {
     const login = new URL("/login", request.url);
     login.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(login);
@@ -26,5 +32,5 @@ export default auth((request) => {
 });
 
 export const config = {
-  matcher: ["/freelancer/:path*", "/company/:path*"],
+  matcher: ["/freelancer/:path*", "/company/:path*", "/interviews/:path*"],
 };
