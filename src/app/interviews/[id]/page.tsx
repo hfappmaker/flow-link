@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { sendInterviewMessage, sendInterviewTimeOptions } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { formatDateTime, formatOpenings, matchedSkills } from "@/lib/utils";
+import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +112,22 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     scheduledAt: thread.scheduledAt,
     meetingUrl: thread.meetingUrl,
   });
+  const preparationPlan = buildInterviewPreparationPlan({
+    isCompanySender,
+    scheduledAt: thread.scheduledAt,
+    meetingUrl: thread.meetingUrl,
+    proposedMessageCount: proposedMessages.length,
+    contractTerms: jobPost.contractTerms,
+    selectionFlow: jobPost.selectionFlow,
+    proposedStart: thread.jobApplication.proposedStart,
+    contactPreference: thread.jobApplication.contactPreference,
+    readinessPercent: readiness.percent,
+    documentCount: freelancer.documents.length,
+    hasCareerHistory: Boolean(freelancer.careerHistory),
+    requiredSkillCount: parseSkills(jobPost.requiredSkills).length,
+    matchedSkillCount: requiredSkillMatches.length,
+    openQuestions: meetingBrief.openQuestions,
+  });
   const starterMessage = buildDirectStarterMessage({
     isCompanySender,
     companyName: company.name,
@@ -193,6 +209,43 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             </div>
           </Card>
           <div className="grid h-fit gap-5">
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">面談準備タスク</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    {preparationPlan.description}
+                  </p>
+                </div>
+                <StatusBadge tone={preparationPlan.completed === preparationPlan.total ? "good" : "warn"}>
+                  {preparationPlan.completed}/{preparationPlan.total}
+                </StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {preparationPlan.tasks.map((task) => (
+                  <PreparationTaskItem
+                    detail={task.detail}
+                    done={task.done}
+                    key={task.label}
+                    label={task.label}
+                    owner={task.owner}
+                  />
+                ))}
+              </div>
+              {preparationPlan.focusQuestions.length > 0 && (
+                <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-medium text-amber-900">面談で先に確認すること</p>
+                  <div className="mt-2 grid gap-2">
+                    {preparationPlan.focusQuestions.map((question) => (
+                      <p className="text-sm leading-6 text-amber-900" key={question}>
+                        {question}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -413,6 +466,98 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   );
 }
 
+function buildInterviewPreparationPlan({
+  isCompanySender,
+  scheduledAt,
+  meetingUrl,
+  proposedMessageCount,
+  contractTerms,
+  selectionFlow,
+  proposedStart,
+  contactPreference,
+  readinessPercent,
+  documentCount,
+  hasCareerHistory,
+  requiredSkillCount,
+  matchedSkillCount,
+  openQuestions,
+}: {
+  isCompanySender: boolean;
+  scheduledAt: Date | null;
+  meetingUrl: string | null;
+  proposedMessageCount: number;
+  contractTerms: string | null;
+  selectionFlow: string | null;
+  proposedStart: string | null;
+  contactPreference: string | null;
+  readinessPercent: number;
+  documentCount: number;
+  hasCareerHistory: boolean;
+  requiredSkillCount: number;
+  matchedSkillCount: number;
+  openQuestions: string[];
+}) {
+  const roleText = isCompanySender ? "企業側で先に整える内容を上から確認できます。" : "応募者側で先に整える内容を上から確認できます。";
+  const skillDone = requiredSkillCount === 0 || matchedSkillCount > 0;
+  const tasks = [
+    {
+      label: "候補日時",
+      detail: scheduledAt
+        ? `${formatDateTime(scheduledAt)}で確定済みです。`
+        : proposedMessageCount > 0
+          ? "届いている候補日時を確認し、確定または別候補を返信してください。"
+          : "面談可能な日時を3つほど共有してください。",
+      done: Boolean(scheduledAt),
+      owner: proposedMessageCount > 0 ? "双方" : isCompanySender ? "企業" : "応募者",
+    },
+    {
+      label: "会議URL",
+      detail: meetingUrl
+        ? "会議URLは共有済みです。"
+        : scheduledAt
+          ? "面談日時が決まったため、会議URLを共有してください。"
+          : "日程確定後に会議URLを共有してください。",
+      done: Boolean(meetingUrl),
+      owner: "企業",
+    },
+    {
+      label: "応募者情報",
+      detail:
+        readinessPercent >= 100
+          ? "プロフィール、職務経歴、PDF書類が揃っています。"
+          : `応募準備は${readinessPercent}%です。職務経歴とPDF書類を面談前に確認してください。`,
+      done: readinessPercent >= 100 && documentCount >= 2 && hasCareerHistory,
+      owner: "応募者",
+    },
+    {
+      label: "スキル確認",
+      detail:
+        requiredSkillCount === 0
+          ? "必須スキルは未設定です。職務経歴と応募時の提案から確認してください。"
+          : `${matchedSkillCount}/${requiredSkillCount}件の必須スキルがプロフィールと一致しています。`,
+      done: skillDone,
+      owner: "双方",
+    },
+    {
+      label: "条件確認",
+      detail:
+        contractTerms && selectionFlow && proposedStart && contactPreference
+          ? "契約・支払い条件、選考フロー、開始目安、連絡希望が揃っています。"
+          : "契約・支払い条件、選考フロー、開始目安、連絡希望の不足分を面談で確認してください。",
+      done: Boolean(contractTerms && selectionFlow && proposedStart && contactPreference),
+      owner: "双方",
+    },
+  ];
+
+  return {
+    description: roleText,
+    tasks,
+    completed: tasks.filter((task) => task.done).length,
+    total: tasks.length,
+    focusQuestions: openQuestions.slice(0, 3),
+  };
+}
+
 function buildDirectStarterMessage({
   isCompanySender,
   companyName,
@@ -603,6 +748,34 @@ function DealReadinessItem({ label, detail, done }: { label: string; detail: str
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium">{label}</span>
         <span className="text-xs font-semibold">{done ? "完了" : "要確認"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+    </div>
+  );
+}
+
+function PreparationTaskItem({
+  label,
+  detail,
+  done,
+  owner,
+}: {
+  label: string;
+  detail: string;
+  done: boolean;
+  owner: string;
+}) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-stone-200 bg-white text-stone-800"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${done ? "bg-white/80 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>
+          {done ? "完了" : owner}
+        </span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
     </div>
