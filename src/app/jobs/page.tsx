@@ -13,13 +13,24 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; directReady?: string; fit?: string; sort?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    remote?: string;
+    accepting?: string;
+    directReady?: string;
+    fit?: string;
+    sort?: string;
+    workload?: string;
+    rate?: string;
+  }>;
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
   const remote = filters.remote === "remote";
   const accepting = filters.accepting === "open";
   const directReady = filters.directReady === "ready";
+  const workload = filters.workload === "light" ? "light" : "";
+  const rate = filters.rate === "high" ? "high" : "";
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const andFilters: Prisma.JobPostWhereInput[] = [];
   if (directReady) {
@@ -42,6 +53,29 @@ export default async function JobsPage({
         { preferredSkills: { contains: keyword, mode: "insensitive" } },
         { location: { contains: keyword, mode: "insensitive" } },
         { companyProfile: { name: { contains: keyword, mode: "insensitive" } } },
+      ],
+    });
+  }
+  if (workload === "light") {
+    andFilters.push({
+      OR: [
+        { workload: { contains: "週2", mode: "insensitive" } },
+        { workload: { contains: "週3", mode: "insensitive" } },
+        { workload: { contains: "副業", mode: "insensitive" } },
+        { workload: { contains: "0.4", mode: "insensitive" } },
+        { workload: { contains: "0.5", mode: "insensitive" } },
+        { workload: { contains: "40%", mode: "insensitive" } },
+        { workload: { contains: "50%", mode: "insensitive" } },
+      ],
+    });
+  }
+  if (rate === "high") {
+    andFilters.push({
+      OR: [
+        { rate: { contains: "80", mode: "insensitive" } },
+        { rate: { contains: "90", mode: "insensitive" } },
+        { rate: { contains: "100", mode: "insensitive" } },
+        { rate: { contains: "高単価", mode: "insensitive" } },
       ],
     });
   }
@@ -88,6 +122,8 @@ export default async function JobsPage({
     directReady,
     fit,
     sort,
+    workload,
+    rate,
   });
   const rankedJobs = jobs
     .map((job) => ({
@@ -161,7 +197,7 @@ export default async function JobsPage({
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
         <Card className="mt-6">
-          <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_150px_150px_170px_180px_auto_auto]" action="/jobs">
+          <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_132px_132px_150px_132px_132px_150px_auto_auto]" action="/jobs">
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               キーワード
               <input
@@ -205,6 +241,28 @@ export default async function JobsPage({
               </select>
             </label>
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+              稼働量
+              <select
+                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                name="workload"
+                defaultValue={workload}
+              >
+                <option value="">すべて</option>
+                <option value="light">週2-3日目安</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+              単価
+              <select
+                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                name="rate"
+                defaultValue={rate}
+              >
+                <option value="">すべて</option>
+                <option value="high">80万円以上目安</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               並び順
               <select
                 className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
@@ -220,13 +278,13 @@ export default async function JobsPage({
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
+            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{workload === "light" && " / 週2-3日目安"}{rate === "high" && " / 80万円以上目安"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
           </p>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <DiscoverySignal
               label="条件フィルター"
-              value={directReady || fit === "ready" ? "有効" : "任意"}
-              tone={directReady || fit === "ready" ? "good" : "neutral"}
+              value={directReady || fit === "ready" || workload || rate ? "有効" : "任意"}
+              tone={directReady || fit === "ready" || workload || rate ? "good" : "neutral"}
             />
             <DiscoverySignal
               label="高スコア案件"
@@ -251,8 +309,11 @@ export default async function JobsPage({
         {freelancerProfile && (
           <ProfileDiscoveryShortcuts
             activeFit={fit}
+            activeRate={rate}
+            activeWorkload={workload}
             keyword={keyword}
             remote={remote}
+            desiredOccupation={freelancerProfile.desiredOccupation}
             skills={parseSkills(freelancerProfile.skills).slice(0, 6)}
           />
         )}
@@ -307,11 +368,17 @@ type RankedJob = {
 
 function ProfileDiscoveryShortcuts({
   activeFit,
+  activeRate,
+  activeWorkload,
+  desiredOccupation,
   keyword,
   remote,
   skills,
 }: {
   activeFit?: string;
+  activeRate?: string;
+  activeWorkload?: string;
+  desiredOccupation?: string | null;
   keyword: string;
   remote: boolean;
   skills: string[];
@@ -328,10 +395,29 @@ function ProfileDiscoveryShortcuts({
       active: activeFit === "ready",
     },
     {
-      label: "リモート受付中",
-      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct" }),
-      active: remote && !activeFit,
+      label: "週2-3日目安",
+      href: jobsHref({ q: keyword, remote, accepting: true, workload: "light", sort: "direct" }),
+      active: activeWorkload === "light",
     },
+    {
+      label: "80万円以上目安",
+      href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct" }),
+      active: activeRate === "high",
+    },
+    {
+      label: "リモート受付中",
+      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct", workload: activeWorkload, rate: activeRate }),
+      active: remote && !activeFit && !activeWorkload && !activeRate,
+    },
+    ...(desiredOccupation
+      ? [
+          {
+            label: "希望職種で探す",
+            href: jobsHref({ q: desiredOccupation, remote, accepting: true, sort: "direct", workload: activeWorkload, rate: activeRate }),
+            active: keyword === desiredOccupation,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -340,7 +426,7 @@ function ProfileDiscoveryShortcuts({
         <div>
           <h2 className="font-semibold">登録内容から探す</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
-            プロフィールのスキルと応募準備状況を使って、応募前に確認しやすい案件へ絞り込めます。
+            プロフィールのスキル、希望職種、稼働条件を使って、応募前に確認しやすい案件へ絞り込めます。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -364,7 +450,7 @@ function ProfileDiscoveryShortcuts({
             {skills.map((skill) => (
               <Link
                 className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700 hover:border-emerald-300 hover:text-emerald-800"
-                href={jobsHref({ q: skill, accepting: true, fit: "skill", sort: "direct" })}
+                href={jobsHref({ q: skill, remote, accepting: true, fit: "skill", sort: "direct", workload: activeWorkload, rate: activeRate })}
                 key={skill}
               >
                 {skill}
@@ -712,6 +798,8 @@ function jobsHref({
   directReady,
   fit,
   sort,
+  workload,
+  rate,
 }: {
   q?: string;
   remote?: boolean;
@@ -719,6 +807,8 @@ function jobsHref({
   directReady?: boolean;
   fit?: string;
   sort?: string;
+  workload?: string;
+  rate?: string;
 }) {
   return {
     pathname: "/jobs",
@@ -729,6 +819,8 @@ function jobsHref({
       ...(directReady ? { directReady: "ready" } : {}),
       ...(fit ? { fit } : {}),
       ...(sort ? { sort } : {}),
+      ...(workload ? { workload } : {}),
+      ...(rate ? { rate } : {}),
     },
   };
 }
