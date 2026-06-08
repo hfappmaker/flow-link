@@ -99,7 +99,7 @@ export async function registerUser(formData: FormData) {
 export async function loginUser(formData: FormData) {
   const email = toText(formData.get("email")).toLowerCase();
   const password = toText(formData.get("password"));
-  const callbackUrl = toText(formData.get("callbackUrl")) || "/";
+  const callbackUrl = safeReturnPath(toText(formData.get("callbackUrl")) || "/");
 
   const user = await authorizeCredentials({ email, password });
   if (!user) {
