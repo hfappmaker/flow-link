@@ -35,7 +35,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
   const hasRateSignal = Boolean(application.freelancerProfile.desiredRate || application.jobPost.rate);
-  const directFitItems = [
+  const interviewDecisionItems = [
     {
       label: "必須スキル",
       value: requiredSkills.length > 0 ? `${requiredSkillMatches.length}/${requiredSkills.length}` : "未設定",
@@ -57,8 +57,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       done: hasRateSignal,
     },
   ];
-  const directFitCompleted = directFitItems.filter((item) => item.done).length;
-  const directFitPercent = Math.round((directFitCompleted / directFitItems.length) * 100);
+  const interviewDecisionCompleted = interviewDecisionItems.filter((item) => item.done).length;
+  const interviewDecisionPercent = Math.round((interviewDecisionCompleted / interviewDecisionItems.length) * 100);
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({
     companyName: companyUser!.companyProfile.name,
     freelancerName: application.freelancerProfile.fullName,
@@ -145,20 +145,20 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold">直接選考ブリーフ</h2>
+                  <h2 className="font-semibold">面談判断ブリーフ</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    仲介担当の補足なしで、応募者との面談判断に必要な一致点と確認点を整理します。
+                    応募者との面談判断に必要な一致点と確認点を整理します。
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-semibold">{directFitPercent}%</p>
+                  <p className="text-2xl font-semibold">{interviewDecisionPercent}%</p>
                   <p className="text-xs text-stone-500">
-                    {directFitCompleted}/{directFitItems.length}
+                    {interviewDecisionCompleted}/{interviewDecisionItems.length}
                   </p>
                 </div>
               </div>
               <div className="mt-4 grid gap-2">
-                {directFitItems.map((item) => (
+                {interviewDecisionItems.map((item) => (
                   <FitSignal done={item.done} key={item.label} label={item.label} value={item.value} />
                 ))}
               </div>
@@ -215,7 +215,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </div>
             </Card>
             <Card>
-              <h2 className="font-semibold">直接面談へ進める</h2>
+              <h2 className="font-semibold">面談調整へ進める</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
                 書類選考OKにすると、面談チャットを作成し、下の初回連絡を企業名義で送信します。
               </p>

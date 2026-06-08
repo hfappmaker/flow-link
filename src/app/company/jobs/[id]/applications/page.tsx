@@ -20,12 +20,14 @@ export default async function JobApplicationsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; ready?: string; sort?: string }>;
 }) {
   const { id } = await params;
   const filters = await searchParams;
   const selectedStatus = statusTabs.some((tab) => tab.value === filters.status) ? filters.status! : "all";
   const keyword = filters.q?.trim() ?? "";
+  const readyOnly = filters.ready === "interview";
+  const selectedSort = filters.sort === "new" ? "new" : "review";
   const session = await auth();
   const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
   const applicationWhere: Prisma.JobApplicationWhereInput = {
@@ -70,6 +72,22 @@ export default async function JobApplicationsPage({
     : [];
   const countByStatus = new Map(counts.map((item) => [item.status, item._count.status]));
   const total = job?._count.applications ?? 0;
+  const reviewedApplications =
+    job?.applications
+      .map((application) => ({
+        application,
+        review: buildApplicationReview(application, job),
+      }))
+      .filter(({ review }) => !readyOnly || review.isInterviewReady)
+      .sort((a, b) => {
+        if (selectedSort === "review") {
+          return b.review.interviewReadinessPercent - a.review.interviewReadinessPercent || b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
+        }
+        return b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
+      }) ?? [];
+  const appliedReviews = job?.applications.map((application) => buildApplicationReview(application, job)) ?? [];
+  const interviewReadyCount = appliedReviews.filter((review) => review.isInterviewReady).length;
+  const needsCheckCount = appliedReviews.filter((review) => review.nextChecks.length > 0).length;
 
   return (
     <Shell>
@@ -79,7 +97,7 @@ export default async function JobApplicationsPage({
         {job && (
           <Card className="mt-6">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-              <form className="grid gap-3 md:grid-cols-[1fr_auto_auto]" action={`/company/jobs/${job.id}/applications`}>
+              <form className="grid gap-3 md:grid-cols-[1fr_150px_150px_auto_auto]" action={`/company/jobs/${job.id}/applications`}>
                 <label className="grid gap-1.5 text-sm font-medium text-stone-700">
                   候補者検索
                   <input
@@ -90,14 +108,41 @@ export default async function JobApplicationsPage({
                   />
                 </label>
                 <input type="hidden" name="status" value={selectedStatus === "all" ? "" : selectedStatus} />
+                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                  面談判断
+                  <select
+                    className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                    name="ready"
+                    defaultValue={readyOnly ? "interview" : ""}
+                  >
+                    <option value="">すべて</option>
+                    <option value="interview">面談候補のみ</option>
+                  </select>
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                  並び順
+                  <select
+                    className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                    name="sort"
+                    defaultValue={selectedSort}
+                  >
+                    <option value="review">判断しやすい順</option>
+                    <option value="new">新着順</option>
+                  </select>
+                </label>
                 <button className="btn btn-primary self-end" type="submit">検索</button>
                 <Link className="btn btn-secondary self-end" href={`/company/jobs/${job.id}/applications`}>クリア</Link>
               </form>
-              <div className="flex items-end text-sm text-stone-600">全応募 {total} 件</div>
+              <div className="flex items-end text-sm text-stone-600">表示 {reviewedApplications.length} / 全応募 {total} 件</div>
+            </div>
+            <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+              <ReviewSignal label="面談候補" value={`${interviewReadyCount}件`} tone={interviewReadyCount > 0 ? "good" : "neutral"} />
+              <ReviewSignal label="未選考" value={`${countByStatus.get("applied") ?? 0}件`} tone={(countByStatus.get("applied") ?? 0) > 0 ? "warn" : "neutral"} />
+              <ReviewSignal label="確認点あり" value={`${needsCheckCount}件`} tone={needsCheckCount > 0 ? "warn" : "good"} />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {statusTabs.map((tab) => {
-                const href = applicationsHref(job.id, tab.value, keyword);
+                const href = applicationsHref(job.id, tab.value, keyword, readyOnly, selectedSort);
                 const count = tab.value === "all" ? total : countByStatus.get(tab.value) ?? 0;
                 return (
                   <Link
@@ -115,10 +160,10 @@ export default async function JobApplicationsPage({
           </Card>
         )}
         <div className="mt-6 grid gap-4">
-          {job?.applications.map((application) => (
-            <ApplicationCard application={application} job={job} key={application.id} />
+          {reviewedApplications.map(({ application, review }) => (
+            <ApplicationCard application={application} key={application.id} review={review} />
           ))}
-          {job?.applications.length === 0 && (
+          {job && reviewedApplications.length === 0 && (
             <EmptyState
               title="条件に合う応募者はいません。"
               description="ステータスや検索キーワードを変えて確認してください。"
@@ -148,19 +193,44 @@ type JobWithApplications = Prisma.JobPostGetPayload<{
 }>;
 type ApplicationWithProfile = JobWithApplications["applications"][number];
 
-function ApplicationCard({ application, job }: { application: ApplicationWithProfile; job: JobWithApplications }) {
+type ApplicationReview = {
+  requiredSkillMatches: string[];
+  matchPercent: number | null;
+  interviewReadinessPercent: number;
+  isInterviewReady: boolean;
+  nextChecks: string[];
+};
+
+function buildApplicationReview(application: ApplicationWithProfile, job: JobWithApplications): ApplicationReview {
   const requiredSkills = parseSkills(job.requiredSkills);
   const requiredSkillMatches = matchedSkills(job.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(job.requiredSkills, application.freelancerProfile.skills);
-  const directFitSignals = [
-    requiredSkills.length === 0 || requiredSkillMatches.length > 0,
-    application.freelancerProfile.documents.length >= 2,
-    Boolean(application.freelancerProfile.careerHistory),
-    Boolean(application.proposalMessage),
-    Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability),
+  const reviewSignals = [
+    { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
+    { done: application.freelancerProfile.documents.length >= 2, nextCheck: "PDF書類" },
+    { done: Boolean(application.freelancerProfile.careerHistory), nextCheck: "職務経歴" },
+    { done: Boolean(application.proposalMessage), nextCheck: "応募時の提案" },
+    { done: Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability), nextCheck: "開始条件" },
   ];
-  const directFitPercent = Math.round((directFitSignals.filter(Boolean).length / directFitSignals.length) * 100);
 
+  const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
+
+  return {
+    requiredSkillMatches,
+    matchPercent,
+    interviewReadinessPercent,
+    isInterviewReady: interviewReadinessPercent >= 80 && application.status === "applied",
+    nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
+  };
+}
+
+function ApplicationCard({
+  application,
+  review,
+}: {
+  application: ApplicationWithProfile;
+  review: ApplicationReview;
+}) {
   return (
     <Card>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -169,11 +239,11 @@ function ApplicationCard({ application, job }: { application: ApplicationWithPro
             <StatusBadge tone={application.status === "screening_passed" ? "good" : application.status === "screening_rejected" ? "bad" : "neutral"}>
               {applicationStatusLabel(application.status)}
             </StatusBadge>
-            <StatusBadge tone={directFitPercent >= 80 ? "good" : directFitPercent >= 50 ? "neutral" : "warn"}>
-              直接選考 {directFitPercent}%
+            <StatusBadge tone={review.interviewReadinessPercent >= 80 ? "good" : review.interviewReadinessPercent >= 50 ? "neutral" : "warn"}>
+              面談判断 {review.interviewReadinessPercent}%
             </StatusBadge>
-            <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
-              必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
+            <StatusBadge tone={review.matchPercent === null ? "neutral" : review.matchPercent >= 50 ? "good" : review.matchPercent > 0 ? "neutral" : "warn"}>
+              必須一致 {review.matchPercent === null ? "要確認" : `${review.matchPercent}%`}
             </StatusBadge>
           </div>
           <h2 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h2>
@@ -181,9 +251,9 @@ function ApplicationCard({ application, job }: { application: ApplicationWithPro
           {application.proposalMessage && (
             <p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-stone-700">{application.proposalMessage}</p>
           )}
-          {requiredSkillMatches.length > 0 && (
+          {review.requiredSkillMatches.length > 0 && (
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              一致: {requiredSkillMatches.slice(0, 4).join("、")}
+              一致: {review.requiredSkillMatches.slice(0, 4).join("、")}
             </p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -198,19 +268,57 @@ function ApplicationCard({ application, job }: { application: ApplicationWithPro
             </StatusBadge>
             <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {review.nextChecks.length > 0 ? (
+              review.nextChecks.slice(0, 3).map((check) => (
+                <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800" key={check}>
+                  確認: {check}
+                </span>
+              ))
+            ) : (
+              <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">
+                面談前の確認点は揃っています
+              </span>
+            )}
+          </div>
         </div>
-        <Link className="btn btn-primary shrink-0" href={`/company/applications/${application.id}`}>詳細</Link>
+        <Link className="btn btn-primary shrink-0" href={`/company/applications/${application.id}`}>面談判断へ</Link>
       </div>
     </Card>
   );
 }
 
-function applicationsHref(jobId: string, status: JobApplicationStatus | "all", keyword: string): LinkProps["href"] {
+function ReviewSignal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "good" | "warn";
+}) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[tone]}`}>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function applicationsHref(jobId: string, status: JobApplicationStatus | "all", keyword: string, readyOnly: boolean, sort: string): LinkProps["href"] {
   return {
     pathname: `/company/jobs/${jobId}/applications`,
     query: {
       ...(status !== "all" ? { status } : {}),
       ...(keyword ? { q: keyword } : {}),
+      ...(readyOnly ? { ready: "interview" } : {}),
+      ...(sort !== "review" ? { sort } : {}),
     },
   };
 }
