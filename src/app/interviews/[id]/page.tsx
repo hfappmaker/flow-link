@@ -32,6 +32,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   }
   const proposedMessages = thread.messages.filter((message) => message.messageType === "proposed_time" && message.proposedAt);
   const latestProposed = proposedMessages.at(-1);
+  const latestProposedOptions = thread.status === "scheduled" ? [] : proposedMessages.slice(-3);
+  const olderProposedCount = Math.max(0, proposedMessages.length - latestProposedOptions.length);
   const hasMeetingUrl = Boolean(thread.meetingUrl);
   const freelancer = thread.jobApplication.freelancerProfile;
   const jobPost = thread.jobApplication.jobPost;
@@ -406,19 +408,40 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
             {proposedMessages.length > 0 && thread.status !== "scheduled" && (
               <Card>
-                <h2 className="font-semibold">候補日時</h2>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-semibold">最新の候補日時</h2>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      直近に共有された候補から選ぶと、古い日程との取り違えを防げます。
+                    </p>
+                  </div>
+                  <StatusBadge tone="warn">未確定</StatusBadge>
+                </div>
                 <div className="mt-3 grid gap-3">
-                  {proposedMessages.map((message) => (
+                  {latestProposedOptions.map((message) => (
                     <form action={sendInterviewMessage} className="rounded border border-stone-200 p-3" key={message.id}>
                       <input type="hidden" name="threadId" value={thread.id} />
                       <input type="hidden" name="messageType" value="accepted_time" />
                       <input type="hidden" name="proposedAt" value={message.proposedAt!.toISOString()} />
                       <input type="hidden" name="body" value={`${formatDateTime(message.proposedAt)}で確定します。`} />
-                      <p className="text-sm font-semibold">{formatDateTime(message.proposedAt)}</p>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">{formatDateTime(message.proposedAt)}</p>
+                          <p className="mt-1 text-xs text-stone-500">提案者: {message.sender.email}</p>
+                        </div>
+                        <StatusBadge tone={message.senderUserId === session!.user.id ? "neutral" : "good"}>
+                          {message.senderUserId === session!.user.id ? "送信済み" : "返信する候補"}
+                        </StatusBadge>
+                      </div>
                       <button className="btn btn-secondary mt-3 w-full" type="submit">この日時で確定</button>
                     </form>
                   ))}
                 </div>
+                {olderProposedCount > 0 && (
+                  <p className="mt-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                    以前の候補が{olderProposedCount}件あります。必要な場合はチャット履歴で確認できます。
+                  </p>
+                )}
               </Card>
             )}
 

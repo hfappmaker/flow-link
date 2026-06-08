@@ -492,10 +492,20 @@ export async function sendInterviewMessage(formData: FormData) {
   const user = await currentUser();
   const threadId = toText(formData.get("threadId"));
   const messageType = toText(formData.get("messageType")) as InterviewMessageType;
+  if (!["text", "proposed_time", "accepted_time", "meeting_url"].includes(messageType)) {
+    throw new Error("メッセージ種別が不正です。");
+  }
   await assertCanUseThread(user.id, threadId);
 
   const proposedAtText = toOptionalText(formData.get("proposedAt"));
   const body = toText(formData.get("body")) || proposedAtText || "";
+  const proposedAt = proposedAtText ? new Date(proposedAtText) : null;
+  if ((messageType === "proposed_time" || messageType === "accepted_time") && (!proposedAt || Number.isNaN(proposedAt.getTime()))) {
+    throw new Error("候補日時を入力してください。");
+  }
+  if (messageType === "meeting_url" && !isHttpUrl(body)) {
+    throw new Error("会議URLは http:// または https:// から始まるURLを入力してください。");
+  }
   await prisma.$transaction(async (tx) => {
     await tx.interviewMessage.create({
       data: {
@@ -503,13 +513,13 @@ export async function sendInterviewMessage(formData: FormData) {
         senderUserId: user.id,
         messageType,
         body,
-        proposedAt: proposedAtText ? new Date(proposedAtText) : null,
+        proposedAt,
       },
     });
-    if (messageType === "accepted_time" && proposedAtText) {
+    if (messageType === "accepted_time" && proposedAt) {
       await tx.interviewThread.update({
         where: { id: threadId },
-        data: { status: "scheduled", scheduledAt: new Date(proposedAtText) },
+        data: { status: "scheduled", scheduledAt: proposedAt },
       });
     }
     if (messageType === "meeting_url") {
@@ -571,6 +581,15 @@ function formatDateForMessage(value: Date) {
 
 function safeReturnPath(value: string) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 async function assertOwnsApplication(companyProfileId: string, applicationId: string) {
