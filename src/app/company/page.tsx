@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function CompanyDashboard() {
   const session = await auth();
   const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
-  const [jobs, applications, openApplications, contactQueueCandidates] = await Promise.all([
+  const [jobs, applications, openApplications, contactQueueCandidates, interviewQueue] = await Promise.all([
     prisma.jobPost.count({ where: { companyProfileId: companyUser!.companyProfileId } }),
     prisma.jobApplication.count({ where: { jobPost: { companyProfileId: companyUser!.companyProfileId } } }),
     prisma.jobApplication.count({
@@ -41,6 +41,31 @@ export default async function CompanyDashboard() {
       },
       orderBy: { appliedAt: "desc" },
       take: 12,
+    }),
+    prisma.jobApplication.findMany({
+      where: {
+        status: "screening_passed",
+        jobPost: { companyProfileId: companyUser!.companyProfileId },
+        OR: [
+          { interviewThread: { is: { status: "open" } } },
+          { interviewThread: { is: { meetingUrl: null } } },
+        ],
+      },
+      include: {
+        jobPost: true,
+        freelancerProfile: true,
+        interviewThread: {
+          include: {
+            messages: {
+              where: { messageType: "proposed_time", proposedAt: { not: null } },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: { screenedAt: "desc" },
+      take: 5,
     }),
   ]);
   const contactQueue = contactQueueCandidates
@@ -72,6 +97,32 @@ export default async function CompanyDashboard() {
           <StatCard label="応募者数" value={applications} icon={icons.users} />
           <StatCard label="未選考" value={openApplications} icon={icons.ok} />
         </div>
+        <section className="mt-6">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">面談調整の未完了</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">
+                書類選考OK後に止まりやすい、候補日時の確定と会議URL共有を優先して確認します。
+              </p>
+            </div>
+            <Link className="btn btn-secondary" href="/company/jobs">案件別に見る</Link>
+          </div>
+          {interviewQueue.length > 0 ? (
+            <Card className="p-0">
+              <div className="divide-y divide-stone-200">
+                {interviewQueue.map((application) => (
+                  <InterviewQueueRow application={application} key={application.id} />
+                ))}
+              </div>
+            </Card>
+          ) : (
+            <EmptyState
+              title="未完了の面談調整はありません。"
+              description="書類選考OK後、候補日時や会議URLが未完了の応募者がここに表示されます。"
+              action={<Link className="btn btn-secondary" href="/company/jobs">応募者を確認</Link>}
+            />
+          )}
+        </section>
         <section className="mt-6">
           <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
@@ -125,6 +176,102 @@ type ContactQueueApplication = Prisma.JobApplicationGetPayload<{
   };
 }>;
 
+type InterviewQueueApplication = Prisma.JobApplicationGetPayload<{
+  include: {
+    jobPost: true;
+    freelancerProfile: true;
+    interviewThread: {
+      include: {
+        messages: true;
+      };
+    };
+  };
+}>;
+
+function InterviewQueueRow({ application }: { application: InterviewQueueApplication }) {
+  const thread = application.interviewThread;
+  const latestProposedAt = thread?.messages[0]?.proposedAt ?? null;
+  const scheduledAt = thread?.scheduledAt ?? null;
+  const missingMeetingUrl = !thread?.meetingUrl;
+  const nextAction = !scheduledAt
+    ? latestProposedAt
+      ? "候補日時を確認"
+      : "候補日時を送る"
+    : missingMeetingUrl
+      ? "会議URLを共有"
+      : "面談前の条件確認";
+  const nextActionDetail = !scheduledAt
+    ? latestProposedAt
+      ? `最新候補: ${formatDateTime(latestProposedAt)}`
+      : "面談可能な日時を複数提示すると、相手が選びやすくなります。"
+    : missingMeetingUrl
+      ? `確定日時: ${formatDateTime(scheduledAt)}`
+      : "面談前に契約・支払い条件と確認事項を整理してください。";
+
+  return (
+    <div className="grid gap-4 p-5 lg:grid-cols-[1fr_220px] lg:items-center">
+      <div>
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge tone={scheduledAt ? "good" : "warn"}>
+            {scheduledAt ? "日時確定" : "日時未確定"}
+          </StatusBadge>
+          <StatusBadge tone={missingMeetingUrl ? "warn" : "good"}>
+            {missingMeetingUrl ? "会議URL未共有" : "会議URL共有済み"}
+          </StatusBadge>
+          {latestProposedAt && <StatusBadge>最新候補 {formatDateTime(latestProposedAt)}</StatusBadge>}
+        </div>
+        <h3 className="mt-3 font-semibold">{application.freelancerProfile.fullName}</h3>
+        <p className="mt-1 text-sm text-stone-500">{application.jobPost.title}</p>
+        <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+          <QueueSignal label="次のアクション" value={nextAction} tone={scheduledAt && !missingMeetingUrl ? "good" : "warn"} />
+          <QueueSignal
+            label="稼働開始目安"
+            value={application.proposedStart ?? application.freelancerProfile.availableFrom ?? "未設定"}
+            tone={application.proposedStart || application.freelancerProfile.availableFrom ? "good" : "neutral"}
+          />
+          <QueueSignal
+            label="連絡希望"
+            value={application.contactPreference ?? "この画面で調整"}
+            tone={application.contactPreference ? "good" : "neutral"}
+          />
+        </div>
+        <p className="mt-3 text-sm leading-6 text-stone-600">{nextActionDetail}</p>
+      </div>
+      <div className="grid gap-2">
+        {thread ? (
+          <Link className="btn btn-primary" href={`/interviews/${thread.id}`}>面談チャット</Link>
+        ) : (
+          <Link className="btn btn-primary" href={`/company/applications/${application.id}`}>詳細確認</Link>
+        )}
+        <Link className="btn btn-secondary" href={`/company/applications/${application.id}`}>応募詳細</Link>
+      </div>
+    </div>
+  );
+}
+
+function QueueSignal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "good" | "warn";
+}) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[tone]}`}>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+      <p className="mt-1 break-words font-semibold">{value}</p>
+    </div>
+  );
+}
+
 function ContactQueueRow({
   application,
   matchedSkills,
@@ -147,7 +294,7 @@ function ContactQueueRow({
     <div className="grid gap-4 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
       <div>
         <div className="flex flex-wrap gap-2">
-          <StatusBadge tone={score >= 80 ? "good" : score >= 55 ? "neutral" : "warn"}>直接優先 {score}%</StatusBadge>
+          <StatusBadge tone={score >= 80 ? "good" : score >= 55 ? "neutral" : "warn"}>連絡優先 {score}%</StatusBadge>
           <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
             必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
           </StatusBadge>

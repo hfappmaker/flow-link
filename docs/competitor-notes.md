@@ -31,3 +31,10 @@
 - Xpert Directは「No recruitment agencies required」と、直接チャット、直接交渉、オファー/契約までの流れを前面に出している。https://xpertdirect.io/
 - OB ProMatchはマッチ後のチャット、ビデオ面談、透明なパイプラインを価値として訴求している。https://obpromatch.com/en/
 - Flow Link MVPでは、応募時にフリーランスが貢献内容、稼働開始目安、連絡希望を企業へ送れる提案情報を追加し、企業の応募者一覧、応募詳細、面談チャットのハンドオフで確認できるようにする。
+
+## 2026-06-08 面談調整の継続管理
+
+- レバテック系サービスは、案件申し込み後の商談設定、成立、単価交渉、契約、参画中フォローまでサポートする流れを案内している。https://creator.levtech.jp/ https://freelance.levtech.jp/service/onsite/
+- レバテックフリーランスのヘルプでは、案件提案・相談、検索、掲載内容、標準的な支払いサイトなど、応募前後の不安を減らす情報を整理している。https://freelance.levtech.jp/help/
+- Findy Freelanceは、オンライン面談で経歴・希望条件・中長期キャリアを確認して案件紹介につなげる流れを案内している。https://info.freelance.findy-code.io/lp001
+- Flow Linkでは、書類選考OK後に企業が候補日時の確定や会議URL共有を見落とさないよう、企業ダッシュボードに面談調整の未完了キューを追加する。
