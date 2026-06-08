@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { applyToJob } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
+import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { applicationStatusLabel, directContractChecklist, formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
@@ -11,30 +12,40 @@ export const dynamic = "force-dynamic";
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
-  const job = process.env.DATABASE_URL
-    ? await prisma.jobPost.findFirst({
+  const job = await publicDbRead(
+    () =>
+      prisma.jobPost.findFirst({
         where: { id, status: "published" },
         include: { companyProfile: true },
-      })
-    : null;
+      }),
+    null,
+  );
   const freelancerProfile =
     session?.user?.role === "freelancer"
-      ? await prisma.freelancerProfile.findUnique({
-          where: { userId: session.user.id },
-          include: { documents: true, careerHistory: true },
-        })
+      ? await publicDbRead(
+          () =>
+            prisma.freelancerProfile.findUnique({
+              where: { userId: session.user.id },
+              include: { documents: true, careerHistory: true },
+            }),
+          null,
+        )
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
   const existingApplication = freelancerProfile
-    ? await prisma.jobApplication.findUnique({
-        where: {
-          jobPostId_freelancerProfileId: {
-            jobPostId: id,
-            freelancerProfileId: freelancerProfile.id,
-          },
-        },
-        include: { interviewThread: true },
-      })
+    ? await publicDbRead(
+        () =>
+          prisma.jobApplication.findUnique({
+            where: {
+              jobPostId_freelancerProfileId: {
+                jobPostId: id,
+                freelancerProfileId: freelancerProfile.id,
+              },
+            },
+            include: { interviewThread: true },
+          }),
+        null,
+      )
     : null;
 
   if (!job) {
