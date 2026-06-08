@@ -1,9 +1,11 @@
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { Shell, TopNav, PageHeader, StatCard, Card, icons } from "@/components/ui";
+import { directContractChecklist, directMatchScore, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,34 @@ export default async function FreelancerDashboard() {
   });
   const unread = await prisma.notification.count({ where: { userId: session!.user.id, readAt: null } });
   const readiness = getFreelancerReadiness(profile);
+  const appliedJobIds = new Set(profile?.applications.map((application) => application.jobPostId) ?? []);
+  const recommendationCandidates = profile
+    ? await prisma.jobPost.findMany({
+        where: {
+          status: "published",
+          applicationStatus: "open",
+          id: { notIn: Array.from(appliedJobIds) },
+        },
+        include: { companyProfile: true },
+        orderBy: { createdAt: "desc" },
+        take: 24,
+      })
+    : [];
+  const recommendedJobs = recommendationCandidates
+    .map((job) => {
+      const contractReadiness = directContractChecklist(job);
+      const matchPercent = skillMatchPercent(job.requiredSkills, profile?.skills);
+      const matched = matchedSkills(job.requiredSkills, profile?.skills);
+      const score = directMatchScore({
+        ...job,
+        freelancerReadinessPercent: readiness.percent,
+        freelancerSkills: profile?.skills,
+      });
+
+      return { job, contractReadiness, matchPercent, matched, score };
+    })
+    .sort((a, b) => b.score - a.score || b.contractReadiness.percent - a.contractReadiness.percent || b.job.createdAt.getTime() - a.job.createdAt.getTime())
+    .slice(0, 3);
 
   return (
     <Shell>
@@ -57,6 +87,38 @@ export default async function FreelancerDashboard() {
             ))}
           </div>
         </Card>
+        <section className="mt-6">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">登録内容に近い受付中案件</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">
+                スキル、応募準備、案件側の条件公開を合わせて、次に確認しやすい案件を表示します。
+              </p>
+            </div>
+            <Link className="btn btn-secondary" href="/jobs?accepting=open&sort=direct">案件をもっと見る</Link>
+          </div>
+          {recommendedJobs.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {recommendedJobs.map(({ job, contractReadiness, matchPercent, matched, score }) => (
+                <RecommendedJobCard
+                  contractPercent={contractReadiness.percent}
+                  job={job}
+                  key={job.id}
+                  matched={matched}
+                  matchPercent={matchPercent}
+                  readinessComplete={readiness.isReady}
+                  score={score}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="表示できる受付中案件はありません。"
+              description="新しい案件が公開されたら、プロフィールのスキルや希望条件に近いものをここに表示します。"
+              action={<Link className="btn btn-primary" href="/jobs">公開案件を見る</Link>}
+            />
+          )}
+        </section>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <ActionCard href="/freelancer/profile" title="プロフィール編集" body="希望職種、スキル、稼働条件を更新します。" />
           <ActionCard href="/freelancer/career" title="職務経歴フォーム" body="検索や選考時に確認される職務経歴を整えます。" />
@@ -66,6 +128,68 @@ export default async function FreelancerDashboard() {
         </div>
       </div>
     </Shell>
+  );
+}
+
+type RecommendedJob = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+
+function RecommendedJobCard({
+  contractPercent,
+  job,
+  matched,
+  matchPercent,
+  readinessComplete,
+  score,
+}: {
+  contractPercent: number;
+  job: RecommendedJob;
+  matched: string[];
+  matchPercent: number | null;
+  readinessComplete: boolean;
+  score: number;
+}) {
+  const nextAction = !readinessComplete
+    ? "応募準備を整えてから条件確認"
+    : contractPercent < 100
+      ? "条件確認をしてから応募"
+      : "提案文を作って応募";
+
+  return (
+    <Card>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge tone={score >= 70 ? "good" : score >= 45 ? "neutral" : "warn"}>応募しやすさ {score}%</StatusBadge>
+        <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
+          必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
+        </StatusBadge>
+      </div>
+      <h3 className="mt-3 line-clamp-2 font-semibold">{job.title}</h3>
+      <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
+      <div className="mt-4 grid gap-2 text-sm">
+        <RecommendationSignal label="単価" value={job.rate ?? "未設定"} />
+        <RecommendationSignal label="稼働率" value={job.workload ?? "未設定"} />
+        <RecommendationSignal label="条件確認" value={`${contractPercent}%`} />
+      </div>
+      {matched.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {matched.slice(0, 4).map((skill) => (
+            <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800" key={skill}>
+              {skill}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-sm leading-6 text-stone-600">{nextAction}</p>
+      <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>案件条件を見る</Link>
+    </Card>
+  );
+}
+
+function RecommendationSignal({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded border border-stone-200 bg-stone-50 px-3 py-2">
+      <span className="text-xs text-stone-500">{label}</span>
+      <span className="truncate text-right text-xs font-semibold text-stone-800">{value}</span>
+    </div>
   );
 }
 
