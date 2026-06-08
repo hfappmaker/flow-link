@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; directReady?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; remote?: string; accepting?: string; directReady?: string; fit?: string; sort?: string }>;
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
@@ -79,6 +79,7 @@ export default async function JobsPage({
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
+  const fit = freelancerProfile && ["skill", "ready"].includes(filters.fit ?? "") ? filters.fit : "";
   const rankedJobs = jobs
     .map((job) => ({
       job,
@@ -90,6 +91,15 @@ export default async function JobsPage({
       }),
       contractReadinessPercent: directContractChecklist(job).percent,
     }))
+    .filter(({ job, contractReadinessPercent, directScore }) => {
+      if (fit === "skill") {
+        return job.applicationStatus === "open" && (skillMatchPercent(job.requiredSkills, freelancerProfile?.skills) ?? 0) > 0;
+      }
+      if (fit === "ready") {
+        return job.applicationStatus === "open" && directScore >= 70 && contractReadinessPercent >= 80;
+      }
+      return true;
+    })
     .sort((a, b) => {
       if (sort === "direct") {
         return b.directScore - a.directScore || b.job.createdAt.getTime() - a.job.createdAt.getTime();
@@ -178,17 +188,18 @@ export default async function JobsPage({
                 <option value="new">新着順</option>
               </select>
             </label>
+            {fit && <input type="hidden" name="fit" value={fit} />}
             <button className="btn btn-primary self-end" type="submit">検索</button>
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {jobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
+            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
           </p>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <DiscoverySignal
               label="条件フィルター"
-              value={directReady ? "有効" : "任意"}
-              tone={directReady ? "good" : "neutral"}
+              value={directReady || fit === "ready" ? "有効" : "任意"}
+              tone={directReady || fit === "ready" ? "good" : "neutral"}
             />
             <DiscoverySignal
               label="高スコア案件"
@@ -196,12 +207,28 @@ export default async function JobsPage({
               tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
             />
             <DiscoverySignal
-              label="条件確認100%"
-              value={`${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`}
-              tone={rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"}
+              label={freelancerProfile ? "スキル一致あり" : "条件確認100%"}
+              value={
+                freelancerProfile
+                  ? `${rankedJobs.filter(({ job }) => (skillMatchPercent(job.requiredSkills, freelancerProfile.skills) ?? 0) > 0).length}件`
+                  : `${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`
+              }
+              tone={
+                freelancerProfile
+                  ? rankedJobs.some(({ job }) => (skillMatchPercent(job.requiredSkills, freelancerProfile.skills) ?? 0) > 0) ? "good" : "warn"
+                  : rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"
+              }
             />
           </div>
         </Card>
+        {freelancerProfile && (
+          <ProfileDiscoveryShortcuts
+            activeFit={fit}
+            keyword={keyword}
+            remote={remote}
+            skills={parseSkills(freelancerProfile.skills).slice(0, 6)}
+          />
+        )}
         {priorityJobs.length > 0 && (
           <DirectPriorityStrip
             freelancerProfile={freelancerProfile}
@@ -228,6 +255,13 @@ export default async function JobsPage({
               action={<Link className="btn btn-secondary" href="/jobs">条件をクリア</Link>}
             />
           )}
+          {jobs.length > 0 && rankedJobs.length === 0 && (
+            <EmptyState
+              title="この条件で表示できる案件はありません。"
+              description="スキル一致や応募準備の条件を外すと、候補を広げて確認できます。"
+              action={<Link className="btn btn-secondary" href="/jobs">条件をクリア</Link>}
+            />
+          )}
         </div>
       </div>
     </Shell>
@@ -241,6 +275,78 @@ type RankedJob = {
   directScore: number;
   contractReadinessPercent: number;
 };
+
+function ProfileDiscoveryShortcuts({
+  activeFit,
+  keyword,
+  remote,
+  skills,
+}: {
+  activeFit?: string;
+  keyword: string;
+  remote: boolean;
+  skills: string[];
+}) {
+  const shortcuts = [
+    {
+      label: "スキル一致を優先",
+      href: jobsHref({ q: keyword, remote, accepting: true, fit: "skill", sort: "direct" }),
+      active: activeFit === "skill",
+    },
+    {
+      label: "応募へ進みやすい案件",
+      href: jobsHref({ q: keyword, remote, accepting: true, fit: "ready", sort: "direct" }),
+      active: activeFit === "ready",
+    },
+    {
+      label: "リモート受付中",
+      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct" }),
+      active: remote && !activeFit,
+    },
+  ];
+
+  return (
+    <section className="mt-5 rounded-md border border-stone-200 bg-white p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="font-semibold">登録内容から探す</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+            プロフィールのスキルと応募準備状況を使って、応募前に確認しやすい案件へ絞り込めます。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {shortcuts.map((shortcut) => (
+            <Link
+              className={`rounded border px-3 py-2 text-sm font-semibold ${
+                shortcut.active ? "border-emerald-700 bg-emerald-50 text-emerald-800" : "border-stone-200 bg-stone-50 text-stone-700"
+              }`}
+              href={shortcut.href}
+              key={shortcut.label}
+            >
+              {shortcut.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+      {skills.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium text-stone-500">登録スキルで検索</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {skills.map((skill) => (
+              <Link
+                className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700 hover:border-emerald-300 hover:text-emerald-800"
+                href={jobsHref({ q: skill, accepting: true, fit: "skill", sort: "direct" })}
+                key={skill}
+              >
+                {skill}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function DirectPriorityStrip({
   freelancerProfile,
@@ -553,4 +659,32 @@ function JobMeta({ label, value }: { label: string; value?: string | null }) {
       <p className="mt-1 truncate font-semibold">{value || "未設定"}</p>
     </div>
   );
+}
+
+function jobsHref({
+  q,
+  remote,
+  accepting,
+  directReady,
+  fit,
+  sort,
+}: {
+  q?: string;
+  remote?: boolean;
+  accepting?: boolean;
+  directReady?: boolean;
+  fit?: string;
+  sort?: string;
+}) {
+  return {
+    pathname: "/jobs",
+    query: {
+      ...(q ? { q } : {}),
+      ...(remote ? { remote: "remote" } : {}),
+      ...(accepting ? { accepting: "open" } : {}),
+      ...(directReady ? { directReady: "ready" } : {}),
+      ...(fit ? { fit } : {}),
+      ...(sort ? { sort } : {}),
+    },
+  };
 }
