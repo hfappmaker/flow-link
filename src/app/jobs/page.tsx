@@ -20,6 +20,7 @@ export default async function JobsPage({
     directReady?: string;
     fit?: string;
     sort?: string;
+    candidate?: string;
     workload?: string;
     rate?: string;
   }>;
@@ -31,6 +32,7 @@ export default async function JobsPage({
   const directReady = filters.directReady === "ready";
   const workload = filters.workload === "light" ? "light" : "";
   const rate = filters.rate === "high" ? "high" : "";
+  const candidate = filters.candidate === "fresh" ? "fresh" : "";
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const andFilters: Prisma.JobPostWhereInput[] = [];
   if (directReady) {
@@ -115,45 +117,6 @@ export default async function JobsPage({
   const readiness = getFreelancerReadiness(freelancerProfile);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
   const fit = freelancerProfile && ["skill", "ready"].includes(filters.fit ?? "") ? filters.fit : "";
-  const currentJobsPath = jobsPath({
-    q: keyword,
-    remote,
-    accepting,
-    directReady,
-    fit,
-    sort,
-    workload,
-    rate,
-  });
-  const rankedJobs = jobs
-    .map((job) => ({
-      job,
-      directScore: directMatchScore({
-        ...job,
-        applicationStatus: job.applicationStatus,
-        freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
-        freelancerSkills: freelancerProfile?.skills,
-      }),
-      contractReadinessPercent: directContractChecklist(job).percent,
-    }))
-    .filter(({ job, contractReadinessPercent, directScore }) => {
-      if (fit === "skill") {
-        return job.applicationStatus === "open" && (skillMatchPercent(job.requiredSkills, freelancerProfile?.skills) ?? 0) > 0;
-      }
-      if (fit === "ready") {
-        return job.applicationStatus === "open" && directScore >= 70 && contractReadinessPercent >= 80;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      if (sort === "direct") {
-        return b.directScore - a.directScore || b.job.createdAt.getTime() - a.job.createdAt.getTime();
-      }
-      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
-    });
-  const priorityJobs = [...rankedJobs]
-    .sort((a, b) => b.directScore - a.directScore || b.contractReadinessPercent - a.contractReadinessPercent)
-    .slice(0, 3);
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -190,6 +153,50 @@ export default async function JobsPage({
           ).map((savedJob) => savedJob.jobPostId),
         )
       : new Set<string>();
+  const currentJobsPath = jobsPath({
+    q: keyword,
+    remote,
+    accepting,
+    directReady,
+    fit,
+    sort,
+    candidate,
+    workload,
+    rate,
+  });
+  const rankedJobs = jobs
+    .map((job) => ({
+      job,
+      directScore: directMatchScore({
+        ...job,
+        applicationStatus: job.applicationStatus,
+        freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
+        freelancerSkills: freelancerProfile?.skills,
+      }),
+      contractReadinessPercent: directContractChecklist(job).percent,
+    }))
+    .filter(({ job, contractReadinessPercent, directScore }) => {
+      const matchesCandidate = candidate !== "fresh" || (!appliedJobIds.has(job.id) && !savedJobIds.has(job.id));
+      if (fit === "skill") {
+        return matchesCandidate && job.applicationStatus === "open" && (skillMatchPercent(job.requiredSkills, freelancerProfile?.skills) ?? 0) > 0;
+      }
+      if (fit === "ready") {
+        return matchesCandidate && job.applicationStatus === "open" && directScore >= 70 && contractReadinessPercent >= 80;
+      }
+      return matchesCandidate;
+    })
+    .sort((a, b) => {
+      if (sort === "direct") {
+        return b.directScore - a.directScore || b.job.createdAt.getTime() - a.job.createdAt.getTime();
+      }
+      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
+    });
+  const priorityJobs = [...rankedJobs]
+    .sort((a, b) => b.directScore - a.directScore || b.contractReadinessPercent - a.contractReadinessPercent)
+    .slice(0, 3);
+  const freshCandidateCount = freelancerProfile
+    ? jobs.filter((job) => !appliedJobIds.has(job.id) && !savedJobIds.has(job.id)).length
+    : 0;
 
   return (
     <Shell>
@@ -197,7 +204,14 @@ export default async function JobsPage({
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
         <Card className="mt-6">
-          <form className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_132px_132px_150px_132px_132px_150px_auto_auto]" action="/jobs">
+          <form
+            className={`grid gap-3 md:grid-cols-2 ${
+              freelancerProfile
+                ? "lg:grid-cols-[minmax(220px,1fr)_repeat(7,minmax(112px,145px))_auto_auto]"
+                : "lg:grid-cols-[minmax(220px,1fr)_repeat(6,minmax(118px,150px))_auto_auto]"
+            }`}
+            action="/jobs"
+          >
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               キーワード
               <input
@@ -262,6 +276,19 @@ export default async function JobsPage({
                 <option value="high">80万円以上目安</option>
               </select>
             </label>
+            {freelancerProfile && (
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                対応状況
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="candidate"
+                  defaultValue={candidate}
+                >
+                  <option value="">すべて</option>
+                  <option value="fresh">未対応の候補</option>
+                </select>
+              </label>
+            )}
             <label className="grid gap-1.5 text-sm font-medium text-stone-700">
               並び順
               <select
@@ -278,7 +305,7 @@ export default async function JobsPage({
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{workload === "light" && " / 週2-3日目安"}{rate === "high" && " / 80万円以上目安"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
+            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{workload === "light" && " / 週2-3日目安"}{rate === "high" && " / 80万円以上目安"}{candidate === "fresh" && " / 未対応の候補"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
           </p>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <DiscoverySignal
@@ -292,15 +319,15 @@ export default async function JobsPage({
               tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
             />
             <DiscoverySignal
-              label={freelancerProfile ? "スキル一致あり" : "条件確認100%"}
+              label={freelancerProfile ? "未対応の候補" : "条件確認100%"}
               value={
                 freelancerProfile
-                  ? `${rankedJobs.filter(({ job }) => (skillMatchPercent(job.requiredSkills, freelancerProfile.skills) ?? 0) > 0).length}件`
+                  ? `${freshCandidateCount}件`
                   : `${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`
               }
               tone={
                 freelancerProfile
-                  ? rankedJobs.some(({ job }) => (skillMatchPercent(job.requiredSkills, freelancerProfile.skills) ?? 0) > 0) ? "good" : "warn"
+                  ? freshCandidateCount > 0 ? "good" : "warn"
                   : rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"
               }
             />
@@ -310,6 +337,7 @@ export default async function JobsPage({
           <ProfileDiscoveryShortcuts
             activeFit={fit}
             activeRate={rate}
+            activeCandidate={candidate}
             activeWorkload={workload}
             keyword={keyword}
             remote={remote}
@@ -369,6 +397,7 @@ type RankedJob = {
 function ProfileDiscoveryShortcuts({
   activeFit,
   activeRate,
+  activeCandidate,
   activeWorkload,
   desiredOccupation,
   keyword,
@@ -377,6 +406,7 @@ function ProfileDiscoveryShortcuts({
 }: {
   activeFit?: string;
   activeRate?: string;
+  activeCandidate?: string;
   activeWorkload?: string;
   desiredOccupation?: string | null;
   keyword: string;
@@ -386,34 +416,39 @@ function ProfileDiscoveryShortcuts({
   const shortcuts = [
     {
       label: "スキル一致を優先",
-      href: jobsHref({ q: keyword, remote, accepting: true, fit: "skill", sort: "direct" }),
+      href: jobsHref({ q: keyword, remote, accepting: true, fit: "skill", sort: "direct", candidate: activeCandidate }),
       active: activeFit === "skill",
     },
     {
       label: "応募へ進みやすい案件",
-      href: jobsHref({ q: keyword, remote, accepting: true, fit: "ready", sort: "direct" }),
+      href: jobsHref({ q: keyword, remote, accepting: true, fit: "ready", sort: "direct", candidate: activeCandidate }),
       active: activeFit === "ready",
     },
     {
+      label: "未対応の候補",
+      href: jobsHref({ q: keyword, remote, accepting: true, sort: "direct", candidate: "fresh", workload: activeWorkload, rate: activeRate }),
+      active: activeCandidate === "fresh",
+    },
+    {
       label: "週2-3日目安",
-      href: jobsHref({ q: keyword, remote, accepting: true, workload: "light", sort: "direct" }),
+      href: jobsHref({ q: keyword, remote, accepting: true, workload: "light", sort: "direct", candidate: activeCandidate }),
       active: activeWorkload === "light",
     },
     {
       label: "80万円以上目安",
-      href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct" }),
+      href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct", candidate: activeCandidate }),
       active: activeRate === "high",
     },
     {
       label: "リモート受付中",
-      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct", workload: activeWorkload, rate: activeRate }),
-      active: remote && !activeFit && !activeWorkload && !activeRate,
+      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct", candidate: activeCandidate, workload: activeWorkload, rate: activeRate }),
+      active: remote && !activeFit && !activeCandidate && !activeWorkload && !activeRate,
     },
     ...(desiredOccupation
       ? [
           {
             label: "希望職種で探す",
-            href: jobsHref({ q: desiredOccupation, remote, accepting: true, sort: "direct", workload: activeWorkload, rate: activeRate }),
+            href: jobsHref({ q: desiredOccupation, remote, accepting: true, sort: "direct", candidate: activeCandidate, workload: activeWorkload, rate: activeRate }),
             active: keyword === desiredOccupation,
           },
         ]
@@ -450,7 +485,7 @@ function ProfileDiscoveryShortcuts({
             {skills.map((skill) => (
               <Link
                 className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700 hover:border-emerald-300 hover:text-emerald-800"
-                href={jobsHref({ q: skill, remote, accepting: true, fit: "skill", sort: "direct", workload: activeWorkload, rate: activeRate })}
+                href={jobsHref({ q: skill, remote, accepting: true, fit: "skill", sort: "direct", candidate: activeCandidate, workload: activeWorkload, rate: activeRate })}
                 key={skill}
               >
                 {skill}
@@ -798,6 +833,7 @@ function jobsHref({
   directReady,
   fit,
   sort,
+  candidate,
   workload,
   rate,
 }: {
@@ -807,6 +843,7 @@ function jobsHref({
   directReady?: boolean;
   fit?: string;
   sort?: string;
+  candidate?: string;
   workload?: string;
   rate?: string;
 }) {
@@ -819,6 +856,7 @@ function jobsHref({
       ...(directReady ? { directReady: "ready" } : {}),
       ...(fit ? { fit } : {}),
       ...(sort ? { sort } : {}),
+      ...(candidate ? { candidate } : {}),
       ...(workload ? { workload } : {}),
       ...(rate ? { rate } : {}),
     },
