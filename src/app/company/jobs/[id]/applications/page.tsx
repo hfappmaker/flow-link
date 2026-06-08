@@ -208,6 +208,21 @@ function ApplicationCard({
   application: ApplicationWithProfile;
   review: ApplicationReview;
 }) {
+  const startSignal =
+    application.proposedStart ||
+    application.freelancerProfile.availableFrom ||
+    application.freelancerProfile.availability ||
+    "未設定";
+  const contactSignal = application.contactPreference || "面談判断後に調整";
+  const rateSignal = application.freelancerProfile.desiredRate || "未設定";
+  const nextReviewAction = buildApplicantReviewAction({
+    status: application.status,
+    isInterviewReady: review.isInterviewReady,
+    nextChecks: review.nextChecks,
+    hasContactSignal: Boolean(application.contactPreference),
+    hasStartSignal: startSignal !== "未設定",
+  });
+
   return (
     <Card>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -245,6 +260,23 @@ function ApplicationCard({
             </StatusBadge>
             <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
           </div>
+          <div className="mt-3 grid gap-2 text-sm md:grid-cols-3">
+            <ApplicantSignal
+              label="稼働開始目安"
+              value={startSignal}
+              tone={startSignal === "未設定" ? "warn" : "good"}
+            />
+            <ApplicantSignal
+              label="連絡希望"
+              value={contactSignal}
+              tone={application.contactPreference ? "good" : "neutral"}
+            />
+            <ApplicantSignal
+              label="希望単価"
+              value={rateSignal}
+              tone={application.freelancerProfile.desiredRate ? "good" : "warn"}
+            />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             {review.nextChecks.length > 0 ? (
               review.nextChecks.slice(0, 3).map((check) => (
@@ -258,10 +290,92 @@ function ApplicationCard({
               </span>
             )}
           </div>
+          <div className="mt-3 rounded border border-stone-200 bg-stone-50 p-3">
+            <p className="text-xs font-medium text-stone-500">次の確認</p>
+            <p className="mt-1 text-sm font-semibold text-stone-900">{nextReviewAction.title}</p>
+            <p className="mt-1 text-sm leading-6 text-stone-600">{nextReviewAction.description}</p>
+          </div>
         </div>
         <Link className="btn btn-primary shrink-0" href={`/company/applications/${application.id}`}>面談判断へ</Link>
       </div>
     </Card>
+  );
+}
+
+function buildApplicantReviewAction({
+  status,
+  isInterviewReady,
+  nextChecks,
+  hasContactSignal,
+  hasStartSignal,
+}: {
+  status: JobApplicationStatus;
+  isInterviewReady: boolean;
+  nextChecks: string[];
+  hasContactSignal: boolean;
+  hasStartSignal: boolean;
+}) {
+  if (status === "screening_passed") {
+    return {
+      title: "面談調整を確認",
+      description: "候補日時、会議URL、面談前に確認したい条件を応募詳細から確認してください。",
+    };
+  }
+
+  if (status === "screening_rejected") {
+    return {
+      title: "選考結果を確認済み",
+      description: "必要に応じて企業内メモを残し、同じ案件の他応募者を確認してください。",
+    };
+  }
+
+  if (isInterviewReady && hasStartSignal && hasContactSignal) {
+    return {
+      title: "面談へ進める判断",
+      description: "応募内容、開始条件、連絡希望が揃っています。応募詳細で初回連絡文を確認してください。",
+    };
+  }
+
+  if (!hasStartSignal) {
+    return {
+      title: "開始条件を確認",
+      description: "稼働開始目安が未設定です。面談へ進める前に、応募詳細で確認事項として残してください。",
+    };
+  }
+
+  if (!hasContactSignal) {
+    return {
+      title: "連絡希望を確認",
+      description: "面談候補日時や連絡しやすい時間帯を、応募詳細の初回連絡文に含めて確認してください。",
+    };
+  }
+
+  return {
+    title: `${nextChecks[0] ?? "応募内容"}を確認`,
+    description: "不足している確認点を応募詳細で見直してから、面談へ進めるか判断してください。",
+  };
+}
+
+function ApplicantSignal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "neutral" | "good" | "warn";
+}) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[tone]}`}>
+      <p className="text-xs font-medium opacity-80">{label}</p>
+      <p className="mt-1 break-words font-semibold">{value}</p>
+    </div>
   );
 }
 
