@@ -71,6 +71,29 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   ];
   const completedDealChecks = directDealChecks.filter((item) => item.done).length;
   const dealReadinessPercent = Math.round((completedDealChecks / directDealChecks.length) * 100);
+  const coordinationSteps = [
+    {
+      label: "候補日時",
+      detail: latestProposed?.proposedAt ? formatDateTime(latestProposed.proposedAt) : "候補を提案してください",
+      done: proposedMessages.length > 0 || Boolean(thread.scheduledAt),
+    },
+    {
+      label: "面談日時",
+      detail: thread.scheduledAt ? formatDateTime(thread.scheduledAt) : "候補日時から確定してください",
+      done: Boolean(thread.scheduledAt),
+    },
+    {
+      label: "会議URL",
+      detail: thread.meetingUrl ?? "確定後に共有してください",
+      done: Boolean(thread.meetingUrl),
+    },
+    {
+      label: "条件確認",
+      detail: jobPost.contractTerms ? "契約・支払い条件を確認できます" : "面談で支払い条件を確認してください",
+      done: Boolean(jobPost.contractTerms),
+    },
+  ];
+  const nextCoordinationStep = coordinationSteps.find((step) => !step.done);
   const nextAction =
     thread.status === "scheduled"
       ? hasMeetingUrl
@@ -110,7 +133,35 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
       <TopNav sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="面談日程調整チャット" description={`${thread.jobApplication.jobPost.title} / ${thread.jobApplication.freelancerProfile.fullName}`} />
-        <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_340px]">
+        <Card className="mt-6">
+          <div className="grid gap-5 lg:grid-cols-[1fr_240px] lg:items-center">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone={thread.status === "scheduled" ? "good" : "warn"}>
+                  {thread.status === "scheduled" ? "面談日時確定" : "面談調整中"}
+                </StatusBadge>
+                <StatusBadge tone={hasMeetingUrl ? "good" : "neutral"}>{hasMeetingUrl ? "会議URL共有済み" : "会議URL未共有"}</StatusBadge>
+              </div>
+              <h2 className="mt-4 text-xl font-semibold">面談調整ボード</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-600">
+                次に必要な作業は「{nextCoordinationStep?.label ?? "最終確認"}」です。候補日時、会議URL、契約・支払い条件を揃えてから面談に進んでください。
+              </p>
+            </div>
+            <div className="rounded border border-stone-200 bg-stone-50 p-4">
+              <p className="text-xs font-medium text-stone-500">面談前の準備</p>
+              <p className="mt-1 text-3xl font-semibold">{dealReadinessPercent}%</p>
+              <p className="mt-1 text-sm text-stone-600">
+                {completedDealChecks}/{directDealChecks.length}項目完了
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            {coordinationSteps.map((step, index) => (
+              <CoordinationStep detail={step.detail} done={step.done} index={index + 1} key={step.label} label={step.label} />
+            ))}
+          </div>
+        </Card>
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_340px]">
           <Card>
             <div className="mb-5 flex flex-wrap gap-2">
               <StatusBadge tone={thread.status === "scheduled" ? "good" : "neutral"}>{thread.status === "scheduled" ? "日程確定" : "調整中"}</StatusBadge>
@@ -143,7 +194,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                     企業とフリーランスが、面談前に相手情報・条件・信頼材料を同じ画面で確認できます。
                   </p>
                 </div>
-                <StatusBadge tone="good">仲介なし</StatusBadge>
+                <StatusBadge tone={thread.status === "scheduled" ? "good" : "neutral"}>
+                  {thread.status === "scheduled" ? "日程確定" : "確認中"}
+                </StatusBadge>
               </div>
 
               <dl className="mt-4 grid gap-3 text-sm">
@@ -497,6 +550,25 @@ function DealReadinessItem({ label, detail, done }: { label: string; detail: str
         <span className="text-xs font-semibold">{done ? "完了" : "要確認"}</span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+    </div>
+  );
+}
+
+function CoordinationStep({ index, label, detail, done }: { index: number; label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border p-3 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-stone-200 bg-white text-stone-800"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="grid size-6 shrink-0 place-items-center rounded bg-white text-xs font-semibold text-stone-700 ring-1 ring-stone-200">
+          {index}
+        </span>
+        <StatusBadge tone={done ? "good" : "warn"}>{done ? "完了" : "未完了"}</StatusBadge>
+      </div>
+      <p className="mt-3 font-semibold">{label}</p>
+      <p className="mt-1 break-words leading-6 text-stone-600">{detail}</p>
     </div>
   );
 }
