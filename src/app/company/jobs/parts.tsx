@@ -115,7 +115,7 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
         </JobSelectField>
         {isPublishingIncomplete && (
           <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 md:col-span-2">
-            公開できますが、{missingItems.map((item) => item.label).join("、")}が未設定です。応募者が条件確認しやすいよう、保存前の入力をおすすめします。
+            {missingItems.map((item) => item.label).join("、")}が未設定です。このまま保存すると下書きとして保存され、応募受付は停止されます。
           </div>
         )}
         <button className="btn btn-primary md:col-span-2" type="submit">保存</button>

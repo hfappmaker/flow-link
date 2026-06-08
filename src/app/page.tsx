@@ -19,12 +19,12 @@ export default async function Home() {
       <TopNav sessionRole={session?.user?.role} />
       <section className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
         <div>
-          <StatusBadge tone="good">仲介なしで進める案件探し</StatusBadge>
+          <StatusBadge tone="good">条件確認から面談まで管理</StatusBadge>
           <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-tight tracking-normal text-stone-950">
-            企業とフリーランスが、仲介なしで条件確認から面談まで進める。
+            企業とフリーランスが、条件確認から面談まで迷わず進める。
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-stone-600">
-            Flow Link は営業担当やエージェントを挟まず、案件条件、応募提案、書類選考、面談チャットを同じ場所に集約します。
+            Flow Link は案件条件、応募提案、書類選考、面談チャットを同じ場所に集約します。
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link className="btn btn-primary" href="/jobs">
@@ -45,7 +45,7 @@ export default async function Home() {
               <p className="text-sm font-semibold text-stone-950">応募から面談までの進行</p>
               <p className="mt-1 text-xs text-stone-500">応募後の判断材料と次の接点</p>
             </div>
-            <StatusBadge tone="good">仲介なし</StatusBadge>
+            <StatusBadge tone="good">面談準備中</StatusBadge>
           </div>
 
           <div className="mt-4 grid gap-3">
@@ -60,14 +60,14 @@ export default async function Home() {
               accent="sky"
               label="応募提案"
               title="スキル一致と開始時期"
-              description="フリーランスの提案文が企業へ直接届く"
+              description="フリーランスの提案文を企業が確認"
               value="86%"
             />
             <PreviewRow
               accent="amber"
               label="面談接続"
               title="チャットと日程調整"
-              description="書類選考OK後に双方だけで面談へ進行"
+              description="書類選考OK後に面談へ進行"
               value="Ready"
             />
           </div>
@@ -75,7 +75,7 @@ export default async function Home() {
           <div className="mt-5 grid gap-3 rounded-md border border-stone-200 bg-stone-50 p-4">
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-stone-950">次のアクション</p>
-              <span className="text-xs font-semibold text-emerald-700">会社と直接調整中</span>
+              <span className="text-xs font-semibold text-emerald-700">面談調整中</span>
             </div>
             <p className="text-sm leading-6 text-stone-600">
               面談日時、会議URL、契約前の確認事項まで、応募者と企業のチャットに集約されます。

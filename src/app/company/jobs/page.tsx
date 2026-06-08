@@ -6,7 +6,12 @@ import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/comp
 
 export const dynamic = "force-dynamic";
 
-export default async function CompanyJobsPage() {
+export default async function CompanyJobsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ publish?: string }>;
+}) {
+  const notice = await searchParams;
   const session = await auth();
   const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
   const jobs = await prisma.jobPost.findMany({
@@ -19,6 +24,12 @@ export default async function CompanyJobsPage() {
       <TopNav sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="案件一覧" action={<Link className="btn btn-primary" href="/company/jobs/create">案件作成</Link>} />
+        {notice.publish === "needs-conditions" && (
+          <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+            公開前に必要な条件が不足していたため、案件を下書きとして保存し、応募受付を停止しました。
+            案件編集で業務範囲、報酬・支払い、稼働条件、選考フロー、働き方を揃えてから公開してください。
+          </div>
+        )}
         <div className="mt-6 grid gap-4">
           {jobs.map((job) => {
             const pendingApplications = job.applications.filter((application) => application.status === "applied").length;

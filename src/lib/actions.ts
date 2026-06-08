@@ -17,7 +17,7 @@ import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { buildScreeningPassedHandoffMessage, toOptionalText, toText } from "@/lib/utils";
+import { buildScreeningPassedHandoffMessage, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 
 async function currentUser() {
   const session = await auth();
@@ -243,6 +243,7 @@ export async function saveJobPost(formData: FormData) {
   if ((selectionFlow?.length ?? 0) > 800 || (contractTerms?.length ?? 0) > 800) {
     throw new Error("選考フローと契約・支払い条件は800文字以内で入力してください。");
   }
+  const requestedStatus = toText(formData.get("status")) as JobPostStatus;
   const data = {
     companyProfileId: companyUser.companyProfileId,
     title: toText(formData.get("title")),
@@ -257,9 +258,18 @@ export async function saveJobPost(formData: FormData) {
     location: toOptionalText(formData.get("location")),
     remotePolicy: toOptionalText(formData.get("remotePolicy")),
     openings: Number(toText(formData.get("openings"))) || null,
-    status: toText(formData.get("status")) as JobPostStatus,
+    status: requestedStatus,
     applicationStatus: toText(formData.get("applicationStatus")) as ApplicationStatus,
   };
+  if (!data.title || !data.description) {
+    throw new Error("タイトルと業務内容を入力してください。");
+  }
+  const publishReadiness = directContractChecklist(data);
+  const heldAsDraft = requestedStatus === "published" && !publishReadiness.isReady;
+  if (heldAsDraft) {
+    data.status = JobPostStatus.draft;
+    data.applicationStatus = ApplicationStatus.paused;
+  }
 
   if (id) {
     await prisma.jobPost.update({
@@ -271,7 +281,7 @@ export async function saveJobPost(formData: FormData) {
   }
 
   revalidatePath("/company/jobs");
-  redirect("/company/jobs");
+  redirect(heldAsDraft ? "/company/jobs?publish=needs-conditions" : "/company/jobs");
 }
 
 export async function applyToJob(formData: FormData) {
