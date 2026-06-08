@@ -59,6 +59,22 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   ];
   const interviewDecisionCompleted = interviewDecisionItems.filter((item) => item.done).length;
   const interviewDecisionPercent = Math.round((interviewDecisionCompleted / interviewDecisionItems.length) * 100);
+  const interviewPrepSheet = buildInterviewPrepSheet({
+    freelancerName: application.freelancerProfile.fullName,
+    jobTitle: application.jobPost.title,
+    matchedSkills: requiredSkillMatches,
+    skillGaps: requiredSkillGaps,
+    proposalMessage: application.proposalMessage,
+    proposedStart: application.proposedStart,
+    contactPreference: application.contactPreference,
+    availability: application.freelancerProfile.availability,
+    desiredRate: application.freelancerProfile.desiredRate,
+    jobRate: application.jobPost.rate,
+    workload: application.jobPost.workload,
+    contractPeriod: application.jobPost.contractPeriod,
+    selectionFlow: application.jobPost.selectionFlow,
+    contractTerms: application.jobPost.contractTerms,
+  });
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({
     companyName: companyUser!.companyProfile.name,
     freelancerName: application.freelancerProfile.fullName,
@@ -215,6 +231,22 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </div>
             </Card>
             <Card>
+              <h2 className="font-semibold">面談確認シート</h2>
+              <p className="mt-2 text-sm leading-6 text-stone-600">
+                面談で確認したい一致点、懸念点、契約・支払い条件を企業内メモとして残せます。
+              </p>
+              <form action={saveScreeningNote} className="mt-4 grid gap-3">
+                <input type="hidden" name="applicationId" value={application.id} />
+                <TextArea
+                  name="note"
+                  label="確認内容"
+                  defaultValue={interviewPrepSheet}
+                  maxLength={2400}
+                />
+                <button className="btn btn-secondary" type="submit">企業内メモに保存</button>
+              </form>
+            </Card>
+            <Card>
               <h2 className="font-semibold">面談調整へ進める</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
                 書類選考OKにすると、面談チャットを作成し、下の初回連絡を企業名義で送信します。
@@ -313,4 +345,59 @@ function SummaryInfo({ label, value, multiline }: { label: string; value?: strin
       <dd className={`mt-1 break-words font-semibold ${multiline ? "whitespace-pre-wrap leading-6" : ""}`}>{value || "未設定"}</dd>
     </div>
   );
+}
+
+function buildInterviewPrepSheet({
+  freelancerName,
+  jobTitle,
+  matchedSkills,
+  skillGaps,
+  proposalMessage,
+  proposedStart,
+  contactPreference,
+  availability,
+  desiredRate,
+  jobRate,
+  workload,
+  contractPeriod,
+  selectionFlow,
+  contractTerms,
+}: {
+  freelancerName: string;
+  jobTitle: string;
+  matchedSkills: string[];
+  skillGaps: string[];
+  proposalMessage?: string | null;
+  proposedStart?: string | null;
+  contactPreference?: string | null;
+  availability?: string | null;
+  desiredRate?: string | null;
+  jobRate?: string | null;
+  workload?: string | null;
+  contractPeriod?: string | null;
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+}) {
+  return [
+    `面談確認シート: ${freelancerName} / ${jobTitle}`,
+    "",
+    "応募内容で評価したい点",
+    `- 一致スキル: ${matchedSkills.length > 0 ? matchedSkills.join("、") : "職務経歴と提案文から確認"}`,
+    `- 応募時の提案: ${proposalMessage || "未登録"}`,
+    "",
+    "面談で確認する点",
+    `- スキルの確認: ${skillGaps.length > 0 ? skillGaps.slice(0, 6).join("、") : "必須スキルの不足項目なし"}`,
+    `- 稼働開始目安: ${proposedStart || "応募者に確認"}`,
+    `- 稼働条件: ${availability || workload || "応募者に確認"}`,
+    `- 連絡希望: ${contactPreference || "面談チャットで確認"}`,
+    "",
+    "契約・支払い条件",
+    `- 単価: ${desiredRate || jobRate || "面談で確認"}`,
+    `- 契約期間: ${contractPeriod || "面談で確認"}`,
+    `- 契約・支払い条件: ${contractTerms || "面談で確認"}`,
+    "",
+    "次の案内",
+    `- 選考フロー: ${selectionFlow || "面談で説明"}`,
+    "- 面談後の判断期限:",
+  ].join("\n");
 }
