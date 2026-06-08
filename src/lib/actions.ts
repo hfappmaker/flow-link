@@ -455,6 +455,52 @@ export async function sendInterviewMessage(formData: FormData) {
   revalidatePath(`/interviews/${threadId}`);
 }
 
+export async function sendInterviewTimeOptions(formData: FormData) {
+  const user = await currentUser();
+  const threadId = toText(formData.get("threadId"));
+  await assertCanUseThread(user.id, threadId);
+
+  const note = toOptionalText(formData.get("body"));
+  if ((note?.length ?? 0) > 800) {
+    throw new Error("補足は800文字以内で入力してください。");
+  }
+
+  const proposedTimes = ["proposedAt1", "proposedAt2", "proposedAt3"]
+    .map((name) => toOptionalText(formData.get(name)))
+    .filter((value): value is string => Boolean(value))
+    .map((value) => new Date(value));
+
+  if (proposedTimes.length === 0 || proposedTimes.some((date) => Number.isNaN(date.getTime()))) {
+    throw new Error("候補日時を1つ以上入力してください。");
+  }
+
+  await prisma.$transaction(
+    proposedTimes.map((proposedAt, index) =>
+      prisma.interviewMessage.create({
+        data: {
+          interviewThreadId: threadId,
+          senderUserId: user.id,
+          messageType: InterviewMessageType.proposed_time,
+          proposedAt,
+          body: [
+            `面談候補${index + 1}: ${formatDateForMessage(proposedAt)}`,
+            note ? `補足: ${note}` : null,
+          ].filter(Boolean).join("\n"),
+        },
+      }),
+    ),
+  );
+
+  revalidatePath(`/interviews/${threadId}`);
+}
+
+function formatDateForMessage(value: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
+}
+
 async function assertOwnsApplication(companyProfileId: string, applicationId: string) {
   const application = await prisma.jobApplication.findFirst({
     where: {

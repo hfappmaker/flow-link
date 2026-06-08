@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { sendInterviewMessage } from "@/lib/actions";
+import { sendInterviewMessage, sendInterviewTimeOptions } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills } from "@/lib/utils";
@@ -125,6 +125,13 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     hasMessages: thread.messages.length > 0,
     nextAction,
     agenda: meetingBrief.agenda,
+    openQuestions: meetingBrief.openQuestions,
+  });
+  const timeOptionNote = buildTimeOptionNote({
+    isCompanySender,
+    jobTitle: jobPost.title,
+    proposedStart: thread.jobApplication.proposedStart,
+    contactPreference: thread.jobApplication.contactPreference,
     openQuestions: meetingBrief.openQuestions,
   });
 
@@ -362,6 +369,25 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               </Card>
             )}
 
+            {thread.status !== "scheduled" && (
+              <Card>
+                <h2 className="font-semibold">候補日時をまとめて提案</h2>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  面談可能な日時を複数出すと、相手がこの画面から選びやすくなります。
+                </p>
+                <form action={sendInterviewTimeOptions} className="mt-4 grid gap-4">
+                  <input type="hidden" name="threadId" value={thread.id} />
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <TextField name="proposedAt1" label="候補1" type="datetime-local" />
+                    <TextField name="proposedAt2" label="候補2" type="datetime-local" />
+                    <TextField name="proposedAt3" label="候補3" type="datetime-local" />
+                  </div>
+                  <TextArea name="body" label="補足" defaultValue={timeOptionNote} maxLength={800} />
+                  <button className="btn btn-secondary" type="submit">候補日時を送る</button>
+                </form>
+              </Card>
+            )}
+
             <Card>
               <h2 className="font-semibold">メッセージを送る</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
@@ -455,6 +481,35 @@ function buildDirectStarterMessage({
     "",
     "この内容で問題なければ、候補日時または確認したい条件を返信してください。",
     sender,
+  ].join("\n");
+}
+
+function buildTimeOptionNote({
+  isCompanySender,
+  jobTitle,
+  proposedStart,
+  contactPreference,
+  openQuestions,
+}: {
+  isCompanySender: boolean;
+  jobTitle: string;
+  proposedStart: string | null;
+  contactPreference: string | null;
+  openQuestions: string[];
+}) {
+  const requestLine = isCompanySender
+    ? "ご都合のよい日時があれば、この画面から確定してください。"
+    : "企業側で調整しやすい日時があれば、この画面から確定をお願いします。";
+  const questionLine = openQuestions.length > 0
+    ? `面談で確認したいこと: ${openQuestions.slice(0, 3).join(" / ")}`
+    : "面談で確認したいこと: 役割、条件、開始までの進め方";
+
+  return [
+    `${jobTitle}の面談候補です。`,
+    `応募時の開始目安: ${proposedStart || "面談で確認"}`,
+    `連絡希望: ${contactPreference || "このチャットで調整"}`,
+    questionLine,
+    requestLine,
   ].join("\n");
 }
 
