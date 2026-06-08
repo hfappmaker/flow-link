@@ -218,7 +218,7 @@ export default async function JobsPage({
               freelancerProfile={freelancerProfile}
               job={job}
               key={job.id}
-              readinessPercent={readiness.percent}
+              readiness={readiness}
             />
           ))}
           {jobs.length === 0 && (
@@ -359,19 +359,32 @@ function JobCard({
   directScore,
   freelancerProfile,
   job,
-  readinessPercent,
+  readiness,
 }: {
   applied: boolean;
   contractReadinessPercent: number;
   directScore: number;
   freelancerProfile: FreelancerForMatch | null;
   job: JobWithCompany;
-  readinessPercent: number;
+  readiness: ReturnType<typeof getFreelancerReadiness>;
 }) {
   const requiredSkills = skillPreview(job.requiredSkills);
   const requiredSkillCount = parseSkills(job.requiredSkills).length;
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
   const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
+  const requiredSkillMatchSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
+  const requiredSkillGaps = parseSkills(job.requiredSkills).filter((skill) => !requiredSkillMatchSet.has(skill.toLowerCase()));
+  const nextStep = freelancerProfile
+    ? buildJobCardNextStep({
+        applied,
+        applicationOpen: job.applicationStatus === "open",
+        contractReadinessPercent,
+        jobId: job.id,
+        matchPercent,
+        missingReadinessItem: readiness.items.find((item) => !item.done),
+        requiredSkillGaps,
+      })
+    : null;
 
   return (
     <Card>
@@ -412,8 +425,8 @@ function JobCard({
                 <StatusBadge tone={applied ? "good" : job.applicationStatus === "open" ? "neutral" : "warn"}>
                   {applied ? "応募済み" : job.applicationStatus === "open" ? "応募可" : "受付停止"}
                 </StatusBadge>
-                <StatusBadge tone={readinessPercent === 100 ? "good" : "warn"}>
-                  応募準備 {readinessPercent}%
+                <StatusBadge tone={readiness.isReady ? "good" : "warn"}>
+                  応募準備 {readiness.percent}%
                 </StatusBadge>
                 {matchPercent !== null && (
                   <StatusBadge tone={matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
@@ -424,7 +437,7 @@ function JobCard({
               <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-3">
                 <ScoreMeta label="スキル一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
                 <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
-                <ScoreMeta label="応募準備" value={`${readinessPercent}%`} />
+                <ScoreMeta label="応募準備" value={`${readiness.percent}%`} />
               </div>
               <p className="mt-2 text-sm leading-6 text-stone-700">
                 {requiredSkillCount === 0
@@ -433,6 +446,16 @@ function JobCard({
                     ? `一致: ${requiredSkillMatches.slice(0, 4).join("、")}`
                     : "プロフィールのスキルと必須スキルの一致はまだ見つかっていません。"}
               </p>
+              {nextStep && (
+                <div className="mt-3 rounded border border-white bg-white/80 p-3">
+                  <p className="text-xs font-medium text-stone-500">応募前の次のアクション</p>
+                  <p className="mt-1 text-sm font-semibold text-stone-900">{nextStep.title}</p>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">{nextStep.description}</p>
+                  <Link className="mt-3 inline-flex text-sm font-semibold text-emerald-700" href={nextStep.href}>
+                    {nextStep.label} {icons.arrow}
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -442,6 +465,76 @@ function JobCard({
       </div>
     </Card>
   );
+}
+
+function buildJobCardNextStep({
+  applied,
+  applicationOpen,
+  contractReadinessPercent,
+  jobId,
+  matchPercent,
+  missingReadinessItem,
+  requiredSkillGaps,
+}: {
+  applied: boolean;
+  applicationOpen: boolean;
+  contractReadinessPercent: number;
+  jobId: string;
+  matchPercent: number | null;
+  missingReadinessItem?: { label: string; href: string };
+  requiredSkillGaps: string[];
+}) {
+  if (applied) {
+    return {
+      title: "応募後の状況を確認",
+      description: "応募内容、条件確認、面談調整の状態を応募一覧で確認できます。",
+      href: "/freelancer/applications",
+      label: "応募済み案件を見る",
+    };
+  }
+
+  if (!applicationOpen) {
+    return {
+      title: "受付再開を待つ",
+      description: "現在は応募受付が停止しています。条件だけ確認して、他の受付中案件も見てください。",
+      href: `/jobs/${jobId}`,
+      label: "案件条件を見る",
+    };
+  }
+
+  if (missingReadinessItem) {
+    return {
+      title: `${missingReadinessItem.label}を整える`,
+      description: "応募前に不足している情報を埋めると、企業が面談判断をしやすくなります。",
+      href: missingReadinessItem.href,
+      label: "応募準備を進める",
+    };
+  }
+
+  if (matchPercent === 0 && requiredSkillGaps.length > 0) {
+    return {
+      title: "スキルの伝え方を確認",
+      description: `${requiredSkillGaps.slice(0, 3).join("、")}に近い経験があれば、プロフィールと提案文で補足してください。`,
+      href: "/freelancer/profile",
+      label: "プロフィールを見直す",
+    };
+  }
+
+  if (contractReadinessPercent < 100) {
+    return {
+      title: "条件確認をしてから応募",
+      description: "単価、稼働率、選考フロー、契約・支払い条件の未設定項目を詳細で確認してください。",
+      href: `/jobs/${jobId}`,
+      label: "条件を確認する",
+    };
+  }
+
+  return {
+    title: "提案文を作成",
+    description: "一致スキル、近い実績、開始可能時期、面談で確認したい条件を整理して応募できます。",
+    href: `/jobs/${jobId}`,
+    label: "応募へ進む",
+  };
 }
 
 function ScoreMeta({ label, value }: { label: string; value: string }) {
