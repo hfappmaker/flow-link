@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { publicDbRead } from "@/lib/public-db";
 import { Shell, TopNav, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const [jobs, companies, applications] = await Promise.all([
-    process.env.DATABASE_URL ? prisma.jobPost.count({ where: { status: "published" } }) : 0,
-    process.env.DATABASE_URL ? prisma.companyProfile.count() : 0,
-    process.env.DATABASE_URL ? prisma.jobApplication.count() : 0,
+    publicDbRead(() => prisma.jobPost.count({ where: { status: "published" } }), 0),
+    publicDbRead(() => prisma.companyProfile.count(), 0),
+    publicDbRead(() => prisma.jobApplication.count(), 0),
   ]);
 
   return (
@@ -18,7 +19,7 @@ export default async function Home() {
       <TopNav sessionRole={session?.user?.role} />
       <section className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
         <div>
-          <StatusBadge tone="good">Direct matching workspace</StatusBadge>
+          <StatusBadge tone="good">仲介なしで進める案件探し</StatusBadge>
           <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-tight tracking-normal text-stone-950">
             企業とフリーランスが、仲介なしで条件確認から面談まで進める。
           </h1>
@@ -27,21 +28,21 @@ export default async function Home() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link className="btn btn-primary" href="/jobs">
-              直接応募できる案件を見る {icons.arrow}
+              応募できる案件を見る {icons.arrow}
             </Link>
             {!session && <Link className="btn btn-secondary" href="/register">プロフィールを作る</Link>}
           </div>
           <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
             <Metric label="公開中案件" value={jobs} />
             <Metric label="登録企業" value={companies} />
-            <Metric label="直接応募" value={applications} />
+            <Metric label="応募数" value={applications} />
           </div>
         </div>
 
         <div className="rounded-md border border-stone-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-4 border-b border-stone-200 pb-4">
             <div>
-              <p className="text-sm font-semibold text-stone-950">Direct match room</p>
+              <p className="text-sm font-semibold text-stone-950">応募から面談までの進行</p>
               <p className="mt-1 text-xs text-stone-500">応募後の判断材料と次の接点</p>
             </div>
             <StatusBadge tone="good">仲介なし</StatusBadge>
@@ -51,8 +52,8 @@ export default async function Home() {
             <PreviewRow
               accent="emerald"
               label="条件公開"
-              title="単価・稼働率・契約条件"
-              description="企業が直接契約の前提を案件上で提示"
+              title="単価・稼働率・支払い条件"
+              description="応募前に確認したい条件を案件上で提示"
               value="5/5"
             />
             <PreviewRow

@@ -55,7 +55,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     },
     {
       label: "契約・支払い条件",
-      detail: jobPost.contractTerms ? "企業が直接契約の前提を公開しています。" : "契約・支払い条件が未設定です。",
+      detail: jobPost.contractTerms ? "企業が契約・支払い条件を公開しています。" : "契約・支払い条件が未設定です。",
       done: Boolean(jobPost.contractTerms),
     },
     {
@@ -138,7 +138,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold">直接進行ハンドオフ</h2>
+                  <h2 className="font-semibold">面談前の確認</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
                     企業とフリーランスが、面談前に相手情報・条件・信頼材料を同じ画面で確認できます。
                   </p>
@@ -149,7 +149,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               <dl className="mt-4 grid gap-3 text-sm">
                 <SummaryRow label="企業" value={company.name} />
                 <SummaryRow label="フリーランス" value={`${freelancer.fullName}${freelancer.desiredOccupation ? ` / ${freelancer.desiredOccupation}` : ""}`} />
-                <SummaryRow label="連絡先" value={thread.messages.length > 0 ? "このチャットで直接調整中" : "このチャットで直接調整開始"} />
+                <SummaryRow label="連絡先" value={thread.messages.length > 0 ? "このチャットで調整中" : "このチャットで調整開始"} />
                 {company.websiteUrl && (
                   <div className="rounded border border-stone-200 bg-stone-50 p-3">
                     <dt className="text-xs text-stone-500">企業サイト</dt>
@@ -183,7 +183,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
               {thread.jobApplication.proposalMessage && (
                 <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
-                  <p className="text-xs font-medium text-stone-500">応募時の直接提案</p>
+                  <p className="text-xs font-medium text-stone-500">応募時の提案</p>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">{thread.jobApplication.proposalMessage}</p>
                 </div>
               )}
@@ -204,9 +204,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               <Card>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-semibold">直接契約チェック</h2>
+                    <h2 className="font-semibold">選考・条件の確認</h2>
                     <p className="mt-1 text-sm leading-6 text-stone-600">
-                      面談前に、仲介なしで合意する流れと契約条件を確認できます。
+                      面談前に、選考の流れと契約条件を確認できます。
                     </p>
                   </div>
                   <StatusBadge tone="good">公開済み</StatusBadge>
@@ -221,9 +221,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold">直接成約レディネス</h2>
+                  <h2 className="font-semibold">面談前の準備状況</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    面談から直接契約へ進む前に、双方で揃える情報を確認できます。
+                    面談前に、双方で揃える情報を確認できます。
                   </p>
                 </div>
                 <div className="text-right">
@@ -255,7 +255,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold">直接面談ブリーフ</h2>
+                  <h2 className="font-semibold">面談ブリーフ</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
                     面談前に確認する議題と未決事項を、応募内容と案件条件から整理します。
                   </p>
@@ -310,9 +310,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
             )}
 
             <Card>
-              <h2 className="font-semibold">直接連絡を送る</h2>
+              <h2 className="font-semibold">メッセージを送る</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                応募情報と案件条件から、仲介担当なしで次に確認すべき内容を下書きしています。
+                応募情報と案件条件から、次に確認すべき内容を下書きしています。
               </p>
               <form action={sendInterviewMessage} className="mt-4 grid gap-4">
                 <input type="hidden" name="threadId" value={thread.id} />
@@ -367,7 +367,7 @@ function buildDirectStarterMessage({
   const sender = isCompanySender ? companyName : freelancerName;
   const intro = hasMessages
     ? `${jobTitle}の面談調整について、次の確認です。`
-    : `${jobTitle}について、仲介なしで直接面談調整を進めさせてください。`;
+    : `${jobTitle}について、面談調整を進めさせてください。`;
   const skillLine =
     matchedSkills.length > 0
       ? `確認済みの一致スキル: ${matchedSkills.slice(0, 5).join("、")}`
@@ -452,7 +452,7 @@ function buildMeetingBrief({
   const openQuestions = [
     !scheduledAt ? "面談日時を確定する" : null,
     scheduledAt && !meetingUrl ? "会議URLを共有する" : null,
-    !jobPost.contractTerms ? "直接契約の支払いサイト、請求方法、契約主体を確認する" : null,
+    !jobPost.contractTerms ? "支払いサイト、請求方法、契約主体を確認する" : null,
     !jobPost.selectionFlow ? "面談後の判断期限と次ステップを確認する" : null,
     !jobPost.rate && !freelancer.desiredRate ? "報酬レンジを確認する" : null,
     !jobPost.workload && !freelancer.availability ? "週の稼働日数または稼働率を確認する" : null,

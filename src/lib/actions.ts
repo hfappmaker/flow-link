@@ -241,7 +241,7 @@ export async function saveJobPost(formData: FormData) {
   const selectionFlow = toOptionalText(formData.get("selectionFlow"));
   const contractTerms = toOptionalText(formData.get("contractTerms"));
   if ((selectionFlow?.length ?? 0) > 800 || (contractTerms?.length ?? 0) > 800) {
-    throw new Error("選考フローと直接契約・支払い条件は800文字以内で入力してください。");
+    throw new Error("選考フローと契約・支払い条件は800文字以内で入力してください。");
   }
   const data = {
     companyProfileId: companyUser.companyProfileId,

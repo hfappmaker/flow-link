@@ -194,7 +194,7 @@ function ApplicationCard({ application, job }: { application: ApplicationWithPro
               職務経歴{application.freelancerProfile.careerHistory ? "あり" : "未登録"}
             </StatusBadge>
             <StatusBadge tone={application.proposalMessage ? "good" : "warn"}>
-              直接提案{application.proposalMessage ? "あり" : "未登録"}
+              提案文{application.proposalMessage ? "あり" : "未登録"}
             </StatusBadge>
             <StatusBadge>応募 {formatDateTime(application.appliedAt)}</StatusBadge>
           </div>

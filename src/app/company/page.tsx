@@ -75,9 +75,9 @@ export default async function CompanyDashboard() {
         <section className="mt-6">
           <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-lg font-semibold">直接連絡キュー</h2>
+              <h2 className="text-lg font-semibold">次に連絡する応募者</h2>
               <p className="mt-1 text-sm leading-6 text-stone-600">
-                仲介担当なしで次に連絡すべき応募者を、案件条件・提案内容・応募準備から優先表示します。
+                次に連絡すべき応募者を、案件条件・提案内容・応募準備から優先表示します。
               </p>
             </div>
             <Link className="btn btn-secondary" href="/company/jobs">案件別に見る</Link>

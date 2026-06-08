@@ -79,13 +79,15 @@ You are running as a scheduled local automation for this repository.
 
 Goal:
 - Continuously improve this product so it can compete with freelance/job matching services such as Levatech and Findy.
-- Prioritize the product's core differentiation: companies and freelancers can communicate and proceed directly without an agency or sales agent in the middle.
-- Consider improvements to direct matching, job discovery, application flow, company/freelancer profiles, messaging/contact handoff, trust signals, onboarding, conversion, UI/UX quality, and maintainability.
+- Prioritize user outcomes: freelancers can find suitable jobs, prepare strong applications, and move to interviews without confusion; companies can publish clear jobs, judge applicants, and coordinate interviews efficiently.
+- Consider improvements to job discovery, application flow, company/freelancer profiles, messaging/contact handoff, trust signals, onboarding, conversion, UI/UX quality, and maintainability.
 - Before choosing the improvement, research current public competitor information when network access is available. Check official or high-quality sources for Levatech, Findy, and adjacent freelance/job matching services; use the findings to pick a concrete gap or advantage to address.
-- In your final message, briefly name the competitor insight that motivated the change and include source URLs when you used web research.
-- Pick exactly one safe, high-value improvement that fits the existing codebase. Medium-sized changes are allowed when they clearly strengthen the core direct-matching experience.
+- Use competitor research only to inform the product decision. Do not expose competitor-comparison language, internal strategy, or developer-facing differentiation terms in the app UI.
+- Pick exactly one safe, high-value improvement that fits the existing codebase. Medium-sized changes are allowed when they clearly improve a freelancer or company workflow.
 - Implement it completely.
 - Keep the change coherently scoped. Avoid broad rewrites, speculative platform pivots, or partially finished multi-area changes.
+- Write UI copy from the freelancer/company user's point of view. In functional screens, prefer task language such as "応募準備", "条件確認", "面談調整", "契約・支払い条件", and "企業とのやりとり". Avoid meta/marketing terms such as "direct matching", "direct match", "直接マッチ", "直契約", "直接契約", "core differentiation", and "MVP" unless the text is clearly a marketing headline on the public home page.
+- In your final message, briefly name the user problem or competitor insight that motivated the change and include source URLs when you used web research.
 - If you touch Next.js code, first read the relevant guide in node_modules/next/dist/docs/ because this project uses a Next.js version with breaking changes.
 - Run relevant verification commands such as npm run typecheck, npm run lint, and/or npm run build when appropriate.
 - If you make changes, commit and push them yourself from inside this Codex run.

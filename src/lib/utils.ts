@@ -71,7 +71,7 @@ export function directContractChecklist(job: DirectContractChecklistInput) {
     {
       key: "compensation",
       label: "報酬・支払い",
-      detail: "単価と直接契約・支払い条件が提示されている",
+      detail: "単価と契約・支払い条件が提示されている",
       done: Boolean(job.rate && job.contractTerms),
     },
     {
@@ -162,12 +162,12 @@ export function buildScreeningPassedHandoffMessage({
   return [
     `${freelancerName}さん`,
     "",
-    `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と直接面談調整を進めさせてください。`,
+    `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と面談調整を進めさせてください。`,
     "",
     `応募時の開始目安: ${proposedStart || "面談で確認"}`,
     `応募時の連絡希望: ${contactPreference || "このチャットで調整"}`,
     `選考フロー: ${selectionFlow || "面談で確認"}`,
-    `直接契約・支払い条件: ${contractTerms || "面談で確認"}`,
+    `契約・支払い条件: ${contractTerms || "面談で確認"}`,
     "",
     "まずは候補日時と、面談前に確認したい条件があればこのチャットで共有してください。",
     companyName,

@@ -27,7 +27,7 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
         />
         <TextArea
           name="contractTerms"
-          label="直接契約・支払い条件"
+          label="契約・支払い条件"
           defaultValue={job?.contractTerms}
           maxLength={800}
           placeholder="例: 業務委託契約、月末締め翌月末払い、NDA締結後に詳細資料を共有。"
@@ -50,8 +50,8 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
       <aside className="h-fit rounded-md border border-stone-200 bg-stone-50 p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-semibold">直接契約準備</h2>
-            <p className="mt-1 text-sm leading-6 text-stone-600">仲介なしで判断しやすい案件情報の充足状況です。</p>
+            <h2 className="font-semibold">応募前に見せる条件</h2>
+            <p className="mt-1 text-sm leading-6 text-stone-600">応募者が判断しやすい案件情報の充足状況です。</p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-semibold">{contractReadiness.percent}%</p>

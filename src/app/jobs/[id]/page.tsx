@@ -78,7 +78,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </dl>
             {(job.selectionFlow || job.contractTerms) && (
               <div className="mt-6 rounded border border-emerald-100 bg-emerald-50/60 p-4">
-                <h2 className="font-semibold">直接契約の進め方</h2>
+                <h2 className="font-semibold">選考・条件の確認</h2>
                 <dl className="mt-3 grid gap-3 text-sm">
                   <DirectInfo label="選考フロー" value={job.selectionFlow} />
                   <DirectInfo label="契約・支払い条件" value={job.contractTerms} />
@@ -90,9 +90,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-semibold">直接契約準備</h2>
+                  <h2 className="font-semibold">応募前の確認</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    仲介なしで進む前に、案件側で確認できる条件です。
+                    応募前に、案件側で確認できる条件です。
                   </p>
                 </div>
                 <StatusBadge tone={contractReadiness.isReady ? "good" : "warn"}>{contractReadiness.percent}%</StatusBadge>
@@ -108,9 +108,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <Card>
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-semibold">直接マッチ診断</h2>
+                    <h2 className="font-semibold">応募準備チェック</h2>
                     <p className="mt-1 text-sm leading-6 text-stone-600">
-                      応募前に、企業へ直接伝えるべき一致点と確認点を整理します。
+                      応募前に、企業へ伝えるべき一致点と確認点を整理します。
                     </p>
                   </div>
                   <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 60 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
@@ -134,7 +134,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
                 {requiredSkillMatches.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs font-medium text-stone-500">直接提案で強調する一致点</p>
+                    <p className="text-xs font-medium text-stone-500">提案文で強調する一致点</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {requiredSkillMatches.map((skill) => (
                         <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800" key={skill}>
@@ -159,7 +159,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 )}
 
                 <p className="mt-4 text-sm leading-6 text-stone-600">
-                  提案文では、一致スキル、近い実績、開始可能時期、初回面談で確認したい条件を先に書くと、仲介なしでも判断が進みやすくなります。
+                  提案文では、一致スキル、近い実績、開始可能時期、初回面談で確認したい条件を先に書くと、企業が判断しやすくなります。
                 </p>
               </Card>
             )}
@@ -191,9 +191,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <form action={applyToJob} className="grid gap-3">
                   <input type="hidden" name="jobPostId" value={job.id} />
                   <div>
-                    <p className="font-semibold">直接応募メッセージ</p>
+                    <p className="font-semibold">応募メッセージ</p>
                     <p className="mt-1 text-sm leading-6 text-stone-600">
-                      仲介担当を挟まず、企業が最初に読む提案として送信されます。
+                      企業が最初に読む提案として送信されます。
                     </p>
                   </div>
                   <TextArea

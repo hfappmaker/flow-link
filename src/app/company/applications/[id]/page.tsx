@@ -90,7 +90,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </dl>
             </Card>
             <Card>
-              <h2 className="font-semibold">応募時の直接提案</h2>
+              <h2 className="font-semibold">応募時の提案</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-stone-700">
                 {application.proposalMessage ?? "応募メッセージは未登録です。"}
               </p>
@@ -101,7 +101,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </Card>
             {(application.jobPost.selectionFlow || application.jobPost.contractTerms) && (
               <Card>
-                <h2 className="font-semibold">直接契約の前提</h2>
+                <h2 className="font-semibold">選考・条件の確認</h2>
                 <dl className="mt-4 grid gap-3 text-sm">
                   <SummaryInfo label="選考フロー" value={application.jobPost.selectionFlow} multiline />
                   <SummaryInfo label="契約・支払い条件" value={application.jobPost.contractTerms} multiline />
@@ -228,7 +228,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   defaultValue={handoffMessageDraft}
                   maxLength={1600}
                 />
-                <button className="btn btn-primary w-full" type="submit">書類選考OK・直接連絡を送る</button>
+                <button className="btn btn-primary w-full" type="submit">書類選考OK・初回連絡を送る</button>
               </form>
             </Card>
             <Card>
