@@ -89,6 +89,12 @@ Required investigation:
   - vercel logs <deployment-url-or-id>
   - vercel inspect <deployment-url-or-id>
 - Treat Vercel log errors as strong signals, but verify the root cause in code before changing anything.
+- When a Vercel Preview deployment URL is available and accessible, run browser checks against Preview as well as localhost.
+- On Preview, prefer read-only checks first: open public pages, protected redirects, job list/detail pages, login/register pages, and any route related to detected Vercel errors.
+- Preview write checks are allowed only for disposable end-to-end verification. If you create or mutate Preview data, every generated value must be clearly marked with an automation prefix such as "Codex QA", "Playwright test", or "Automation test", and you must clean up the created records before the run ends.
+- For Preview write checks, record created IDs or unique titles/emails immediately, keep the test scope minimal, and delete or revert created users, companies, jobs, applications, documents, messages, and uploaded blobs during cleanup. If cleanup fails, stop and report the exact leftover records.
+- Never use real-looking customer, freelancer, or company data for Preview tests. Do not leave published test jobs, test users, uploaded documents, or applications behind.
+- Never use pulled Vercel Preview environment variables for local browser flows unless the flow is intentionally testing Preview data and includes cleanup. Pull Preview env only when needed for diagnosis, migration/status checks, or cleanup of explicit automation test data.
 - Run the app locally when feasible. Prefer a production-like local check:
   - ensure dependencies are installed
   - ensure Prisma client and database schema are ready
@@ -97,6 +103,7 @@ Required investigation:
   - start the app locally with npm run dev or npm run start when feasible
 - Exercise realistic flows in a real browser with Playwright. The repository includes @playwright/test; use Playwright scripts or npx playwright where appropriate. In this devcontainer, launch Chromium with headless mode and sandbox disabled, for example: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }). If the browser cannot launch, capture the failure and use HTTP checks only as a fallback.
 - Cover at least the high-risk flows when feasible: register, login, public jobs list/detail, freelancer profile/document upload, company job create/edit, application submit, and document access.
+- Run write-path browser checks against the local app when a disposable local database is available. If local write-path checks are not feasible, Preview write-path checks may be used with the cleanup rules above.
 
 Fix policy:
 - Pick exactly one confirmed bug to fix per run.
