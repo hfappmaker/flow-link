@@ -1,11 +1,11 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { removeSavedJob } from "@/lib/actions";
+import { removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -45,9 +45,23 @@ export default async function SavedJobsPage() {
           matched,
           score,
           appliedStatus: appliedByJobId.get(job.id),
+          nextStep: buildSavedJobNextStep({
+            applicationOpen: job.applicationStatus === "open",
+            applied: Boolean(appliedByJobId.get(job.id)),
+            contractMissingLabel: contractReadiness.items.find((item) => !item.done)?.label,
+            missingReadinessLabel: readiness.items.find((item) => !item.done)?.label,
+            note: savedJob.note,
+            score,
+          }),
         };
       })
       .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime()) ?? [];
+  const openSavedCount = savedJobs.filter(({ savedJob, appliedStatus }) => !appliedStatus && savedJob.jobPost.applicationStatus === "open").length;
+  const notedSavedCount = savedJobs.filter(({ savedJob }) => Boolean(savedJob.note)).length;
+  const readySavedCount = savedJobs.filter(
+    ({ appliedStatus, contractReadiness, score, savedJob }) =>
+      !appliedStatus && savedJob.jobPost.applicationStatus === "open" && score >= 70 && contractReadiness.percent >= 80,
+  ).length;
 
   return (
     <Shell>
@@ -64,26 +78,27 @@ export default async function SavedJobsPage() {
               <div>
                 <h2 className="font-semibold">応募前の優先確認</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  応募しやすさ、必須スキル、契約・支払い条件を見て、先に準備する案件を選べます。
+                  応募しやすさ、必須スキル、契約・支払い条件、検討メモを見て、先に準備する案件を選べます。
                 </p>
               </div>
-              <div className="rounded border border-stone-200 bg-stone-50 p-4">
-                <p className="text-xs font-medium text-stone-500">応募準備</p>
-                <p className="mt-1 text-3xl font-semibold">{readiness.percent}%</p>
-                <p className="mt-1 text-sm text-stone-600">{readiness.completed}/{readiness.total}項目完了</p>
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+                <PrepStat label="応募準備" value={`${readiness.percent}%`} detail={`${readiness.completed}/${readiness.total}項目完了`} />
+                <PrepStat label="応募へ進める候補" value={`${readySavedCount}件`} detail={`受付中 ${openSavedCount}件 / メモあり ${notedSavedCount}件`} />
               </div>
             </div>
           </Card>
         )}
         <div className="mt-6 grid gap-4">
-          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, score, appliedStatus }) => (
+          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, score, appliedStatus, nextStep }) => (
             <SavedJobRow
               appliedStatus={appliedStatus}
+              contractMissingItems={contractReadiness.items.filter((item) => !item.done)}
               contractPercent={contractReadiness.percent}
               job={savedJob.jobPost}
               key={savedJob.id}
               matched={matched}
               matchPercent={matchPercent}
+              nextStep={nextStep}
               note={savedJob.note}
               savedAt={savedJob.createdAt}
               score={score}
@@ -103,22 +118,32 @@ export default async function SavedJobsPage() {
 }
 
 type SavedJobPost = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type ContractMissingItem = ReturnType<typeof directContractChecklist>["items"][number];
+type SavedJobNextStep = {
+  title: string;
+  description: string;
+  tone: "neutral" | "good" | "warn";
+};
 
 function SavedJobRow({
   appliedStatus,
+  contractMissingItems,
   contractPercent,
   job,
   matched,
   matchPercent,
+  nextStep,
   note,
   savedAt,
   score,
 }: {
   appliedStatus?: string;
+  contractMissingItems: ContractMissingItem[];
   contractPercent: number;
   job: SavedJobPost;
   matched: string[];
   matchPercent: number | null;
+  nextStep: SavedJobNextStep;
   note?: string | null;
   savedAt: Date;
   score: number;
@@ -157,18 +182,59 @@ function SavedJobRow({
           )}
           {note && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{note}</p>}
         </div>
-        <div className="grid gap-2">
+        <div className="grid gap-3">
+          <div className={`rounded border px-3 py-2 ${nextStepClasses(nextStep.tone)}`}>
+            <p className="text-xs font-medium opacity-80">次に進めること</p>
+            <p className="mt-1 text-sm font-semibold">{nextStep.title}</p>
+            <p className="mt-1 text-xs leading-5">{nextStep.description}</p>
+          </div>
           <Link className="btn btn-primary" href={`/jobs/${job.id}`}>{appliedStatus ? "応募内容を見る" : "条件確認・応募準備"}</Link>
           {!appliedStatus && (
-            <form action={removeSavedJob}>
-              <input type="hidden" name="jobPostId" value={job.id} />
-              <input type="hidden" name="returnTo" value="/freelancer/saved-jobs" />
-              <button className="btn btn-secondary w-full" type="submit">検討リストから外す</button>
-            </form>
+            <>
+              <form action={saveJobForReview} className="rounded border border-stone-200 bg-stone-50 p-3">
+                <input type="hidden" name="jobPostId" value={job.id} />
+                <input type="hidden" name="returnTo" value="/freelancer/saved-jobs" />
+                <TextArea
+                  name="note"
+                  label="検討メモ"
+                  defaultValue={note}
+                  maxLength={400}
+                  placeholder="例: 稼働開始日、単価、面談で確認したい条件"
+                />
+                <button className="btn btn-secondary mt-3 w-full" type="submit">メモを保存</button>
+              </form>
+              {contractMissingItems.length > 0 && (
+                <div className="rounded border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-medium text-amber-900">面談前に確認したい条件</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {contractMissingItems.map((item) => (
+                      <span className="rounded border border-amber-200 bg-white px-2 py-1 text-xs font-medium text-amber-900" key={item.key}>
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <form action={removeSavedJob}>
+                <input type="hidden" name="jobPostId" value={job.id} />
+                <input type="hidden" name="returnTo" value="/freelancer/saved-jobs" />
+                <button className="btn btn-secondary w-full" type="submit">検討リストから外す</button>
+              </form>
+            </>
           )}
         </div>
       </div>
     </Card>
+  );
+}
+
+function PrepStat({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded border border-stone-200 bg-stone-50 p-4">
+      <p className="text-xs font-medium text-stone-500">{label}</p>
+      <p className="mt-1 text-3xl font-semibold">{value}</p>
+      <p className="mt-1 text-sm text-stone-600">{detail}</p>
+    </div>
   );
 }
 
@@ -179,4 +245,70 @@ function SavedJobMeta({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate font-semibold">{value}</p>
     </div>
   );
+}
+
+function buildSavedJobNextStep({
+  applicationOpen,
+  applied,
+  contractMissingLabel,
+  missingReadinessLabel,
+  note,
+  score,
+}: {
+  applicationOpen: boolean;
+  applied: boolean;
+  contractMissingLabel?: string;
+  missingReadinessLabel?: string;
+  note?: string | null;
+  score: number;
+}): SavedJobNextStep {
+  if (applied) {
+    return {
+      title: "企業とのやりとりを確認",
+      description: "応募内容と選考状況を確認し、面談調整へ進めます。",
+      tone: "good",
+    };
+  }
+  if (!applicationOpen) {
+    return {
+      title: "受付状況を確認",
+      description: "応募受付が止まっているため、再開後に応募できるか確認してください。",
+      tone: "warn",
+    };
+  }
+  if (missingReadinessLabel) {
+    return {
+      title: `${missingReadinessLabel}を登録`,
+      description: "応募前にプロフィールと提出書類を揃えると、すぐ提案文へ進めます。",
+      tone: "warn",
+    };
+  }
+  if (contractMissingLabel) {
+    return {
+      title: `${contractMissingLabel}を確認`,
+      description: "検討メモに質問を残してから応募すると、面談で条件を確認しやすくなります。",
+      tone: "neutral",
+    };
+  }
+  if (!note) {
+    return {
+      title: "検討メモを残す",
+      description: "応募理由、確認したい条件、希望する進め方を短く整理できます。",
+      tone: "neutral",
+    };
+  }
+  return {
+    title: score >= 70 ? "応募文を仕上げる" : "条件確認・応募準備",
+    description: "案件詳細で一致点と確認事項を見ながら、企業へ送る提案文を整えます。",
+    tone: score >= 70 ? "good" : "neutral",
+  };
+}
+
+function nextStepClasses(tone: SavedJobNextStep["tone"]) {
+  const classes = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+  return classes[tone];
 }
