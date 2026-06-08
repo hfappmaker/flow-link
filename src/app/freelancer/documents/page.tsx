@@ -25,7 +25,7 @@ export default async function DocumentsPage() {
           ))}
         </div>
         <Card className="mt-6">
-          <form action={uploadResumeDocument} className="grid gap-4" encType="multipart/form-data">
+          <form action={uploadResumeDocument} className="grid gap-4">
             <SelectField name="documentType" label="書類種別" defaultValue="resume">
               <option value="resume">履歴書PDF</option>
               <option value="career_history">職務経歴書PDF</option>
