@@ -62,6 +62,18 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
+  const proposalDraft = freelancerProfile
+    ? buildProposalDraft({
+        companyName: job.companyProfile.name,
+        jobTitle: job.title,
+        matchedSkills: requiredSkillMatches,
+        skillGaps: requiredSkillGaps,
+        summary: freelancerProfile.careerHistory?.summary,
+        startSignal: freelancerProfile.availableFrom || freelancerProfile.availability,
+        rateSignal: freelancerProfile.desiredRate,
+        contactSignal: freelancerProfile.remotePreference,
+      })
+    : "";
 
   return (
     <Shell>
@@ -210,11 +222,18 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   <TextArea
                     name="proposalMessage"
                     label="この案件で貢献できること"
+                    defaultValue={proposalDraft}
                     required
                     minLength={40}
                     maxLength={1200}
                     placeholder="関連する経験、得意領域、案件条件との合い方を簡潔に入力"
                   />
+                  <div className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                    <p className="font-medium text-stone-800">下書きを編集して送信できます</p>
+                    <p className="mt-1">
+                      一致スキル、近い実績、開始可能時期、面談で確認したい条件を先に伝える形にしています。
+                    </p>
+                  </div>
                   <TextField
                     name="proposedStart"
                     label="稼働開始目安"
@@ -312,4 +331,43 @@ function DirectInfo({ label, value }: { label: string; value?: string | null }) 
       <dd className="mt-1 whitespace-pre-wrap leading-6 text-stone-700">{value || "未設定"}</dd>
     </div>
   );
+}
+
+function buildProposalDraft({
+  companyName,
+  jobTitle,
+  matchedSkills,
+  skillGaps,
+  summary,
+  startSignal,
+  rateSignal,
+  contactSignal,
+}: {
+  companyName: string;
+  jobTitle: string;
+  matchedSkills: string[];
+  skillGaps: string[];
+  summary?: string | null;
+  startSignal?: string | null;
+  rateSignal?: string | null;
+  contactSignal?: string | null;
+}) {
+  const matchedSkillText = matchedSkills.slice(0, 4).join("、");
+  const gapText = skillGaps.slice(0, 3).join("、");
+  const experienceLine = summary
+    ? `関連実績: ${summary.slice(0, 160)}${summary.length > 160 ? "..." : ""}`
+    : "関連実績: 職務経歴に記載した開発経験をもとに、要件整理から実装・改善まで対応できます。";
+
+  return [
+    `${companyName} ご担当者さま`,
+    "",
+    `${jobTitle}の案件について、${matchedSkillText ? `${matchedSkillText}の経験を活かして` : "これまでの開発経験を活かして"}貢献できます。`,
+    experienceLine,
+    `稼働開始目安: ${startSignal || "面談で相談"}`,
+    `契約・支払い条件: ${rateSignal ? `${rateSignal}を目安に相談希望` : "面談で確認希望"}`,
+    `企業とのやりとり: ${contactSignal || "候補日時と確認事項をこの画面から共有できます"}`,
+    gapText ? `面談で確認したいこと: ${gapText}に近い経験の活かし方と、初期に期待される役割を確認したいです。` : "面談で確認したいこと: 初期に期待される役割、進め方、優先度を確認したいです。",
+    "",
+    "よろしくお願いいたします。",
+  ].join("\n");
 }
