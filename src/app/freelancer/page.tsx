@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directContractChecklist, directMatchScore, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,17 @@ export default async function FreelancerDashboard() {
   const session = await auth();
   const profile = await prisma.freelancerProfile.findUnique({
     where: { userId: session!.user.id },
-    include: { applications: true, documents: true, careerHistory: true },
+    include: {
+      applications: true,
+      documents: true,
+      careerHistory: true,
+      savedJobs: {
+        include: { jobPost: { include: { companyProfile: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 3,
+      },
+      _count: { select: { savedJobs: true } },
+    },
   });
   const unread = await prisma.notification.count({ where: { userId: session!.user.id, readAt: null } });
   const readiness = getFreelancerReadiness(profile);
@@ -55,10 +65,11 @@ export default async function FreelancerDashboard() {
           description="プロフィール、書類、応募状況、選考結果を管理します。"
           action={<form action={logoutUser}><button className="btn btn-secondary">ログアウト</button></form>}
         />
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
+        <div className="mt-6 grid gap-4 md:grid-cols-4">
           <StatCard label="応募数" value={profile?.applications.length ?? 0} icon={icons.jobs} />
           <StatCard label="登録書類" value={profile?.documents.length ?? 0} icon={icons.files} />
           <StatCard label="未読通知" value={unread} icon={icons.ok} />
+          <StatCard label="検討リスト" value={profile?._count.savedJobs ?? 0} icon={icons.ok} />
         </div>
         <Card className="mt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -119,15 +130,77 @@ export default async function FreelancerDashboard() {
             />
           )}
         </section>
+        <section className="mt-6">
+          <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">検討リスト</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">
+                応募前に条件確認や提案文の準備をしたい案件を見返せます。
+              </p>
+            </div>
+            <Link className="btn btn-secondary" href="/freelancer/saved-jobs">検討リストを見る</Link>
+          </div>
+          {profile && profile.savedJobs.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {profile.savedJobs.map((savedJob) => (
+                <SavedJobCard
+                  job={savedJob.jobPost}
+                  key={savedJob.id}
+                  savedAt={savedJob.createdAt}
+                  savedNote={savedJob.note}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="検討中の案件はまだありません。"
+              description="気になる案件を保存すると、応募前の条件確認と提案準備をここから進められます。"
+              action={<Link className="btn btn-primary" href="/jobs?accepting=open&sort=direct">案件を探す</Link>}
+            />
+          )}
+        </section>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <ActionCard href="/freelancer/profile" title="プロフィール編集" body="希望職種、スキル、稼働条件を更新します。" />
           <ActionCard href="/freelancer/career" title="職務経歴フォーム" body="検索や選考時に確認される職務経歴を整えます。" />
           <ActionCard href="/freelancer/documents" title="PDF書類" body="履歴書PDFと職務経歴書PDFをアップロードします。" />
           <ActionCard href="/freelancer/applications" title="応募済み案件" body="応募履歴と選考状況を確認します。" />
+          <ActionCard href="/freelancer/saved-jobs" title="検討リスト" body="応募前に確認したい案件を見返します。" />
           <ActionCard href="/freelancer/notifications" title="通知" body="書類選考OK/NGの通知を確認します。" />
         </div>
       </div>
     </Shell>
+  );
+}
+
+type SavedDashboardJob = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+
+function SavedJobCard({
+  job,
+  savedAt,
+  savedNote,
+}: {
+  job: SavedDashboardJob;
+  savedAt: Date;
+  savedNote?: string | null;
+}) {
+  const contractReadiness = directContractChecklist(job);
+
+  return (
+    <Card>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge tone={job.applicationStatus === "open" ? "good" : "warn"}>
+          {job.applicationStatus === "open" ? "受付中" : "受付停止"}
+        </StatusBadge>
+        <StatusBadge tone={contractReadiness.isReady ? "good" : contractReadiness.percent >= 60 ? "neutral" : "warn"}>
+          条件確認 {contractReadiness.percent}%
+        </StatusBadge>
+      </div>
+      <h3 className="mt-3 line-clamp-2 font-semibold">{job.title}</h3>
+      <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
+      <p className="mt-3 text-xs text-stone-500">保存 {formatDateTime(savedAt)}</p>
+      {savedNote && <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{savedNote}</p>}
+      <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>条件確認・応募準備</Link>
+    </Card>
   );
 }
 

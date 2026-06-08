@@ -92,6 +92,7 @@ model FreelancerProfile {
   documents           ResumeDocument[]
   careerHistory       CareerHistory?
   applications        JobApplication[]
+  savedJobs           SavedJob[]
 
   @@map("freelancer_profiles")
 }
@@ -171,8 +172,23 @@ model JobPost {
   updatedAt         DateTime             @updatedAt @map("updated_at")
   companyProfile    CompanyProfile       @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
   applications      JobApplication[]
+  savedJobs         SavedJob[]
 
   @@map("job_posts")
+}
+
+model SavedJob {
+  id                  String            @id @default(cuid())
+  freelancerProfileId String            @map("freelancer_profile_id")
+  jobPostId           String            @map("job_post_id")
+  note                String?
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  jobPost             JobPost           @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@unique([freelancerProfileId, jobPostId])
+  @@map("saved_jobs")
 }
 
 model JobApplication {

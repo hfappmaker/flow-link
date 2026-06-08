@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
@@ -80,6 +81,14 @@ export default async function JobsPage({
   const readiness = getFreelancerReadiness(freelancerProfile);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
   const fit = freelancerProfile && ["skill", "ready"].includes(filters.fit ?? "") ? filters.fit : "";
+  const currentJobsPath = jobsPath({
+    q: keyword,
+    remote,
+    accepting,
+    directReady,
+    fit,
+    sort,
+  });
   const rankedJobs = jobs
     .map((job) => ({
       job,
@@ -125,6 +134,24 @@ export default async function JobsPage({
               [],
             )
           ).map((application) => application.jobPostId),
+        )
+      : new Set<string>();
+  const savedJobIds =
+    freelancerProfile && jobs.length > 0
+      ? new Set(
+          (
+            await publicDbRead(
+              () =>
+                prisma.savedJob.findMany({
+                  where: {
+                    freelancerProfileId: freelancerProfile.id,
+                    jobPostId: { in: jobs.map((job) => job.id) },
+                  },
+                  select: { jobPostId: true },
+                }),
+              [],
+            )
+          ).map((savedJob) => savedJob.jobPostId),
         )
       : new Set<string>();
 
@@ -246,6 +273,8 @@ export default async function JobsPage({
               job={job}
               key={job.id}
               readiness={readiness}
+              saved={savedJobIds.has(job.id)}
+              returnTo={currentJobsPath}
             />
           ))}
           {jobs.length === 0 && (
@@ -466,6 +495,8 @@ function JobCard({
   freelancerProfile,
   job,
   readiness,
+  returnTo,
+  saved,
 }: {
   applied: boolean;
   contractReadinessPercent: number;
@@ -473,6 +504,8 @@ function JobCard({
   freelancerProfile: FreelancerForMatch | null;
   job: JobWithCompany;
   readiness: ReturnType<typeof getFreelancerReadiness>;
+  returnTo: string;
+  saved: boolean;
 }) {
   const requiredSkills = skillPreview(job.requiredSkills);
   const requiredSkillCount = parseSkills(job.requiredSkills).length;
@@ -565,9 +598,20 @@ function JobCard({
             </div>
           )}
         </div>
-        <Link className="btn btn-secondary shrink-0" href={`/jobs/${job.id}`}>
-          詳細 {icons.arrow}
-        </Link>
+        <div className="grid shrink-0 gap-2 sm:grid-cols-2 md:grid-cols-1">
+          {freelancerProfile && !applied && (
+            <form action={saved ? removeSavedJob : saveJobForReview}>
+              <input type="hidden" name="jobPostId" value={job.id} />
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <button className="btn btn-secondary w-full" type="submit">
+                {saved ? "検討リストから外す" : "検討リストに保存"}
+              </button>
+            </form>
+          )}
+          <Link className="btn btn-secondary" href={`/jobs/${job.id}`}>
+            詳細 {icons.arrow}
+          </Link>
+        </div>
       </div>
     </Card>
   );
@@ -687,4 +731,14 @@ function jobsHref({
       ...(sort ? { sort } : {}),
     },
   };
+}
+
+function jobsPath(input: Parameters<typeof jobsHref>[0]) {
+  const href = jobsHref(input);
+  const params = new URLSearchParams();
+  Object.entries(href.query).forEach(([key, value]) => {
+    if (value) params.set(key, String(value));
+  });
+  const query = params.toString();
+  return query ? `${href.pathname}?${query}` : href.pathname;
 }

@@ -324,6 +324,64 @@ export async function applyToJob(formData: FormData) {
   redirect("/freelancer/applications");
 }
 
+export async function saveJobForReview(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const jobPostId = toText(formData.get("jobPostId"));
+  const returnTo = safeReturnPath(toText(formData.get("returnTo")) || `/jobs/${jobPostId}`);
+  const note = toOptionalText(formData.get("note"));
+  if ((note?.length ?? 0) > 400) {
+    throw new Error("検討メモは400文字以内で入力してください。");
+  }
+
+  const job = await prisma.jobPost.findFirst({
+    where: { id: jobPostId, status: "published" },
+    select: { id: true },
+  });
+  if (!job) throw new Error("保存できる案件が見つかりません。");
+
+  await prisma.savedJob.upsert({
+    where: {
+      freelancerProfileId_jobPostId: {
+        freelancerProfileId: profile.id,
+        jobPostId,
+      },
+    },
+    create: {
+      freelancerProfileId: profile.id,
+      jobPostId,
+      note,
+    },
+    update: {
+      note,
+    },
+  });
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobPostId}`);
+  revalidatePath("/freelancer");
+  revalidatePath("/freelancer/saved-jobs");
+  redirect(returnTo);
+}
+
+export async function removeSavedJob(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const jobPostId = toText(formData.get("jobPostId"));
+  const returnTo = safeReturnPath(toText(formData.get("returnTo")) || "/freelancer/saved-jobs");
+
+  await prisma.savedJob.deleteMany({
+    where: {
+      freelancerProfileId: profile.id,
+      jobPostId,
+    },
+  });
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobPostId}`);
+  revalidatePath("/freelancer");
+  revalidatePath("/freelancer/saved-jobs");
+  redirect(returnTo);
+}
+
 export async function saveScreeningNote(formData: FormData) {
   const { companyUser } = await currentCompanyUser();
   const applicationId = toText(formData.get("applicationId"));
@@ -499,6 +557,10 @@ function formatDateForMessage(value: Date) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(value);
+}
+
+function safeReturnPath(value: string) {
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
 async function assertOwnsApplication(companyProfileId: string, applicationId: string) {

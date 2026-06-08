@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { applyToJob } from "@/lib/actions";
+import { applyToJob, removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
@@ -43,6 +43,20 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               },
             },
             include: { interviewThread: true },
+          }),
+        null,
+      )
+    : null;
+  const savedJob = freelancerProfile
+    ? await publicDbRead(
+        () =>
+          prisma.savedJob.findUnique({
+            where: {
+              freelancerProfileId_jobPostId: {
+                freelancerProfileId: freelancerProfile.id,
+                jobPostId: id,
+              },
+            },
           }),
         null,
       )
@@ -188,6 +202,25 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             )}
 
             <Card>
+              {session?.user?.role === "freelancer" && !existingApplication && (
+                <div className="mb-4 rounded border border-stone-200 bg-stone-50 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">{savedJob ? "検討リストに保存済み" : "応募前に検討リストへ保存"}</p>
+                      <p className="mt-1 text-sm leading-6 text-stone-600">
+                        条件確認や提案文の準備が必要な案件を、応募前にまとめて見返せます。
+                      </p>
+                    </div>
+                    <form action={savedJob ? removeSavedJob : saveJobForReview}>
+                      <input type="hidden" name="jobPostId" value={job.id} />
+                      <input type="hidden" name="returnTo" value={`/jobs/${job.id}`} />
+                      <button className="btn btn-secondary w-full sm:w-auto" type="submit">
+                        {savedJob ? "検討リストから外す" : "検討リストに保存"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              )}
               {existingApplication ? (
                 <div>
                   <StatusBadge tone={existingApplication.status === "screening_passed" ? "good" : existingApplication.status === "screening_rejected" ? "bad" : "neutral"}>
