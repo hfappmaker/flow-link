@@ -47,6 +47,7 @@ export default async function CompanyDashboard() {
         status: "screening_passed",
         jobPost: { companyProfileId: companyUser!.companyProfileId },
         OR: [
+          { interviewThread: { is: null } },
           { interviewThread: { is: { status: "open" } } },
           { interviewThread: { is: { meetingUrl: null } } },
         ],

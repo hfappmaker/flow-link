@@ -31,6 +31,7 @@ export default async function FreelancerDashboard() {
       status: "screening_passed",
       freelancerProfile: { userId: session!.user.id },
       OR: [
+        { interviewThread: { is: null } },
         { interviewThread: { is: { status: "open" } } },
         { interviewThread: { is: { meetingUrl: null } } },
       ],
