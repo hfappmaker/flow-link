@@ -24,9 +24,14 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
   const contractReadiness = directContractChecklist(formValues);
   const missingItems = contractReadiness.items.filter((item) => !item.done);
   const isPublishingIncomplete = formValues.status === "published" && missingItems.length > 0;
+  const nextGuide = buildConditionGuide(formValues).find((guide) => !guide.done);
 
   function updateField(name: keyof typeof formValues, value: string) {
     setFormValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function applyExample(name: FieldName, value: string) {
+    setFormValues((current) => ({ ...current, [name]: current[name] || value }));
   }
 
   return (
@@ -115,7 +120,8 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
         )}
         <button className="btn btn-primary md:col-span-2" type="submit">保存</button>
       </form>
-      <aside className="h-fit rounded-md border border-stone-200 bg-stone-50 p-4">
+      <aside className="grid h-fit gap-4">
+        <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-semibold">応募前に見せる条件</h2>
@@ -156,6 +162,52 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
             条件確認に必要な情報が揃っています。応募者は業務内容、報酬、稼働条件、面談の流れを応募前に確認できます。
           </p>
         )}
+        </div>
+        <div className="rounded-md border border-stone-200 bg-white p-4">
+          <h2 className="font-semibold">入力ガイド</h2>
+          <p className="mt-1 text-sm leading-6 text-stone-600">
+            応募者が迷いやすい条件から順に、記入例を使って案件内容を整えます。
+          </p>
+          {nextGuide ? (
+            <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-medium text-amber-900">次に埋める項目</p>
+              <p className="mt-1 text-sm font-semibold text-stone-950">{nextGuide.title}</p>
+              <p className="mt-1 text-sm leading-6 text-stone-700">{nextGuide.reason}</p>
+              <div className="mt-3 grid gap-2">
+                {nextGuide.examples.map((example) => (
+                  <button
+                    className="rounded border border-amber-200 bg-white px-3 py-2 text-left text-xs font-medium leading-5 text-stone-700 transition hover:border-amber-400"
+                    key={`${example.name}-${example.value}`}
+                    type="button"
+                    onClick={() => applyExample(example.name, example.value)}
+                  >
+                    {example.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">
+              応募前に必要な条件が揃っています。公開後は応募者の提案と開始条件を確認してください。
+            </p>
+          )}
+          <div className="mt-4 grid gap-2">
+            {buildConditionGuide(formValues).map((guide) => (
+              <div
+                className={`rounded border px-3 py-2 text-sm ${
+                  guide.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-stone-200 bg-stone-50 text-stone-700"
+                }`}
+                key={guide.key}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium">{guide.title}</span>
+                  <span className="text-xs font-semibold">{guide.done ? "入力済み" : "未入力"}</span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-stone-600">{guide.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </aside>
     </div>
   );
@@ -269,4 +321,106 @@ function JobSelectField({
       </select>
     </label>
   );
+}
+
+type ConditionGuide = {
+  key: string;
+  title: string;
+  reason: string;
+  done: boolean;
+  examples: Array<{
+    name: FieldName;
+    label: string;
+    value: string;
+  }>;
+};
+
+function buildConditionGuide(values: Record<FieldName, string>): ConditionGuide[] {
+  return [
+    {
+      key: "scope",
+      title: "業務範囲と必須スキル",
+      reason: "担当範囲と必要スキルが揃うと、応募者が自分の経験を提案文に落とし込みやすくなります。",
+      done: Boolean(values.description && values.requiredSkills),
+      examples: [
+        {
+          name: "description",
+          label: "業務内容の例を入れる",
+          value: "既存サービスの新機能開発と改善を担当します。要件整理、画面実装、API連携、リリース後の改善提案までを期待します。",
+        },
+        {
+          name: "requiredSkills",
+          label: "必須スキルの例を入れる",
+          value: "TypeScript, React, API設計, チーム開発",
+        },
+      ],
+    },
+    {
+      key: "compensation",
+      title: "報酬と支払い条件",
+      reason: "単価、精算幅、支払いタイミングが見えると、応募前の条件確認が減ります。",
+      done: Boolean(values.rate && values.contractTerms),
+      examples: [
+        {
+          name: "rate",
+          label: "単価の例を入れる",
+          value: "月80〜100万円、精算幅140〜180時間",
+        },
+        {
+          name: "contractTerms",
+          label: "契約・支払い条件の例を入れる",
+          value: "業務委託契約。月末締め翌月末払い。NDA締結後に詳細資料を共有します。",
+        },
+      ],
+    },
+    {
+      key: "workload",
+      title: "稼働条件と期間",
+      reason: "開始後の稼働量と契約期間が分かると、応募者がスケジュールを判断できます。",
+      done: Boolean(values.workload && values.contractPeriod),
+      examples: [
+        {
+          name: "workload",
+          label: "稼働率の例を入れる",
+          value: "週3〜4日、月96〜128時間を想定",
+        },
+        {
+          name: "contractPeriod",
+          label: "契約期間の例を入れる",
+          value: "初回3ヶ月。成果と双方の希望により延長相談可",
+        },
+      ],
+    },
+    {
+      key: "process",
+      title: "選考フロー",
+      reason: "面談回数と判断までの流れが明確だと、応募後の予定調整が進めやすくなります。",
+      done: Boolean(values.selectionFlow),
+      examples: [
+        {
+          name: "selectionFlow",
+          label: "選考フローの例を入れる",
+          value: "書類確認後、現場担当と30分のオンライン面談を1回実施します。面談後3営業日以内に結果を連絡します。",
+        },
+      ],
+    },
+    {
+      key: "place",
+      title: "働き方",
+      reason: "リモート可否や出社条件が明確だと、応募者が無理なく稼働できるか判断できます。",
+      done: Boolean(values.location || values.remotePolicy),
+      examples: [
+        {
+          name: "remotePolicy",
+          label: "リモート可否の例を入れる",
+          value: "フルリモート可。初回キックオフのみオンライン参加必須",
+        },
+        {
+          name: "location",
+          label: "勤務地の例を入れる",
+          value: "東京都渋谷区。必要時のみ来社相談",
+        },
+      ],
+    },
+  ];
 }
