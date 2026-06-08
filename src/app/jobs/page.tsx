@@ -89,6 +89,9 @@ export default async function JobsPage({
       }
       return b.job.createdAt.getTime() - a.job.createdAt.getTime();
     });
+  const priorityJobs = [...rankedJobs]
+    .sort((a, b) => b.directScore - a.directScore || b.contractReadinessPercent - a.contractReadinessPercent)
+    .slice(0, 3);
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -188,6 +191,13 @@ export default async function JobsPage({
             />
           </div>
         </Card>
+        {priorityJobs.length > 0 && (
+          <DirectPriorityStrip
+            freelancerProfile={freelancerProfile}
+            jobs={priorityJobs}
+            readinessPercent={readiness.percent}
+          />
+        )}
         <div className="mt-6 grid gap-4">
           {rankedJobs.map(({ job, directScore, contractReadinessPercent }) => (
             <JobCard
@@ -215,6 +225,99 @@ export default async function JobsPage({
 
 type JobWithCompany = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
 type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
+type RankedJob = {
+  job: JobWithCompany;
+  directScore: number;
+  contractReadinessPercent: number;
+};
+
+function DirectPriorityStrip({
+  freelancerProfile,
+  jobs,
+  readinessPercent,
+}: {
+  freelancerProfile: FreelancerForMatch | null;
+  jobs: RankedJob[];
+  readinessPercent: number;
+}) {
+  return (
+    <section className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/70 p-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-stone-950">直接応募の優先候補</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+            条件公開、応募受付、プロフィール準備を合わせて、仲介なしで次の会話へ進みやすい案件を先に表示します。
+          </p>
+        </div>
+        {freelancerProfile && (
+          <StatusBadge tone={readinessPercent === 100 ? "good" : "warn"}>応募準備 {readinessPercent}%</StatusBadge>
+        )}
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {jobs.map(({ job, directScore, contractReadinessPercent }) => {
+          const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
+          const reasons = buildPriorityReasons({
+            contractReadinessPercent,
+            isOpen: job.applicationStatus === "open",
+            matchPercent,
+            hasTerms: Boolean(job.selectionFlow || job.contractTerms),
+          });
+
+          return (
+            <Link
+              className="rounded-md border border-emerald-200 bg-white p-4 shadow-sm transition hover:border-emerald-400"
+              href={`/jobs/${job.id}`}
+              key={job.id}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="line-clamp-2 text-sm font-semibold text-stone-950">{job.title}</p>
+                  <p className="mt-1 text-xs text-stone-500">{job.companyProfile.name}</p>
+                </div>
+                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
+                  {directScore}%
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {reasons.map((reason) => (
+                  <span className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700" key={reason}>
+                    {reason}
+                  </span>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-2">
+                <ScoreMeta label="直接条件" value={`${contractReadinessPercent}%`} />
+                <ScoreMeta label="必須一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function buildPriorityReasons({
+  contractReadinessPercent,
+  hasTerms,
+  isOpen,
+  matchPercent,
+}: {
+  contractReadinessPercent: number;
+  hasTerms: boolean;
+  isOpen: boolean;
+  matchPercent: number | null;
+}) {
+  const reasons = [];
+  if (isOpen) reasons.push("受付中");
+  if (contractReadinessPercent === 100) reasons.push("直接条件100%");
+  else if (contractReadinessPercent >= 60) reasons.push("条件整理済み");
+  if (hasTerms) reasons.push("選考・契約条件あり");
+  if (matchPercent === null) reasons.push("必須スキル未設定");
+  else if (matchPercent >= 60) reasons.push("スキル高一致");
+  else if (matchPercent > 0) reasons.push("一致スキルあり");
+  return reasons.slice(0, 4);
+}
 
 function DiscoverySignal({
   label,
