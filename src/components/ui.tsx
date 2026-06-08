@@ -145,10 +145,13 @@ export function TextArea({
   maxLength?: number;
   placeholder?: string;
 }) {
+  const fieldId = `${name}-${label.replace(/\s+/g, "-")}`;
+
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-      {label}
+    <div className="grid gap-1.5 text-sm font-medium text-stone-700">
+      <label htmlFor={fieldId}>{label}</label>
       <textarea
+        id={fieldId}
         className="min-h-28 rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
         name={name}
         defaultValue={defaultValue ?? ""}
@@ -157,7 +160,7 @@ export function TextArea({
         maxLength={maxLength}
         placeholder={placeholder}
       />
-    </label>
+    </div>
   );
 }
 
