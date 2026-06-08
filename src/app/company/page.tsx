@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import { buildApplicationReview, directMatchScore, formatDateTime, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -71,14 +71,14 @@ export default async function CompanyDashboard() {
   const contactQueue = contactQueueCandidates
     .map((application) => {
       const readiness = getFreelancerReadiness(application.freelancerProfile);
-      const matched = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+      const review = buildApplicationReview(application);
       const score = directMatchScore({
         ...application.jobPost,
         freelancerReadinessPercent: readiness.percent,
         freelancerSkills: application.freelancerProfile.skills,
       });
 
-      return { application, readiness, matched, score };
+      return { application, readiness, review, score };
     })
     .sort((a, b) => b.score - a.score || b.application.appliedAt.getTime() - a.application.appliedAt.getTime())
     .slice(0, 4);
@@ -136,11 +136,12 @@ export default async function CompanyDashboard() {
           {contactQueue.length > 0 ? (
             <Card className="p-0">
               <div className="divide-y divide-stone-200">
-                {contactQueue.map(({ application, readiness, matched, score }) => (
+                {contactQueue.map(({ application, readiness, review, score }) => (
                   <ContactQueueRow
                     application={application}
                     key={application.id}
-                    matchedSkills={matched}
+                    matchedSkills={review.requiredSkillMatches}
+                    nextChecks={review.nextChecks}
                     readinessPercent={readiness.percent}
                     score={score}
                   />
@@ -275,11 +276,13 @@ function QueueSignal({
 function ContactQueueRow({
   application,
   matchedSkills,
+  nextChecks,
   readinessPercent,
   score,
 }: {
   application: ContactQueueApplication;
   matchedSkills: string[];
+  nextChecks: string[];
   readinessPercent: number;
   score: number;
 }) {
@@ -322,6 +325,19 @@ function ContactQueueRow({
             ))}
           </div>
         )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {nextChecks.length > 0 ? (
+            nextChecks.slice(0, 3).map((check) => (
+              <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800" key={check}>
+                確認: {check}
+              </span>
+            ))
+          ) : (
+            <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800">
+              面談前の確認点は揃っています
+            </span>
+          )}
+        </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:w-40 lg:grid-cols-1">
         <Link className="btn btn-primary" href={`/company/applications/${application.id}`}>詳細確認</Link>

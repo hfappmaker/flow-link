@@ -3,7 +3,7 @@ import type { LinkProps } from "next/link";
 import type { JobApplicationStatus, Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { applicationStatusLabel, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
+import { applicationStatusLabel, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +76,7 @@ export default async function JobApplicationsPage({
     job?.applications
       .map((application) => ({
         application,
-        review: buildApplicationReview(application, job),
+        review: buildApplicationReview({ ...application, jobPost: job }),
       }))
       .filter(({ review }) => !readyOnly || review.isInterviewReady)
       .sort((a, b) => {
@@ -85,7 +85,7 @@ export default async function JobApplicationsPage({
         }
         return b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
       }) ?? [];
-  const appliedReviews = job?.applications.map((application) => buildApplicationReview(application, job)) ?? [];
+  const appliedReviews = job?.applications.map((application) => buildApplicationReview({ ...application, jobPost: job })) ?? [];
   const interviewReadyCount = appliedReviews.filter((review) => review.isInterviewReady).length;
   const needsCheckCount = appliedReviews.filter((review) => review.nextChecks.length > 0).length;
 
@@ -200,29 +200,6 @@ type ApplicationReview = {
   isInterviewReady: boolean;
   nextChecks: string[];
 };
-
-function buildApplicationReview(application: ApplicationWithProfile, job: JobWithApplications): ApplicationReview {
-  const requiredSkills = parseSkills(job.requiredSkills);
-  const requiredSkillMatches = matchedSkills(job.requiredSkills, application.freelancerProfile.skills);
-  const matchPercent = skillMatchPercent(job.requiredSkills, application.freelancerProfile.skills);
-  const reviewSignals = [
-    { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
-    { done: application.freelancerProfile.documents.length >= 2, nextCheck: "PDF書類" },
-    { done: Boolean(application.freelancerProfile.careerHistory), nextCheck: "職務経歴" },
-    { done: Boolean(application.proposalMessage), nextCheck: "応募時の提案" },
-    { done: Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability), nextCheck: "開始条件" },
-  ];
-
-  const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
-
-  return {
-    requiredSkillMatches,
-    matchPercent,
-    interviewReadinessPercent,
-    isInterviewReady: interviewReadinessPercent >= 80 && application.status === "applied",
-    nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
-  };
-}
 
 function ApplicationCard({
   application,

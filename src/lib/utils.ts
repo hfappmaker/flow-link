@@ -44,6 +44,51 @@ export function skillMatchPercent(requiredSkills: string | null | undefined, fre
   return Math.round((matchedSkills(requiredSkills, freelancerSkills).length / requiredSkillCount) * 100);
 }
 
+type ApplicationReviewInput = {
+  status?: string | null;
+  proposalMessage?: string | null;
+  proposedStart?: string | null;
+  freelancerProfile: {
+    skills?: string | null;
+    availableFrom?: string | null;
+    availability?: string | null;
+    careerHistory?: unknown | null;
+    documents?: unknown[] | null;
+  };
+  jobPost: {
+    requiredSkills?: string | null;
+  };
+};
+
+export function buildApplicationReview(application: ApplicationReviewInput) {
+  const requiredSkills = parseSkills(application.jobPost.requiredSkills);
+  const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const reviewSignals = [
+    { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
+    { done: (application.freelancerProfile.documents?.length ?? 0) >= 2, nextCheck: "PDF書類" },
+    { done: Boolean(application.freelancerProfile.careerHistory), nextCheck: "職務経歴" },
+    { done: Boolean(application.proposalMessage), nextCheck: "応募時の提案" },
+    {
+      done: Boolean(
+        application.proposedStart ||
+          application.freelancerProfile.availableFrom ||
+          application.freelancerProfile.availability,
+      ),
+      nextCheck: "開始条件",
+    },
+  ];
+  const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
+
+  return {
+    requiredSkillMatches,
+    matchPercent,
+    interviewReadinessPercent,
+    isInterviewReady: interviewReadinessPercent >= 80 && application.status === "applied",
+    nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
+  };
+}
+
 export function formatOpenings(value: number | null | undefined) {
   return value ? `${value}名` : "未設定";
 }
