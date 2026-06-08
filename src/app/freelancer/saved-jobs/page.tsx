@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -30,12 +30,25 @@ export default async function SavedJobsPage() {
       .map((savedJob) => {
         const job = savedJob.jobPost;
         const contractReadiness = directContractChecklist(job);
+        const requiredSkills = parseSkills(job.requiredSkills);
         const matchPercent = skillMatchPercent(job.requiredSkills, profile.skills);
         const matched = matchedSkills(job.requiredSkills, profile.skills);
+        const matchedSkillSet = new Set(matched.map((skill) => skill.toLowerCase()));
+        const skillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
         const score = directMatchScore({
           ...job,
           freelancerReadinessPercent: readiness.percent,
           freelancerSkills: profile.skills,
+        });
+        const prepSheet = buildSavedJobPrepSheet({
+          matched,
+          skillGaps,
+          contractMissingLabels: contractReadiness.items.filter((item) => !item.done).map((item) => item.label),
+          missingReadinessLabels: readiness.items.filter((item) => !item.done).map((item) => item.label),
+          availableFrom: profile.availableFrom,
+          availability: profile.availability,
+          desiredRate: profile.desiredRate,
+          remotePreference: profile.remotePreference,
         });
 
         return {
@@ -43,6 +56,7 @@ export default async function SavedJobsPage() {
           contractReadiness,
           matchPercent,
           matched,
+          prepSheet,
           score,
           appliedStatus: appliedByJobId.get(job.id),
           nextStep: buildSavedJobNextStep({
@@ -89,7 +103,7 @@ export default async function SavedJobsPage() {
           </Card>
         )}
         <div className="mt-6 grid gap-4">
-          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, score, appliedStatus, nextStep }) => (
+          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, prepSheet, score, appliedStatus, nextStep }) => (
             <SavedJobRow
               appliedStatus={appliedStatus}
               contractMissingItems={contractReadiness.items.filter((item) => !item.done)}
@@ -100,6 +114,7 @@ export default async function SavedJobsPage() {
               matchPercent={matchPercent}
               nextStep={nextStep}
               note={savedJob.note}
+              prepSheet={prepSheet}
               savedAt={savedJob.createdAt}
               score={score}
             />
@@ -124,6 +139,11 @@ type SavedJobNextStep = {
   description: string;
   tone: "neutral" | "good" | "warn";
 };
+type SavedJobPrepSheet = {
+  applicationPoints: string[];
+  interviewChecks: string[];
+  remainingTasks: string[];
+};
 
 function SavedJobRow({
   appliedStatus,
@@ -134,6 +154,7 @@ function SavedJobRow({
   matchPercent,
   nextStep,
   note,
+  prepSheet,
   savedAt,
   score,
 }: {
@@ -145,6 +166,7 @@ function SavedJobRow({
   matchPercent: number | null;
   nextStep: SavedJobNextStep;
   note?: string | null;
+  prepSheet: SavedJobPrepSheet;
   savedAt: Date;
   score: number;
 }) {
@@ -181,6 +203,7 @@ function SavedJobRow({
             </div>
           )}
           {note && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{note}</p>}
+          <SavedJobPrepSheetCard prepSheet={prepSheet} />
         </div>
         <div className="grid gap-3">
           <div className={`rounded border px-3 py-2 ${nextStepClasses(nextStep.tone)}`}>
@@ -228,6 +251,72 @@ function SavedJobRow({
   );
 }
 
+function SavedJobPrepSheetCard({ prepSheet }: { prepSheet: SavedJobPrepSheet }) {
+  return (
+    <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-sm font-semibold">応募準備シート</h3>
+        <p className="text-xs text-stone-500">提案文と面談前の確認に使うメモ</p>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <PrepSheetColumn
+          empty="職務経歴と案件内容から、近い実績を1つ選んで書いてください。"
+          items={prepSheet.applicationPoints}
+          label="提案文で伝えること"
+          tone="good"
+        />
+        <PrepSheetColumn
+          empty="現時点で大きな確認点はありません。面談では役割と優先度を確認してください。"
+          items={prepSheet.interviewChecks}
+          label="面談で確認したいこと"
+          tone="warn"
+        />
+        <PrepSheetColumn
+          empty="応募に必要なプロフィールと書類は揃っています。"
+          items={prepSheet.remainingTasks}
+          label="応募前の残タスク"
+          tone="neutral"
+        />
+      </div>
+    </div>
+  );
+}
+
+function PrepSheetColumn({
+  empty,
+  items,
+  label,
+  tone,
+}: {
+  empty: string;
+  items: string[];
+  label: string;
+  tone: "neutral" | "good" | "warn";
+}) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-white text-stone-700",
+    good: "border-emerald-200 bg-white text-emerald-900",
+    warn: "border-amber-200 bg-white text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border p-3 ${toneClasses[tone]}`}>
+      <p className="text-xs font-semibold">{label}</p>
+      {items.length > 0 ? (
+        <ul className="mt-2 grid gap-1.5 text-xs leading-5 text-stone-700">
+          {items.slice(0, 4).map((item) => (
+            <li className="break-words" key={item}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-stone-600">{empty}</p>
+      )}
+    </div>
+  );
+}
+
 function PrepStat({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded border border-stone-200 bg-stone-50 p-4">
@@ -245,6 +334,44 @@ function SavedJobMeta({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate font-semibold">{value}</p>
     </div>
   );
+}
+
+function buildSavedJobPrepSheet({
+  matched,
+  skillGaps,
+  contractMissingLabels,
+  missingReadinessLabels,
+  availableFrom,
+  availability,
+  desiredRate,
+  remotePreference,
+}: {
+  matched: string[];
+  skillGaps: string[];
+  contractMissingLabels: string[];
+  missingReadinessLabels: string[];
+  availableFrom?: string | null;
+  availability?: string | null;
+  desiredRate?: string | null;
+  remotePreference?: string | null;
+}): SavedJobPrepSheet {
+  const applicationPoints = [
+    matched.length > 0 ? `一致スキル: ${matched.slice(0, 4).join("、")}` : "近い実績を職務経歴から1つ選ぶ",
+    availableFrom || availability ? `稼働開始・稼働量: ${[availableFrom, availability].filter(Boolean).join(" / ")}` : "",
+    desiredRate ? `契約・支払い条件: ${desiredRate}を目安に相談` : "",
+    remotePreference ? `企業とのやりとり: ${remotePreference}` : "",
+  ].filter(Boolean);
+  const interviewChecks = [
+    ...skillGaps.slice(0, 3).map((skill) => `${skill}の期待範囲`),
+    ...contractMissingLabels.slice(0, 3).map((label) => `${label}の詳細`),
+  ];
+  const remainingTasks = missingReadinessLabels.map((label) => `${label}を登録`);
+
+  return {
+    applicationPoints,
+    interviewChecks,
+    remainingTasks,
+  };
 }
 
 function buildSavedJobNextStep({
