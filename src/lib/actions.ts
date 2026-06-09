@@ -230,12 +230,21 @@ export async function uploadResumeDocument(formData: FormData) {
 
 export async function saveCompanyProfile(formData: FormData) {
   const { companyUser } = await currentCompanyUser();
+  const contactTeam = toOptionalText(formData.get("contactTeam"));
+  const operatingArea = toOptionalText(formData.get("operatingArea"));
+  const paymentPolicy = toOptionalText(formData.get("paymentPolicy"));
+  if ((contactTeam?.length ?? 0) > 600 || (operatingArea?.length ?? 0) > 240 || (paymentPolicy?.length ?? 0) > 600) {
+    throw new Error("会社情報の補足は指定文字数以内で入力してください。");
+  }
   await prisma.companyProfile.update({
     where: { id: companyUser.companyProfileId },
     data: {
       name: toText(formData.get("name")),
       description: toOptionalText(formData.get("description")),
       websiteUrl: toOptionalText(formData.get("websiteUrl")),
+      contactTeam,
+      operatingArea,
+      paymentPolicy,
     },
   });
   revalidatePath("/company/profile");

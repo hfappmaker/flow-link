@@ -125,14 +125,17 @@ model CareerHistory {
 }
 
 model CompanyProfile {
-  id          String        @id @default(cuid())
-  name        String
-  description String?
-  websiteUrl  String?       @map("website_url")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  users       CompanyUser[]
-  jobPosts    JobPost[]
+  id            String        @id @default(cuid())
+  name          String
+  description   String?
+  websiteUrl    String?       @map("website_url")
+  contactTeam   String?       @map("contact_team")
+  operatingArea String?       @map("operating_area")
+  paymentPolicy String?       @map("payment_policy")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  users         CompanyUser[]
+  jobPosts      JobPost[]
 
   @@map("company_profiles")
 }

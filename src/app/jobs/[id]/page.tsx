@@ -72,6 +72,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
+  const companyTrustItems = buildCompanyTrustItems({ company: job.companyProfile, job });
+  const companyTrustCompleted = companyTrustItems.filter((item) => item.done).length;
+  const companyTrustPercent = Math.round((companyTrustCompleted / companyTrustItems.length) * 100);
   const proposalDraft = freelancerProfile
     ? buildProposalDraft({
         companyName: job.companyProfile.name,
@@ -120,6 +123,25 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             )}
           </Card>
           <div className="grid h-fit gap-5">
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">応募前に確認できる情報</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    企業が登録・公開している会社情報と案件条件です。Flow Linkによる本人確認や支払い保証ではありません。
+                  </p>
+                </div>
+                <StatusBadge tone={companyTrustPercent >= 80 ? "good" : companyTrustPercent >= 50 ? "neutral" : "warn"}>
+                  {companyTrustCompleted}/{companyTrustItems.length}
+                </StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {companyTrustItems.map((item) => (
+                  <TrustSnapshotItem detail={item.detail} done={item.done} key={item.label} label={item.label} />
+                ))}
+              </div>
+            </Card>
+
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -344,6 +366,22 @@ function ContractReadinessItem({ label, detail, done }: { label: string; detail:
   );
 }
 
+function TrustSnapshotItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs font-semibold">{done ? "記載あり" : "未記載"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+    </div>
+  );
+}
+
 function Info({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
@@ -360,6 +398,74 @@ function DirectInfo({ label, value }: { label: string; value?: string | null }) 
       <dd className="mt-1 whitespace-pre-wrap leading-6 text-stone-700">{value || "未設定"}</dd>
     </div>
   );
+}
+
+function buildCompanyTrustItems({
+  company,
+  job,
+}: {
+  company: {
+    description?: string | null;
+    websiteUrl?: string | null;
+    contactTeam?: string | null;
+    operatingArea?: string | null;
+    paymentPolicy?: string | null;
+    updatedAt?: Date | string | null;
+  };
+  job: {
+    rate?: string | null;
+    workload?: string | null;
+    contractPeriod?: string | null;
+    selectionFlow?: string | null;
+    contractTerms?: string | null;
+    location?: string | null;
+    remotePolicy?: string | null;
+    createdAt?: Date | string | null;
+    updatedAt?: Date | string | null;
+  };
+}) {
+  const conditionCount = [job.rate, job.workload, job.contractPeriod, job.location || job.remotePolicy].filter(Boolean).length;
+  return [
+    {
+      label: "会社情報",
+      detail: company.description ? company.description : "会社概要が未記載です。企業プロフィールに事業内容や募集背景があると判断しやすくなります。",
+      done: Boolean(company.description),
+    },
+    {
+      label: "公開Webサイト",
+      detail: company.websiteUrl ? company.websiteUrl : "公開Webサイトが未登録です。応募前に外部で確認できる情報があると安心材料になります。",
+      done: Boolean(company.websiteUrl),
+    },
+    {
+      label: "担当窓口・稼働エリア",
+      detail:
+        company.contactTeam || company.operatingArea
+          ? [company.contactTeam, company.operatingArea].filter(Boolean).join(" / ")
+          : "担当チームや所在地・稼働エリアが未記載です。面談前の連絡先や稼働場所を確認してください。",
+      done: Boolean(company.contactTeam || company.operatingArea),
+    },
+    {
+      label: "案件条件",
+      detail:
+        conditionCount >= 3
+          ? `単価・稼働率・期間・働き方のうち${conditionCount}/4項目が記載されています。`
+          : `単価・稼働率・期間・働き方の記載は${conditionCount}/4項目です。不足条件は応募前または面談で確認してください。`,
+      done: conditionCount >= 3,
+    },
+    {
+      label: "選考・支払い条件",
+      detail:
+        job.selectionFlow && (job.contractTerms || company.paymentPolicy)
+          ? "選考フローと契約・支払いに関する説明が記載されています。"
+          : "選考フロー、契約・支払い条件、請求方針のいずれかが不足しています。応募前に確認点として残してください。",
+      done: Boolean(job.selectionFlow && (job.contractTerms || company.paymentPolicy)),
+    },
+    {
+      label: "掲載・更新日",
+      detail: `掲載: ${formatDateTime(job.createdAt)} / 更新: ${formatDateTime(job.updatedAt)} / 会社情報更新: ${formatDateTime(company.updatedAt)}`,
+      done: Boolean(job.createdAt || job.updatedAt || company.updatedAt),
+    },
+  ];
 }
 
 function buildProposalDraft({

@@ -55,6 +55,22 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   ];
   const interviewDecisionCompleted = interviewDecisionItems.filter((item) => item.done).length;
   const interviewDecisionPercent = Math.round((interviewDecisionCompleted / interviewDecisionItems.length) * 100);
+  const applicantTrustItems = buildApplicantTrustItems({
+    readinessPercent: readiness.percent,
+    documentCount: application.freelancerProfile.documents.length,
+    hasCareerHistory: Boolean(application.freelancerProfile.careerHistory),
+    hasProposal: Boolean(application.proposalMessage),
+    proposedStart: application.proposedStart,
+    availability: application.freelancerProfile.availability,
+    availableFrom: application.freelancerProfile.availableFrom,
+    contactPreference: application.contactPreference,
+    remotePreference: application.freelancerProfile.remotePreference,
+    matchedSkillCount: requiredSkillMatches.length,
+    requiredSkillCount: requiredSkills.length,
+    appliedAt: application.appliedAt,
+  });
+  const applicantTrustCompleted = applicantTrustItems.filter((item) => item.done).length;
+  const applicantTrustPercent = Math.round((applicantTrustCompleted / applicantTrustItems.length) * 100);
   const interviewPrepSheet = buildInterviewPrepSheet({
     freelancerName: application.freelancerProfile.fullName,
     jobTitle: application.jobPost.title,
@@ -214,6 +230,25 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
+                  <h2 className="font-semibold">面談前の確認</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    応募者が登録・提出した情報を、書類選考OKの前に確認します。Flow Linkが本人確認や経歴確認を完了した表示ではありません。
+                  </p>
+                </div>
+                <StatusBadge tone={applicantTrustPercent >= 80 ? "good" : applicantTrustPercent >= 50 ? "neutral" : "warn"}>
+                  {applicantTrustCompleted}/{applicantTrustItems.length}
+                </StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {applicantTrustItems.map((item) => (
+                  <ApplicantTrustItem detail={item.detail} done={item.done} key={item.label} label={item.label} />
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
                   <h2 className="font-semibold">面談判断ブリーフ</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
                     応募者との面談判断に必要な一致点と確認点を整理します。
@@ -368,6 +403,22 @@ function FitSignal({ label, value, done }: { label: string; value: string; done:
     >
       <span className="font-medium">{label}</span>
       <span className="text-right text-xs font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function ApplicantTrustItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className="text-xs font-semibold">{done ? "確認可" : "要確認"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{detail}</p>
     </div>
   );
 }
@@ -535,6 +586,80 @@ function buildInterviewPrepSheet({
     `- 選考フロー: ${selectionFlow || "面談で説明"}`,
     "- 面談後の判断期限:",
   ].join("\n");
+}
+
+function buildApplicantTrustItems({
+  readinessPercent,
+  documentCount,
+  hasCareerHistory,
+  hasProposal,
+  proposedStart,
+  availability,
+  availableFrom,
+  contactPreference,
+  remotePreference,
+  matchedSkillCount,
+  requiredSkillCount,
+  appliedAt,
+}: {
+  readinessPercent: number;
+  documentCount: number;
+  hasCareerHistory: boolean;
+  hasProposal: boolean;
+  proposedStart?: string | null;
+  availability?: string | null;
+  availableFrom?: string | null;
+  contactPreference?: string | null;
+  remotePreference?: string | null;
+  matchedSkillCount: number;
+  requiredSkillCount: number;
+  appliedAt?: Date | string | null;
+}) {
+  const startSignal = proposedStart || availableFrom || availability;
+  return [
+    {
+      label: "書類・職務経歴",
+      detail:
+        documentCount >= 2 && hasCareerHistory
+          ? `履歴書・職務経歴書PDF ${documentCount}/2 と職務経歴フォームを確認できます。`
+          : `PDF ${documentCount}/2、職務経歴フォーム${hasCareerHistory ? "あり" : "未登録"}です。不足分は面談前に依頼してください。`,
+      done: documentCount >= 2 && hasCareerHistory,
+    },
+    {
+      label: "プロフィール充足",
+      detail:
+        readinessPercent >= 80
+          ? `応募準備は${readinessPercent}%です。基本プロフィールと書類が概ね揃っています。`
+          : `応募準備は${readinessPercent}%です。プロフィール、職務経歴、PDFの不足項目を確認してください。`,
+      done: readinessPercent >= 80,
+    },
+    {
+      label: "応募時の提案",
+      detail: hasProposal ? "案件への貢献内容が応募時に提出されています。" : "応募時の提案が未登録です。面談前に貢献イメージを確認してください。",
+      done: hasProposal,
+    },
+    {
+      label: "稼働・連絡希望",
+      detail:
+        startSignal && (contactPreference || remotePreference)
+          ? `開始・稼働: ${startSignal} / 連絡・働き方: ${contactPreference || remotePreference}`
+          : "稼働開始目安、連絡希望、リモート希望のいずれかが不足しています。初回連絡で確認してください。",
+      done: Boolean(startSignal && (contactPreference || remotePreference)),
+    },
+    {
+      label: "案件との一致",
+      detail:
+        requiredSkillCount === 0
+          ? "案件の必須スキルが未設定です。職務経歴と提案文から担当範囲を確認してください。"
+          : `必須スキル ${matchedSkillCount}/${requiredSkillCount} 件がプロフィール上で一致しています。`,
+      done: requiredSkillCount === 0 || matchedSkillCount > 0,
+    },
+    {
+      label: "応募タイミング",
+      detail: `応募日時: ${formatDateTime(appliedAt)}。面談へ進める場合は、初回連絡文で候補日時と追加確認点を明確にしてください。`,
+      done: Boolean(appliedAt),
+    },
+  ];
 }
 
 function buildScreeningRubric({
