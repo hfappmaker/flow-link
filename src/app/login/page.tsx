@@ -8,7 +8,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const registerHref = callbackUrl ? { pathname: "/register", query: { callbackUrl } } : "/register";
   return (
     <Shell>
-      <TopNav />
+      <TopNav activeSection="login" />
       <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-md place-items-center px-5 py-10">
         <Card className="w-full">
           <h1 className="text-2xl font-semibold">ログイン</h1>

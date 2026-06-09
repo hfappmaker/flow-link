@@ -6,7 +6,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return <main className="min-h-screen bg-[#f6f7f3] text-stone-950">{children}</main>;
 }
 
-export function TopNav({ sessionRole }: { sessionRole?: string }) {
+type TopNavSection = "jobs" | "freelancer" | "company" | "login" | "register";
+
+export function TopNav({ activeSection, sessionRole }: { activeSection?: TopNavSection; sessionRole?: string }) {
+  const currentSection =
+    activeSection ??
+    (sessionRole === "freelancer" ? "freelancer" : sessionRole === "company_user" ? "company" : undefined);
+
   return (
     <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
@@ -15,14 +21,44 @@ export function TopNav({ sessionRole }: { sessionRole?: string }) {
           Flow Link
         </Link>
         <nav className="flex items-center gap-2 text-sm">
-          <Link className="nav-link" href="/jobs">案件</Link>
-          {sessionRole === "freelancer" && <Link className="nav-link" href="/freelancer">フリーランス</Link>}
-          {sessionRole === "company_user" && <Link className="nav-link" href="/company">企業</Link>}
-          {!sessionRole && <Link className="nav-link" href="/login">ログイン</Link>}
-          {!sessionRole && <Link className="btn btn-primary" href="/register">登録</Link>}
+          <NavLink href="/jobs" active={currentSection === "jobs"}>
+            案件
+          </NavLink>
+          {sessionRole === "freelancer" && (
+            <NavLink href="/freelancer" active={currentSection === "freelancer"}>
+              フリーランス
+            </NavLink>
+          )}
+          {sessionRole === "company_user" && (
+            <NavLink href="/company" active={currentSection === "company"}>
+              企業
+            </NavLink>
+          )}
+          {!sessionRole && (
+            <NavLink href="/login" active={currentSection === "login"}>
+              ログイン
+            </NavLink>
+          )}
+          {!sessionRole && (
+            <Link
+              aria-current={currentSection === "register" ? "page" : undefined}
+              className={cn("btn btn-primary", currentSection === "register" && "nav-primary-active")}
+              href="/register"
+            >
+              登録
+            </Link>
+          )}
         </nav>
       </div>
     </header>
+  );
+}
+
+function NavLink({ active, children, href }: { active?: boolean; children: React.ReactNode; href: string }) {
+  return (
+    <Link aria-current={active ? "page" : undefined} className={cn("nav-link", active && "nav-link-active")} href={href}>
+      {children}
+    </Link>
   );
 }
 

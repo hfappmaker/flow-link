@@ -230,7 +230,7 @@ export default async function JobsPage({
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav activeSection="jobs" sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
         <Card className="mt-6">

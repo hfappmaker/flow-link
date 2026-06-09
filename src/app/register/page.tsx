@@ -7,7 +7,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
 
   return (
     <Shell>
-      <TopNav />
+      <TopNav activeSection="register" />
       <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-md place-items-center px-5 py-10">
         <Card className="w-full">
           <h1 className="text-2xl font-semibold">アカウント登録</h1>

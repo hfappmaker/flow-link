@@ -87,7 +87,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav activeSection="jobs" sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-5xl px-5 py-8">
         <PageHeader title={job.title} description={job.companyProfile.name} />
         <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_280px]">
