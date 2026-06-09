@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "NODE_ENV=production next build",
     "vercel-build": "prisma migrate deploy && next build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "NODE_ENV=production next typegen && rm -rf .next/dev/types && tsc --noEmit",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
