@@ -12,7 +12,6 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "seed:codex-triage": "node scripts/seed-codex-triage.mjs",
     "start": "npm run db:migration-status && next start",
     "lint": "eslint"
   },

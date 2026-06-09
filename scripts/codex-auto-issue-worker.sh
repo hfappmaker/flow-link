@@ -6,6 +6,7 @@ BRANCH="${BRANCH:-develop}"
 REMOTE="${REMOTE:-origin}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/.codex-automation/issue-worker-logs}"
 LOCK_FILE="${LOCK_FILE:-$REPO_DIR/.codex-automation/issue-worker.lock}"
+WORKTREE_ROOT="${WORKTREE_ROOT:-$REPO_DIR/.codex-automation/worktrees}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 NODE_BIN_DIR="${NODE_BIN_DIR:-/usr/local/bin}"
 ENV_FILE="${ENV_FILE:-$REPO_DIR/.devcontainer/.env}"
@@ -13,13 +14,16 @@ TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_FILE="$LOG_DIR/$TIMESTAMP.log"
 LAST_MESSAGE_FILE="${LAST_MESSAGE_FILE:-$REPO_DIR/.codex-automation/issue-worker-last-message.md}"
 DRY_RUN="${DRY_RUN:-0}"
+MERGE_METHOD="${MERGE_METHOD:-squash}"
+KEEP_WORKTREE="${KEEP_WORKTREE:-0}"
 
 usage() {
   cat <<'EOF'
 Usage: scripts/codex-auto-issue-worker.sh [--dry-run]
 
-Reads one ready GitHub issue, asks Codex to implement exactly that issue, then
-comments on and closes the issue after a successful commit and push.
+Reads one ready GitHub issue, asks Codex to implement exactly that issue in a
+dedicated git worktree, then pushes a branch, opens a PR, merges it, and closes
+the issue through the merged PR.
 EOF
 }
 
@@ -72,8 +76,17 @@ mark_blocked() {
   local reason="$2"
 
   gh issue edit "$issue_number" --remove-label "codex:in-progress" >/dev/null 2>&1 || true
+  gh issue edit "$issue_number" --remove-label "codex:ready" >/dev/null 2>&1 || true
   gh issue edit "$issue_number" --add-label "codex:blocked" >/dev/null 2>&1 || true
   gh issue comment "$issue_number" --body "Codex issue worker blocked: $reason" >/dev/null 2>&1 || true
+}
+
+cleanup_success_worktree() {
+  local worktree_dir="${1:-}"
+
+  if [[ -n "$worktree_dir" && "$KEEP_WORKTREE" != "1" && -d "$worktree_dir" ]]; then
+    git -C "$REPO_DIR" worktree remove "$worktree_dir" --force >/dev/null 2>&1 || true
+  fi
 }
 
 export PATH="$NODE_BIN_DIR:$PATH"
@@ -101,7 +114,7 @@ if [[ "$current_branch" != "$BRANCH" ]]; then
 fi
 
 if [[ -n "$(git status --porcelain)" && "$DRY_RUN" != "1" ]]; then
-  fail "Working tree is not clean before issue worker run."
+  fail "Main working tree is not clean before issue worker run."
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
@@ -116,12 +129,6 @@ if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
   printf 'protocol=https\nhost=github.com\npath=hfappmaker/flow-link.git\nusername=%s\npassword=%s\n\n' \
     "${GITHUB_USERNAME:-x-access-token}" \
     "${GITHUB_TOKEN:-${GH_TOKEN:-}}" | git credential approve
-fi
-
-if [[ "$DRY_RUN" != "1" ]]; then
-  if ! git push --dry-run "$REMOTE" "HEAD:$BRANCH" >/dev/null; then
-    fail "Git push dry-run failed. Configure GitHub push auth before running issue worker."
-  fi
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
@@ -152,7 +159,7 @@ ISSUE_LINE="$(
     --label "codex:ready" \
     --limit 50 \
     --json number,title,labels,updatedAt \
-    --jq 'map(select((([.labels[].name] | index("codex:in-progress")) | not) and ((([.labels[].name] | index("risk:high")) | not) or (([.labels[].name] | index("codex:approved")))))) | sort_by(.updatedAt) | first | if . == null then empty else [.number, .title] | @tsv end'
+    --jq 'map(select((([.labels[].name] | index("codex:in-progress")) | not) and (([.labels[].name] | index("codex:blocked")) | not) and ((([.labels[].name] | index("risk:high")) | not) or (([.labels[].name] | index("codex:approved")))))) | sort_by(.updatedAt) | first | if . == null then empty else [.number, .title] | @tsv end'
 )"
 
 if [[ -z "$ISSUE_LINE" ]]; then
@@ -170,7 +177,7 @@ fi
 log "Selected issue #$ISSUE_NUMBER: $ISSUE_TITLE"
 
 if [[ "$DRY_RUN" == "1" ]]; then
-  log "DRY_RUN=1; selected issue only. Skipping labels, Codex, commit, and push."
+  log "DRY_RUN=1; selected issue only. Skipping labels, worktree, Codex, PR, and merge."
   printf 'issue=%s title=%s\n' "$ISSUE_NUMBER" "$ISSUE_TITLE"
   exit 0
 fi
@@ -184,7 +191,14 @@ gh issue view "$ISSUE_NUMBER" \
   --json number,title,body,labels,comments,url \
   >"$ISSUE_CONTEXT_FILE"
 
-START_HEAD="$(git rev-parse HEAD)"
+mkdir -p "$WORKTREE_ROOT"
+WORK_BRANCH="codex/issue-${ISSUE_NUMBER}-${TIMESTAMP}"
+WORKTREE_DIR="$WORKTREE_ROOT/issue-${ISSUE_NUMBER}-${TIMESTAMP}"
+
+log "Creating worktree $WORKTREE_DIR on branch $WORK_BRANCH"
+git worktree add -b "$WORK_BRANCH" "$WORKTREE_DIR" "$REMOTE/$BRANCH"
+
+START_HEAD="$(git -C "$WORKTREE_DIR" rev-parse HEAD)"
 
 PROMPT=$(cat <<PROMPT_EOF
 You are running as a scheduled GitHub Issue worker for this repository.
@@ -194,24 +208,29 @@ Selected issue:
 - Title: $ISSUE_TITLE
 - Full issue context JSON is available at: $ISSUE_CONTEXT_FILE
 
+Repository context:
+- You are working in a dedicated git worktree: $WORKTREE_DIR
+- Current branch: $WORK_BRANCH
+- Base branch: $BRANCH
+
 Primary goal:
 - Read the selected issue and implement exactly the requested fix or improvement.
 - Do not broaden the scope beyond the issue body and comments.
 - Handle only this one issue in this run.
 
 Issue rules:
-- If the issue is unclear, risky, impossible, or missing required credentials/configuration, leave the working tree clean and explain the blocker in your final message.
+- If the issue is unclear, risky, impossible, or missing required credentials/configuration, leave the worktree clean and explain the blocker in your final message.
 - If the issue has label needs:preview-write, Preview write-path checks are allowed only with disposable automation-prefixed data, recorded IDs/titles/emails, and verified cleanup before the run ends.
 - If the issue does not have label needs:preview-write, do not create or mutate Preview data.
 - Prefer local write-path verification when feasible.
 
 Playwright verification policy:
-- If the issue has label area:bug, area:ux, or area:visual-design, Playwright browser verification is required by default before closing the issue.
+- If the issue has label area:bug, area:ux, or area:visual-design, Playwright browser verification is required by default before marking the issue fixed.
 - For area:bug, reproduce or verify the fixed user-visible behavior in a browser when feasible.
 - For area:ux, verify the relevant navigation, screen transition, form, login/register flow, empty/loading/error state, or task completion in a browser when feasible.
-- For area:visual-design, screenshots are mandatory before closing the issue. Verify at least desktop and mobile viewports in a browser, normally 1280x900 and 375x812, and save screenshots under .codex-automation/screenshots/ with stable names that include the issue number, route, viewport, and timestamp.
+- For area:visual-design, screenshots are mandatory. Verify at least desktop and mobile viewports in a browser, normally 1280x900 and 375x812, and save screenshots under .codex-automation/screenshots/ with stable names that include the issue number, route, viewport, and timestamp.
 - Use Chromium headless with sandbox disabled if needed: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
-- If Playwright cannot run, do not silently skip it. State the exact blocker, use the best available fallback such as HTTP checks or static inspection, and leave enough detail in your final message for the issue comment.
+- If Playwright cannot run, do not silently skip it. State the exact blocker, use the best available fallback such as HTTP checks or static inspection, and leave enough detail in your final message for the PR and issue comment.
 - For product or maintainability issues, Playwright is optional unless the issue acceptance criteria require visible flow verification.
 
 Repository rules:
@@ -224,12 +243,15 @@ Repository rules:
 Verification:
 - Run relevant commands, usually npm run typecheck, npm run lint, npm run build, or targeted checks based on the issue.
 - For area:bug, area:ux, and area:visual-design, include the Playwright scenario, target URL, viewport(s), and result in your final message. If Playwright could not run, include the exact reason and fallback checks.
-- For area:visual-design, include the saved screenshot paths in your final message. If screenshots could not be captured, do not close the issue unless the final message clearly explains why screenshot capture was impossible and what fallback evidence was used.
+- For area:visual-design, include the saved screenshot paths in your final message.
 - Include commands/checks run in your final message.
 
 Git:
-- If you make changes, commit them yourself with a concise Conventional Commit subject.
-- Push with: git push $REMOTE HEAD:$BRANCH
+- If you make changes, commit them yourself on the current worktree branch with a concise Conventional Commit subject.
+- Do not push.
+- Do not create a pull request.
+- Do not merge.
+- Do not close or edit the GitHub issue. The wrapper script handles push, PR creation, merge, labels, and close after your commit.
 - Do not leave uncommitted changes.
 
 Final message:
@@ -239,10 +261,10 @@ Final message:
 PROMPT_EOF
 )
 
-log "Running Codex CLI for issue #$ISSUE_NUMBER"
+log "Running Codex CLI for issue #$ISSUE_NUMBER in $WORKTREE_DIR"
 set +e
 "$CODEX_BIN" exec \
-  --cd "$REPO_DIR" \
+  --cd "$WORKTREE_DIR" \
   --dangerously-bypass-approvals-and-sandbox \
   --output-last-message "$LAST_MESSAGE_FILE" \
   "$PROMPT"
@@ -250,51 +272,87 @@ CODEX_STATUS=$?
 set -e
 
 if [[ "$CODEX_STATUS" -ne 0 ]]; then
-  mark_blocked "$ISSUE_NUMBER" "Codex CLI exited with status $CODEX_STATUS. See $LOG_FILE."
+  mark_blocked "$ISSUE_NUMBER" "Codex CLI exited with status $CODEX_STATUS. Worktree kept at $WORKTREE_DIR. See $LOG_FILE."
   exit "$CODEX_STATUS"
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  log "Codex issue worker left uncommitted changes:"
-  git status --short
-  mark_blocked "$ISSUE_NUMBER" "Codex left uncommitted changes. See $LOG_FILE."
-  fail "Codex must commit and push its own changes."
+if [[ -n "$(git -C "$WORKTREE_DIR" status --porcelain)" ]]; then
+  log "Codex issue worker left uncommitted changes in worktree:"
+  git -C "$WORKTREE_DIR" status --short
+  mark_blocked "$ISSUE_NUMBER" "Codex left uncommitted changes in $WORKTREE_DIR. See $LOG_FILE."
+  fail "Codex must commit its own changes."
 fi
 
-END_HEAD="$(git rev-parse HEAD)"
+END_HEAD="$(git -C "$WORKTREE_DIR" rev-parse HEAD)"
 
 if [[ "$START_HEAD" == "$END_HEAD" ]]; then
   SUMMARY="$(sed -n '1,180p' "$LAST_MESSAGE_FILE" 2>/dev/null || true)"
   NO_COMMIT_COMMENT=$(cat <<COMMENT_EOF
 Codex issue worker did not create a commit and is leaving this issue open.
 
+Worktree: $WORKTREE_DIR
+
 $SUMMARY
 COMMENT_EOF
 )
   gh issue comment "$ISSUE_NUMBER" --body "$NO_COMMIT_COMMENT" >/dev/null || true
-  gh issue edit "$ISSUE_NUMBER" --remove-label "codex:in-progress" --add-label "codex:blocked" >/dev/null 2>&1 || true
+  gh issue edit "$ISSUE_NUMBER" --remove-label "codex:in-progress" >/dev/null 2>&1 || true
+  gh issue edit "$ISSUE_NUMBER" --remove-label "codex:ready" >/dev/null 2>&1 || true
+  gh issue edit "$ISSUE_NUMBER" --add-label "codex:blocked" >/dev/null 2>&1 || true
   log "No commit was created for issue #$ISSUE_NUMBER; marked blocked."
   exit 0
 fi
 
-remote_head="$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" | awk '{print $1}')"
-if [[ "$END_HEAD" != "$remote_head" ]]; then
-  mark_blocked "$ISSUE_NUMBER" "Local HEAD $END_HEAD is not pushed to $REMOTE/$BRANCH ($remote_head)."
-  fail "Local HEAD is not pushed."
-fi
+log "Pushing branch $WORK_BRANCH"
+git -C "$WORKTREE_DIR" push "$REMOTE" "HEAD:$WORK_BRANCH"
 
 SUMMARY="$(sed -n '1,220p' "$LAST_MESSAGE_FILE" 2>/dev/null || true)"
-COMMENT_BODY=$(cat <<COMMENT_EOF
-Codex issue worker completed this issue.
+PR_BODY=$(cat <<PR_EOF
+Closes #$ISSUE_NUMBER
+
+Implemented by Codex issue worker.
 
 Commit: $END_HEAD
+Worktree: $WORKTREE_DIR
 
+## Codex Summary
 $SUMMARY
-COMMENT_EOF
+PR_EOF
 )
 
-gh issue comment "$ISSUE_NUMBER" --body "$COMMENT_BODY" >/dev/null
-gh issue edit "$ISSUE_NUMBER" --remove-label "codex:in-progress" --add-label "codex:done" >/dev/null 2>&1 || true
-gh issue close "$ISSUE_NUMBER" --comment "Closed by Codex issue worker after commit $END_HEAD was pushed to $REMOTE/$BRANCH." >/dev/null
+PR_URL="$(
+  gh pr create \
+    --base "$BRANCH" \
+    --head "$WORK_BRANCH" \
+    --title "Codex: $ISSUE_TITLE" \
+    --body "$PR_BODY"
+)"
 
-log "Codex issue worker completed issue #$ISSUE_NUMBER with commit $END_HEAD"
+log "Created PR $PR_URL"
+
+gh issue comment "$ISSUE_NUMBER" --body "Codex issue worker opened PR: $PR_URL" >/dev/null
+
+set +e
+gh pr merge "$PR_URL" \
+  --"$MERGE_METHOD" \
+  --delete-branch \
+  --subject "Codex: $ISSUE_TITLE" \
+  --body "Closes #$ISSUE_NUMBER"
+MERGE_STATUS=$?
+set -e
+
+if [[ "$MERGE_STATUS" -ne 0 ]]; then
+  mark_blocked "$ISSUE_NUMBER" "PR was created but could not be merged automatically: $PR_URL"
+  fail "PR merge failed: $PR_URL"
+fi
+
+gh issue edit "$ISSUE_NUMBER" --remove-label "codex:in-progress" >/dev/null 2>&1 || true
+gh issue edit "$ISSUE_NUMBER" --remove-label "codex:ready" >/dev/null 2>&1 || true
+gh issue edit "$ISSUE_NUMBER" --add-label "codex:done" >/dev/null 2>&1 || true
+gh issue comment "$ISSUE_NUMBER" --body "Codex issue worker merged PR: $PR_URL" >/dev/null || true
+
+git fetch "$REMOTE" "$BRANCH"
+git pull --ff-only "$REMOTE" "$BRANCH"
+cleanup_success_worktree "$WORKTREE_DIR"
+
+log "Codex issue worker completed issue #$ISSUE_NUMBER with branch commit $END_HEAD and merged PR $PR_URL"

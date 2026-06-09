@@ -131,10 +131,10 @@ if ! flock -n 9; then
 fi
 
 current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != "$BRANCH" && "${GITHUB_ACTIONS:-}" != "true" && "${SKIP_BRANCH_CHECK:-0}" != "1" ]]; then
+if [[ "$current_branch" != "$BRANCH" && "${SKIP_BRANCH_CHECK:-0}" != "1" ]]; then
   fail "Expected branch $BRANCH, but current branch is $current_branch"
 elif [[ "$current_branch" != "$BRANCH" ]]; then
-  log "Skipping branch-name check in CI or because SKIP_BRANCH_CHECK=1. current_branch=${current_branch:-detached}, expected=$BRANCH"
+  log "Skipping branch-name check because SKIP_BRANCH_CHECK=1. current_branch=${current_branch:-detached}, expected=$BRANCH"
 fi
 
 DIRTY_TREE=0
@@ -192,8 +192,9 @@ Browser verification policy:
 - Prefer read-only browser checks. Do not write to Preview unless the issue truly needs it; if Preview write-path verification is needed, label the issue needs:preview-write and define cleanup requirements.
 - Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
 - For visual-design mode, screenshots are mandatory evidence. Store them in .codex-automation/screenshots/ and mention the exact paths in the issue body.
-- In GitHub Actions, use the local app and service Postgres by default. Start the app on 127.0.0.1 using an available non-default port such as 3010 when browser checks are needed.
-- In GitHub Actions, Preview browser checks are only for bug mode and only when VERCEL_AUTOMATION_BYPASS_SECRET is available. Use the x-vercel-protection-bypass header and x-vercel-set-bypass-cookie=true. If the secret is missing and Preview is protected, record that as Preview-protection evidence instead of failing the run.
+- This automation runs in the local devcontainer using the locally authenticated Codex CLI session.
+- Prefer local app checks when the issue can be reproduced with local data. Start the app on 127.0.0.1 using an available non-default port such as 3010 when browser checks are needed.
+- For bug mode, Preview URL read-only checks are strongly preferred when a Preview URL is discoverable from Vercel or GitHub deployment metadata. If Vercel Protection is enabled and VERCEL_AUTOMATION_BYPASS_SECRET is available, use the x-vercel-protection-bypass header and x-vercel-set-bypass-cookie=true. If the secret is missing and Preview is protected, record that as Preview-protection evidence instead of failing the run.
 
 Repository workflow:
 - Use gh CLI in this repository.
