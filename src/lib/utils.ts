@@ -222,6 +222,248 @@ export function directContractChecklist(job: DirectContractChecklistInput) {
   };
 }
 
+export const COMPANY_VERIFICATION_RENEWAL_DAYS = 180;
+
+export type CompanyVerificationKindText = "company_identity" | "payment_policy";
+export type CompanyVerificationStatusText = "submitted" | "confirmed" | "rejected" | "needs_renewal";
+
+export type CompanyVerificationRequestInput = {
+  kind: CompanyVerificationKindText;
+  status: CompanyVerificationStatusText;
+  evidenceSummary?: string | null;
+  confirmedScope?: string | null;
+  reviewerNotes?: string | null;
+  reasonCode?: string | null;
+  reviewedAt?: Date | string | null;
+  expiresAt?: Date | string | null;
+  createdAt?: Date | string | null;
+};
+
+export type CompanyTrustInput = {
+  description?: string | null;
+  websiteUrl?: string | null;
+  contactTeam?: string | null;
+  operatingArea?: string | null;
+  paymentPolicy?: string | null;
+  flowLinkReviewedCompanyAt?: Date | string | null;
+  flowLinkReviewedCompanyScope?: string | null;
+  flowLinkReviewedPaymentAt?: Date | string | null;
+  flowLinkReviewedPaymentScope?: string | null;
+  updatedAt?: Date | string | null;
+  verificationRequests?: CompanyVerificationRequestInput[] | null;
+};
+
+export type JobTrustInput = {
+  rate?: string | null;
+  workload?: string | null;
+  contractPeriod?: string | null;
+  selectionFlow?: string | null;
+  contractTerms?: string | null;
+  location?: string | null;
+  remotePolicy?: string | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+};
+
+export type TrustConfidenceStatus = "confirmed" | "pending" | "selfReported" | "missing" | "stale" | "rejected";
+export type TrustConfidenceTone = "neutral" | "good" | "warn" | "bad";
+
+export function latestVerificationRequest(
+  requests: CompanyVerificationRequestInput[] | null | undefined,
+  kind: CompanyVerificationKindText,
+) {
+  return [...(requests ?? [])]
+    .filter((request) => request.kind === kind)
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())[0] ?? null;
+}
+
+export function buildTrustConfidence({
+  company,
+  job,
+  now = new Date(),
+}: {
+  company: CompanyTrustInput;
+  job: JobTrustInput;
+  now?: Date;
+}) {
+  const companyRequest = latestVerificationRequest(company.verificationRequests, "company_identity");
+  const paymentRequest = latestVerificationRequest(company.verificationRequests, "payment_policy");
+  const companyReviewed = Boolean(company.flowLinkReviewedCompanyAt);
+  const paymentReviewed = Boolean(company.flowLinkReviewedPaymentAt);
+  const companyStale = companyReviewed && isTrustEvidenceStale(company.flowLinkReviewedCompanyAt, companyRequest?.expiresAt, now);
+  const paymentStale = paymentReviewed && isTrustEvidenceStale(company.flowLinkReviewedPaymentAt, paymentRequest?.expiresAt, now);
+  const companySelfReported = Boolean(company.description || company.websiteUrl || company.contactTeam || company.operatingArea);
+  const paymentSelfReported = Boolean(company.paymentPolicy || job.contractTerms);
+  const conditionCount = [job.rate, job.workload, job.contractPeriod, job.location || job.remotePolicy].filter(Boolean).length;
+  const companyStatus = trustStatusForEvidence({
+    hasReviewedAt: companyReviewed,
+    stale: companyStale,
+    selfReported: companySelfReported,
+    request: companyRequest,
+  });
+  const paymentStatus = trustStatusForEvidence({
+    hasReviewedAt: paymentReviewed,
+    stale: paymentStale,
+    selfReported: paymentSelfReported,
+    request: paymentRequest,
+  });
+  const conditionStatus: TrustConfidenceStatus = conditionCount >= 3 ? "selfReported" : "missing";
+  const statusScore = trustStatusScore(companyStatus) + trustStatusScore(paymentStatus) + (conditionCount >= 3 ? 15 : 0);
+  const label =
+    companyStatus === "confirmed" && paymentStatus === "confirmed"
+      ? "Flow Link確認済み"
+      : [companyStatus, paymentStatus].includes("pending")
+        ? "確認リクエスト中"
+        : [companyStatus, paymentStatus].includes("rejected")
+          ? "再提出が必要"
+          : [companyStatus, paymentStatus].includes("stale")
+            ? "更新確認が必要"
+            : [companyStatus, paymentStatus, conditionStatus].includes("missing")
+              ? "要確認あり"
+              : [companyStatus, paymentStatus].includes("confirmed")
+                ? "一部確認済み"
+                : "自己申告のみ";
+  const tone: TrustConfidenceTone =
+    companyStatus === "confirmed" && paymentStatus === "confirmed"
+      ? "good"
+      : [companyStatus, paymentStatus].includes("rejected")
+        ? "bad"
+        : [companyStatus, paymentStatus, conditionStatus].includes("missing") || [companyStatus, paymentStatus].includes("stale")
+          ? "warn"
+          : "neutral";
+
+  const items: Array<{ label: string; detail: string; status: TrustConfidenceStatus }> = [
+    {
+      label: "会社・Web公開情報",
+      detail: trustDetail({
+        confirmedFallback: "会社概要、公開Webサイト、連絡窓口の整合性をFlow Linkが確認しました。",
+        missingText: "会社概要、公開Webサイト、担当窓口、所在地・稼働エリアが未記載です。応募前に外部で確認できる材料が不足しています。",
+        request: companyRequest,
+        reviewedAt: company.flowLinkReviewedCompanyAt,
+        scope: company.flowLinkReviewedCompanyScope,
+        selfReportedText: [company.description, company.websiteUrl, company.contactTeam, company.operatingArea].filter(Boolean).join(" / "),
+        status: companyStatus,
+      }),
+      status: companyStatus,
+    },
+    {
+      label: "支払い・契約条件",
+      detail: trustDetail({
+        confirmedFallback: "請求締め、支払い時期、契約条件の説明をFlow Linkが確認しました。",
+        missingText: "契約・支払い条件、請求方針が未記載です。支払い時期、請求方法、契約主体を応募前または面談で確認してください。",
+        request: paymentRequest,
+        reviewedAt: company.flowLinkReviewedPaymentAt,
+        scope: company.flowLinkReviewedPaymentScope,
+        selfReportedText: [job.contractTerms && `案件条件: ${job.contractTerms}`, company.paymentPolicy && `企業方針: ${company.paymentPolicy}`].filter(Boolean).join(" / "),
+        status: paymentStatus,
+      }),
+      status: paymentStatus,
+    },
+    {
+      label: "案件条件の具体性",
+      detail:
+        conditionCount >= 3
+          ? `単価・稼働率・期間・働き方のうち${conditionCount}/4項目が記載されています。`
+          : `単価・稼働率・期間・働き方の記載は${conditionCount}/4項目です。不足条件は応募前または面談で確認してください。`,
+      status: conditionStatus,
+    },
+    {
+      label: "掲載・更新日",
+      detail: `掲載: ${formatDateTime(job.createdAt)} / 更新: ${formatDateTime(job.updatedAt)} / 会社情報更新: ${formatDateTime(company.updatedAt)}`,
+      status: "selfReported",
+    },
+  ];
+
+  return {
+    items,
+    label,
+    tone,
+    score: Math.max(0, Math.min(100, statusScore)),
+    companyStatus,
+    paymentStatus,
+  };
+}
+
+export function trustRecommendationAdjustment(confidence: Pick<ReturnType<typeof buildTrustConfidence>, "companyStatus" | "paymentStatus">) {
+  const statuses = [confidence.companyStatus, confidence.paymentStatus];
+  if (statuses.every((status) => status === "confirmed")) return 10;
+  if (statuses.includes("rejected")) return -18;
+  if (statuses.includes("stale")) return -10;
+  if (statuses.includes("missing")) return -8;
+  if (statuses.includes("pending")) return 0;
+  return -4;
+}
+
+function isTrustEvidenceStale(reviewedAt: Date | string | null | undefined, expiresAt: Date | string | null | undefined, now: Date) {
+  if (expiresAt) return new Date(expiresAt).getTime() <= now.getTime();
+  return daysSince(reviewedAt, now) >= COMPANY_VERIFICATION_RENEWAL_DAYS;
+}
+
+function trustStatusForEvidence({
+  hasReviewedAt,
+  request,
+  selfReported,
+  stale,
+}: {
+  hasReviewedAt: boolean;
+  request?: CompanyVerificationRequestInput | null;
+  selfReported: boolean;
+  stale: boolean;
+}): TrustConfidenceStatus {
+  if (hasReviewedAt && !stale) return "confirmed";
+  if (hasReviewedAt && stale) return "stale";
+  if (request?.status === "submitted") return "pending";
+  if (request?.status === "confirmed") return request.expiresAt && isTrustEvidenceStale(request.reviewedAt, request.expiresAt, new Date()) ? "stale" : "confirmed";
+  if (request?.status === "needs_renewal") return "stale";
+  if (request?.status === "rejected") return "rejected";
+  return selfReported ? "selfReported" : "missing";
+}
+
+function trustStatusScore(status: TrustConfidenceStatus) {
+  const scores: Record<TrustConfidenceStatus, number> = {
+    confirmed: 40,
+    pending: 24,
+    selfReported: 18,
+    stale: 12,
+    missing: 0,
+    rejected: 0,
+  };
+  return scores[status];
+}
+
+function trustDetail({
+  confirmedFallback,
+  missingText,
+  request,
+  reviewedAt,
+  scope,
+  selfReportedText,
+  status,
+}: {
+  confirmedFallback: string;
+  missingText: string;
+  request?: CompanyVerificationRequestInput | null;
+  reviewedAt?: Date | string | null;
+  scope?: string | null;
+  selfReportedText: string;
+  status: TrustConfidenceStatus;
+}) {
+  if (status === "confirmed") {
+    return `${scope || request?.confirmedScope || confirmedFallback} 確認日: ${formatDateTime(reviewedAt ?? request?.reviewedAt)}`;
+  }
+  if (status === "pending") {
+    return `Flow Linkへ確認リクエストが提出されています。提出内容: ${request?.evidenceSummary || "確認待ち"}。確認中も支払い保証や法務確認を示すものではありません。`;
+  }
+  if (status === "stale") {
+    return `過去の確認から${COMPANY_VERIFICATION_RENEWAL_DAYS}日以上、または有効期限を過ぎています。最新の契約・支払い条件を面談で確認してください。`;
+  }
+  if (status === "rejected") {
+    return `提出内容は再確認が必要です。理由: ${request?.reasonCode || request?.reviewerNotes || "根拠不足"}。応募前に追加説明を確認してください。`;
+  }
+  if (status === "selfReported") return selfReportedText;
+  return missingText;
+}
+
 type DirectMatchScoreInput = DirectContractChecklistInput & {
   applicationStatus?: string | null;
   freelancerReadinessPercent?: number | null;

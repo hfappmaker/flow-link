@@ -159,7 +159,7 @@ export default async function CompanyDashboard() {
           )}
         </section>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          <ActionCard href="/company/profile" title="企業プロフィール" body="企業名、概要、Webサイトを更新します。" />
+          <ActionCard href="/company/profile" title="企業プロフィール" body="企業名、概要、Webサイト、会社・支払い確認リクエストを管理します。" />
           <ActionCard href="/company/jobs" title="案件一覧" body="案件の作成、編集、公開状態、受付状態を管理します。" />
         </div>
       </div>

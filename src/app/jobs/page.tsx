@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
+  buildTrustConfidence,
   directContractChecklist,
   formatOpenings,
   matchedSkills,
@@ -13,8 +14,10 @@ import {
   preferenceAwareMatchScore,
   skillMatchPercent,
   skillPreview,
+  trustRecommendationAdjustment,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
+  type TrustConfidenceStatus,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
@@ -118,7 +121,16 @@ export default async function JobsPage({
       prisma.jobPost.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        include: { companyProfile: true },
+        include: {
+          companyProfile: {
+            include: {
+              verificationRequests: {
+                orderBy: { createdAt: "desc" },
+                take: 4,
+              },
+            },
+          },
+        },
       }),
     [],
   );
@@ -193,18 +205,23 @@ export default async function JobsPage({
     rate,
   });
   const rankedJobs = jobs
-    .map((job) => ({
-      job,
-      directScore: preferenceAwareMatchScore({
+    .map((job) => {
+      const trustConfidence = buildTrustConfidence({ company: job.companyProfile, job });
+      const baseDirectScore = preferenceAwareMatchScore({
         ...job,
         applicationStatus: job.applicationStatus,
         freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
         freelancerSkills: freelancerProfile?.skills,
         workPreference: freelancerProfile?.workPreference,
-      }),
-      contractReadinessPercent: directContractChecklist(job).percent,
-      preferenceReasons: freelancerProfile ? visiblePreferenceReasons({ ...job, workPreference: freelancerProfile.workPreference }, 4) : [],
-    }))
+      });
+      return {
+        job,
+        directScore: Math.max(0, Math.min(100, baseDirectScore + trustRecommendationAdjustment(trustConfidence))),
+        contractReadinessPercent: directContractChecklist(job).percent,
+        preferenceReasons: freelancerProfile ? visiblePreferenceReasons({ ...job, workPreference: freelancerProfile.workPreference }, 4) : [],
+        trustConfidence,
+      };
+    })
     .filter(({ job, contractReadinessPercent, directScore }) => {
       const matchesCandidate = candidate !== "fresh" || (!appliedJobIds.has(job.id) && !savedJobIds.has(job.id));
       if (fit === "skill") {
@@ -447,7 +464,7 @@ export default async function JobsPage({
           />
         )}
         <div className="mt-6 grid gap-4">
-          {rankedJobs.map(({ job, directScore, contractReadinessPercent, preferenceReasons }) => (
+          {rankedJobs.map(({ job, directScore, contractReadinessPercent, preferenceReasons, trustConfidence }) => (
             <JobCard
               applied={appliedJobIds.has(job.id)}
               contractReadinessPercent={contractReadinessPercent}
@@ -458,6 +475,7 @@ export default async function JobsPage({
               preferenceReasons={preferenceReasons}
               readiness={readiness}
               saved={savedJobIds.has(job.id)}
+              trustConfidence={trustConfidence}
               returnTo={currentJobsPath}
             />
           ))}
@@ -481,13 +499,16 @@ export default async function JobsPage({
   );
 }
 
-type JobWithCompany = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type JobWithCompany = Prisma.JobPostGetPayload<{
+  include: { companyProfile: { include: { verificationRequests: true } } };
+}>;
 type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
 type RankedJob = {
   job: JobWithCompany;
   directScore: number;
   contractReadinessPercent: number;
   preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
+  trustConfidence: ReturnType<typeof buildTrustConfidence>;
 };
 
 type DiscoveryIntentCounts = {
@@ -952,6 +973,7 @@ function JobCard({
   readiness,
   returnTo,
   saved,
+  trustConfidence,
 }: {
   applied: boolean;
   contractReadinessPercent: number;
@@ -962,6 +984,7 @@ function JobCard({
   readiness: ReturnType<typeof getFreelancerReadiness>;
   returnTo: string;
   saved: boolean;
+  trustConfidence: ReturnType<typeof buildTrustConfidence>;
 }) {
   const requiredSkills = skillPreview(job.requiredSkills);
   const requiredSkillCount = parseSkills(job.requiredSkills).length;
@@ -978,6 +1001,7 @@ function JobCard({
         matchPercent,
         missingReadinessItem: readiness.items.find((item) => !item.done),
         requiredSkillGaps,
+        trustStatus: trustConfidence.paymentStatus === "confirmed" ? trustConfidence.companyStatus : trustConfidence.paymentStatus,
       })
     : null;
 
@@ -994,6 +1018,7 @@ function JobCard({
             <StatusBadge tone={directScore >= 70 ? "good" : directScore >= 45 ? "neutral" : "warn"}>
               応募しやすさ {directScore}%
             </StatusBadge>
+            <StatusBadge tone={trustConfidence.tone}>{trustConfidence.label}</StatusBadge>
           </div>
           <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
           <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
@@ -1032,12 +1057,20 @@ function JobCard({
               <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-3">
                 <ScoreMeta label="スキル一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
                 <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
-                <ScoreMeta label="応募準備" value={`${readiness.percent}%`} />
+                <ScoreMeta label="信頼確認" value={`${trustConfidence.score}%`} />
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {preferenceReasons.map((reason) => (
                   <PreferenceReason reason={reason} key={`${job.id}-${reason.label}`} />
                 ))}
+                <TrustReason
+                  status={trustConfidence.paymentStatus}
+                  title="支払い確認"
+                />
+                <TrustReason
+                  status={trustConfidence.companyStatus}
+                  title="会社確認"
+                />
               </div>
               <p className="mt-2 text-sm leading-6 text-stone-700">
                 {requiredSkillCount === 0
@@ -1093,6 +1126,32 @@ function PreferenceReason({ reason }: { reason: ReturnType<typeof visiblePrefere
   );
 }
 
+function TrustReason({ status, title }: { status: TrustConfidenceStatus; title: string }) {
+  const detail: Record<TrustConfidenceStatus, string> = {
+    confirmed: "Flow Link確認済み",
+    pending: "確認リクエスト中。面談で最新条件を確認",
+    selfReported: "企業の自己申告。根拠を確認",
+    missing: "未記載。応募前に確認",
+    stale: "期限切れ。更新確認が必要",
+    rejected: "再提出が必要。追加説明を確認",
+  };
+  const toneClasses = {
+    confirmed: "border-emerald-200 bg-white/80 text-emerald-900",
+    pending: "border-stone-200 bg-white/80 text-stone-700",
+    selfReported: "border-stone-200 bg-white/80 text-stone-700",
+    missing: "border-amber-200 bg-white/80 text-amber-900",
+    stale: "border-amber-200 bg-white/80 text-amber-900",
+    rejected: "border-red-200 bg-white/80 text-red-900",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[status]}`}>
+      <p className="text-xs font-semibold">{title}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{detail[status]}</p>
+    </div>
+  );
+}
+
 function buildJobCardNextStep({
   applied,
   applicationOpen,
@@ -1101,6 +1160,7 @@ function buildJobCardNextStep({
   matchPercent,
   missingReadinessItem,
   requiredSkillGaps,
+  trustStatus,
 }: {
   applied: boolean;
   applicationOpen: boolean;
@@ -1109,6 +1169,7 @@ function buildJobCardNextStep({
   matchPercent: number | null;
   missingReadinessItem?: { label: string; href: string };
   requiredSkillGaps: string[];
+  trustStatus: TrustConfidenceStatus;
 }) {
   if (applied) {
     return {
@@ -1143,6 +1204,15 @@ function buildJobCardNextStep({
       description: `${requiredSkillGaps.slice(0, 3).join("、")}に近い経験があれば、プロフィールと提案文で補足してください。`,
       href: "/freelancer/profile",
       label: "プロフィールを見直す",
+    };
+  }
+
+  if (["missing", "stale", "rejected", "selfReported", "pending"].includes(trustStatus)) {
+    return {
+      title: "会社・支払い条件を確認",
+      description: "応募は可能です。検討リストに保存し、契約主体、締め日、支払い時期、外部支払い依頼の有無を提案文や面談で確認してください。",
+      href: `/jobs/${jobId}`,
+      label: "信頼状態を見る",
     };
   }
 

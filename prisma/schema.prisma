@@ -83,6 +83,30 @@ enum WorkLocationMode {
   flexible
 }
 
+enum CompanyVerificationKind {
+  company_identity
+  payment_policy
+}
+
+enum CompanyVerificationStatus {
+  submitted
+  confirmed
+  rejected
+  needs_renewal
+}
+
+enum CompanySafetyReportType {
+  off_platform_payment_request
+  suspicious_evidence
+  unsafe_company
+}
+
+enum CompanySafetyReportStatus {
+  submitted
+  reviewing
+  resolved
+}
+
 model User {
   id                  String                @id @default(cuid())
   email               String                @unique
@@ -95,6 +119,7 @@ model User {
   notifications       Notification[]
   messages            InterviewMessage[]
   interactionFeedback InteractionFeedback[]
+  companySafetyReports CompanySafetyReport[]
 
   @@map("users")
 }
@@ -212,6 +237,8 @@ model CompanyProfile {
   users                        CompanyUser[]
   jobPosts                     JobPost[]
   receivedFeedback             InteractionFeedback[] @relation("FeedbackForCompany")
+  verificationRequests         CompanyVerificationRequest[]
+  safetyReports                CompanySafetyReport[]
 
   @@map("company_profiles")
 }
@@ -226,8 +253,58 @@ model CompanyUser {
   companyProfile   CompanyProfile    @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
   screenedApps     JobApplication[]  @relation("ScreenedBy")
   notes            ScreeningNote[]
+  verificationRequests CompanyVerificationRequest[]
 
   @@map("company_users")
+}
+
+model CompanyVerificationRequest {
+  id                       String                    @id @default(cuid())
+  companyProfileId         String                    @map("company_profile_id")
+  requestedByCompanyUserId String                    @map("requested_by_company_user_id")
+  kind                     CompanyVerificationKind
+  status                   CompanyVerificationStatus @default(submitted)
+  publicEvidenceUrl        String?                   @map("public_evidence_url")
+  contactEvidence          String?                   @map("contact_evidence")
+  contractEvidence         String?                   @map("contract_evidence")
+  paymentEvidence          String?                   @map("payment_evidence")
+  offPlatformPolicy        String?                   @map("off_platform_policy")
+  evidenceSummary          String                    @map("evidence_summary")
+  confirmedScope           String?                   @map("confirmed_scope")
+  reviewerNotes            String?                   @map("reviewer_notes")
+  reasonCode               String?                   @map("reason_code")
+  reviewedAt               DateTime?                 @map("reviewed_at")
+  expiresAt                DateTime?                 @map("expires_at")
+  renewalRequestedAt       DateTime?                 @map("renewal_requested_at")
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  updatedAt                DateTime                  @updatedAt @map("updated_at")
+  companyProfile           CompanyProfile            @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  requestedByCompanyUser   CompanyUser               @relation(fields: [requestedByCompanyUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyProfileId, kind, status])
+  @@map("company_verification_requests")
+}
+
+model CompanySafetyReport {
+  id               String                    @id @default(cuid())
+  companyProfileId String                    @map("company_profile_id")
+  reporterUserId   String?                   @map("reporter_user_id")
+  jobPostId        String?                   @map("job_post_id")
+  reportType       CompanySafetyReportType   @map("report_type")
+  status           CompanySafetyReportStatus @default(submitted)
+  detail           String
+  internalNote     String?                   @map("internal_note")
+  affectedUserNote String?                   @map("affected_user_note")
+  resolvedAt       DateTime?                 @map("resolved_at")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+  companyProfile   CompanyProfile            @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  reporterUser     User?                     @relation(fields: [reporterUserId], references: [id], onDelete: SetNull)
+  jobPost          JobPost?                  @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+
+  @@index([companyProfileId, status])
+  @@index([reportType, status])
+  @@map("company_safety_reports")
 }
 
 model JobPost {
@@ -252,6 +329,7 @@ model JobPost {
   companyProfile    CompanyProfile    @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
   applications      JobApplication[]
   savedJobs         SavedJob[]
+  safetyReports     CompanySafetyReport[]
 
   @@map("job_posts")
 }

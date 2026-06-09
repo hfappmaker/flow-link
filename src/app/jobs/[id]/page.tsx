@@ -6,7 +6,16 @@ import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { getCompanyReputationSummary } from "@/lib/reputation";
-import { applicationStatusLabel, directContractChecklist, formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
+import {
+  applicationStatusLabel,
+  buildTrustConfidence,
+  directContractChecklist,
+  formatDateTime,
+  formatOpenings,
+  matchedSkills,
+  parseSkills,
+  type TrustConfidenceStatus,
+} from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
 
@@ -19,7 +28,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     () =>
       prisma.jobPost.findFirst({
         where: { id, status: "published" },
-        include: { companyProfile: true },
+        include: {
+          companyProfile: {
+            include: {
+              verificationRequests: {
+                orderBy: { createdAt: "desc" },
+                take: 4,
+              },
+            },
+          },
+        },
       }),
     null,
   );
@@ -84,7 +102,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
-  const companyConfidence = buildCompanyConfidence({ company: job.companyProfile, job });
+  const companyConfidence = buildTrustConfidence({ company: job.companyProfile, job });
   const proposalDraft = freelancerProfile
     ? buildProposalDraft({
         companyName: job.companyProfile.name,
@@ -148,6 +166,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   <TrustSnapshotItem detail={item.detail} key={item.label} label={item.label} status={item.status} />
                 ))}
               </div>
+              {companyConfidence.tone !== "good" && (
+                <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                  支払い・会社情報が未確認、確認中、期限切れ、または再提出待ちの場合でも応募は可能です。応募前に検討リストへ保存し、提案文や面談で契約主体、締め日、支払い時期、外部支払い依頼の有無を確認してください。
+                </div>
+              )}
             </Card>
 
             <ReputationSummaryCard
@@ -380,19 +403,22 @@ function ContractReadinessItem({ label, detail, done }: { label: string; detail:
   );
 }
 
-type ConfidenceStatus = "reviewed" | "selfReported" | "missing";
-type ConfidenceTone = "neutral" | "good" | "warn";
-
-function TrustSnapshotItem({ label, detail, status }: { label: string; detail: string; status: ConfidenceStatus }) {
+function TrustSnapshotItem({ label, detail, status }: { label: string; detail: string; status: TrustConfidenceStatus }) {
   const statusClasses = {
-    reviewed: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    confirmed: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    pending: "border-stone-200 bg-stone-50 text-stone-800",
     selfReported: "border-stone-200 bg-stone-50 text-stone-800",
     missing: "border-amber-200 bg-amber-50 text-amber-900",
+    stale: "border-amber-200 bg-amber-50 text-amber-900",
+    rejected: "border-red-200 bg-red-50 text-red-900",
   };
   const statusLabels = {
-    reviewed: "Flow Link確認済み",
+    confirmed: "Flow Link確認済み",
+    pending: "確認リクエスト中",
     selfReported: "自己申告",
-    missing: "要確認",
+    missing: "未記載",
+    stale: "更新確認が必要",
+    rejected: "再提出が必要",
   };
   return (
     <div className={`rounded border px-3 py-2 text-sm ${statusClasses[status]}`}>
@@ -421,86 +447,6 @@ function DirectInfo({ label, value }: { label: string; value?: string | null }) 
       <dd className="mt-1 whitespace-pre-wrap leading-6 text-stone-700">{value || "未設定"}</dd>
     </div>
   );
-}
-
-function buildCompanyConfidence({
-  company,
-  job,
-}: {
-  company: {
-    description?: string | null;
-    websiteUrl?: string | null;
-    contactTeam?: string | null;
-    operatingArea?: string | null;
-    paymentPolicy?: string | null;
-    flowLinkReviewedCompanyAt?: Date | string | null;
-    flowLinkReviewedCompanyScope?: string | null;
-    flowLinkReviewedPaymentAt?: Date | string | null;
-    flowLinkReviewedPaymentScope?: string | null;
-    updatedAt?: Date | string | null;
-  };
-  job: {
-    rate?: string | null;
-    workload?: string | null;
-    contractPeriod?: string | null;
-    selectionFlow?: string | null;
-    contractTerms?: string | null;
-    location?: string | null;
-    remotePolicy?: string | null;
-    createdAt?: Date | string | null;
-    updatedAt?: Date | string | null;
-  };
-}) {
-  const companyReviewed = Boolean(company.flowLinkReviewedCompanyAt);
-  const paymentReviewed = Boolean(company.flowLinkReviewedPaymentAt);
-  const companySelfReported = Boolean(company.description || company.websiteUrl || company.contactTeam || company.operatingArea);
-  const paymentSelfReported = Boolean(company.paymentPolicy || job.contractTerms);
-  const conditionCount = [job.rate, job.workload, job.contractPeriod, job.location || job.remotePolicy].filter(Boolean).length;
-  const missingCount = [!companySelfReported, !paymentSelfReported, conditionCount < 3].filter(Boolean).length;
-  const reviewedCount = [companyReviewed, paymentReviewed].filter(Boolean).length;
-  const label =
-    reviewedCount === 2
-      ? "Flow Link確認済み"
-      : missingCount > 0
-        ? "要確認あり"
-        : reviewedCount > 0
-          ? "一部確認済み"
-          : "自己申告のみ";
-  const tone: ConfidenceTone = reviewedCount === 2 ? "good" : missingCount > 0 ? "warn" : "neutral";
-  const items: Array<{ label: string; detail: string; status: ConfidenceStatus }> = [
-    {
-      label: "会社・Web公開情報",
-      detail: companyReviewed
-        ? `${company.flowLinkReviewedCompanyScope || "会社概要、公開Webサイト、連絡窓口の整合性をFlow Linkが確認しました。"} 確認日: ${formatDateTime(company.flowLinkReviewedCompanyAt)}`
-        : companySelfReported
-          ? [company.description, company.websiteUrl, company.contactTeam, company.operatingArea].filter(Boolean).join(" / ")
-          : "会社概要、公開Webサイト、担当窓口、所在地・稼働エリアが未記載です。応募前に外部で確認できる材料が不足しています。",
-      status: companyReviewed ? "reviewed" : companySelfReported ? "selfReported" : "missing",
-    },
-    {
-      label: "支払い・契約条件",
-      detail: paymentReviewed
-        ? `${company.flowLinkReviewedPaymentScope || "請求締め、支払い時期、契約条件の説明をFlow Linkが確認しました。"} 確認日: ${formatDateTime(company.flowLinkReviewedPaymentAt)}`
-        : paymentSelfReported
-          ? [job.contractTerms && `案件条件: ${job.contractTerms}`, company.paymentPolicy && `企業方針: ${company.paymentPolicy}`].filter(Boolean).join(" / ")
-          : "契約・支払い条件、請求方針が未記載です。支払い時期、請求方法、契約主体を応募前または面談で確認してください。",
-      status: paymentReviewed ? "reviewed" : paymentSelfReported ? "selfReported" : "missing",
-    },
-    {
-      label: "案件条件の具体性",
-      detail:
-        conditionCount >= 3
-          ? `単価・稼働率・期間・働き方のうち${conditionCount}/4項目が記載されています。`
-          : `単価・稼働率・期間・働き方の記載は${conditionCount}/4項目です。不足条件は応募前または面談で確認してください。`,
-      status: conditionCount >= 3 ? "selfReported" : "missing",
-    },
-    {
-      label: "掲載・更新日",
-      detail: `掲載: ${formatDateTime(job.createdAt)} / 更新: ${formatDateTime(job.updatedAt)} / 会社情報更新: ${formatDateTime(company.updatedAt)}`,
-      status: "selfReported",
-    },
-  ];
-  return { items, label, tone };
 }
 
 function buildProposalDraft({

@@ -1,5 +1,6 @@
 import {
   ApplicationStatus,
+  CompanyVerificationKind,
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
@@ -41,6 +42,7 @@ export const userRoleValues = enumValues(UserRole);
 export const resumeDocumentTypeValues = enumValues(ResumeDocumentType);
 export const jobPostStatusValues = enumValues(JobPostStatus);
 export const applicationStatusValues = enumValues(ApplicationStatus);
+export const companyVerificationKindValues = enumValues(CompanyVerificationKind);
 export const jobApplicationStatusValues = enumValues(JobApplicationStatus);
 export const interviewMessageTypeValues = enumValues(InterviewMessageType);
 export const workPreferenceStatusValues = enumValues(WorkPreferenceStatus);
@@ -66,6 +68,10 @@ export function parseJobPostStatus(value: FormDataEntryValue | null) {
 
 export function parseApplicationStatus(value: FormDataEntryValue | null) {
   return parseRequiredEnum(value, applicationStatusValues, "応募受付状態を確認してください。");
+}
+
+export function parseCompanyVerificationKind(value: FormDataEntryValue | null) {
+  return parseRequiredEnum(value, companyVerificationKindValues, "確認リクエストの種類を確認してください。");
 }
 
 export function parseScreeningResultStatus(value: FormDataEntryValue | null) {

@@ -3,6 +3,7 @@
 import { put } from "@vercel/blob";
 import {
   ApplicationStatus,
+  CompanyVerificationKind,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
@@ -16,6 +17,7 @@ import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
 import {
   parseApplicationStatus,
+  parseCompanyVerificationKind,
   parseInterviewMessageType,
   parseJobPostStatus,
   parseResumeDocumentType,
@@ -342,6 +344,50 @@ export async function saveCompanyProfile(formData: FormData) {
   });
   revalidatePath("/company/profile");
   redirect("/company");
+}
+
+export async function submitCompanyVerificationRequest(formData: FormData) {
+  const { companyUser } = await currentCompanyUser();
+  const kind = parseCompanyVerificationKind(formData.get("kind"));
+  const publicEvidenceUrl = toOptionalText(formData.get("publicEvidenceUrl"));
+  const contactEvidence = toOptionalText(formData.get("contactEvidence"));
+  const contractEvidence = toOptionalText(formData.get("contractEvidence"));
+  const paymentEvidence = toOptionalText(formData.get("paymentEvidence"));
+  const offPlatformPolicy = toOptionalText(formData.get("offPlatformPolicy"));
+  const evidenceSummary = toText(formData.get("evidenceSummary"));
+  const maxTextLength = 1000;
+  if (
+    [contactEvidence, contractEvidence, paymentEvidence, offPlatformPolicy, evidenceSummary].some(
+      (value) => (value?.length ?? 0) > maxTextLength,
+    )
+  ) {
+    throw new Error("確認リクエストの根拠は各1000文字以内で入力してください。");
+  }
+  if (!publicEvidenceUrl || !contactEvidence || !evidenceSummary) {
+    throw new Error("公開URL、連絡窓口の根拠、提出内容の要約を入力してください。");
+  }
+  if (kind === CompanyVerificationKind.payment_policy && (!contractEvidence || !paymentEvidence || !offPlatformPolicy)) {
+    throw new Error("支払い・契約方針の確認には、契約条件、支払い根拠、外部支払い依頼への対応方針が必要です。");
+  }
+
+  await prisma.companyVerificationRequest.create({
+    data: {
+      companyProfileId: companyUser.companyProfileId,
+      requestedByCompanyUserId: companyUser.id,
+      kind,
+      publicEvidenceUrl,
+      contactEvidence,
+      contractEvidence,
+      paymentEvidence,
+      offPlatformPolicy,
+      evidenceSummary,
+    },
+  });
+
+  revalidatePath("/company/profile");
+  revalidatePath("/company/verification");
+  revalidatePath("/jobs");
+  redirect("/company/profile?verification=submitted");
 }
 
 export async function saveJobPost(formData: FormData) {

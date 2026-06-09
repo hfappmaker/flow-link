@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import prismaClient from "@prisma/client";
 import {
   ApplicationStatus,
   InterviewMessageType,
@@ -9,12 +10,16 @@ import {
   UserRole,
 } from "@prisma/client";
 
+const { CompanyVerificationKind } = prismaClient;
+
 const {
   applicationStatusValues,
+  companyVerificationKindValues,
   interviewMessageTypeValues,
   jobApplicationStatusValues,
   jobPostStatusValues,
   parseApplicationStatus,
+  parseCompanyVerificationKind,
   parseInterviewMessageType,
   parseJobApplicationStatusFilter,
   parseJobPostStatus,
@@ -34,6 +39,7 @@ test("form enum value lists stay aligned with Prisma enums", () => {
   assert.deepEqual(sorted(resumeDocumentTypeValues), sorted(Object.values(ResumeDocumentType)));
   assert.deepEqual(sorted(jobPostStatusValues), sorted(Object.values(JobPostStatus)));
   assert.deepEqual(sorted(applicationStatusValues), sorted(Object.values(ApplicationStatus)));
+  assert.deepEqual(sorted(companyVerificationKindValues), sorted(Object.values(CompanyVerificationKind)));
   assert.deepEqual(sorted(jobApplicationStatusValues), sorted(Object.values(JobApplicationStatus)));
   assert.deepEqual(sorted(interviewMessageTypeValues), sorted(Object.values(InterviewMessageType)));
 });
@@ -48,6 +54,10 @@ test("job post form statuses parse only valid Prisma enum values", () => {
   assert.equal(parseApplicationStatus("paused"), ApplicationStatus.paused);
   assert.throws(() => parseApplicationStatus("closed"), /応募受付状態を確認してください。/);
   assert.throws(() => parseApplicationStatus(null), /応募受付状態を確認してください。/);
+
+  assert.equal(parseCompanyVerificationKind("company_identity"), CompanyVerificationKind.company_identity);
+  assert.equal(parseCompanyVerificationKind("payment_policy"), CompanyVerificationKind.payment_policy);
+  assert.throws(() => parseCompanyVerificationKind("government_id"), /確認リクエストの種類を確認してください。/);
 });
 
 test("existing action enum parsers keep rejecting unsupported values", () => {
