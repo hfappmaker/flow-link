@@ -44,6 +44,21 @@ enum JobApplicationStatus {
 enum NotificationType {
   screening_passed
   screening_rejected
+  job_alert
+  job_alert_digest
+}
+
+enum JobAlertCadence {
+  immediate
+  daily
+  weekly
+  paused
+}
+
+enum JobAlertMatchStatus {
+  pending_digest
+  notified
+  suppressed
 }
 
 enum InterviewThreadStatus {
@@ -188,6 +203,7 @@ model FreelancerProfile {
   savedJobs         SavedJob[]
   workPreference    WorkPreference?
   savedJobSearches  SavedJobSearch[]
+  jobAlertMatches   JobAlertMatch[]
   recommendationFeedback RecommendationFeedback[]
   receivedFeedback  InteractionFeedback[] @relation("FeedbackForFreelancer")
 
@@ -228,10 +244,11 @@ model SavedJobSearch {
   workload            String?
   rate                String?
   sort                String            @default("direct")
-  notificationCadence String?           @map("notification_cadence")
+  notificationCadence JobAlertCadence   @default(immediate) @map("notification_cadence")
   createdAt           DateTime          @default(now()) @map("created_at")
   updatedAt           DateTime          @updatedAt @map("updated_at")
   freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  alertMatches        JobAlertMatch[]
 
   @@index([freelancerProfileId])
   @@map("saved_job_searches")
@@ -375,6 +392,7 @@ model JobPost {
   savedJobs         SavedJob[]
   safetyReports     CompanySafetyReport[]
   recommendationFeedback RecommendationFeedback[]
+  alertMatches      JobAlertMatch[]
 
   @@map("job_posts")
 }
@@ -459,11 +477,39 @@ model Notification {
   type      NotificationType
   title     String
   body      String
+  actionUrl String?          @map("action_url")
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobAlertMatches JobAlertMatch[]
 
   @@map("notifications")
+}
+
+model JobAlertMatch {
+  id                  String              @id @default(cuid())
+  freelancerProfileId String              @map("freelancer_profile_id")
+  savedJobSearchId    String              @map("saved_job_search_id")
+  jobPostId           String              @map("job_post_id")
+  notificationId      String?             @map("notification_id")
+  cadence             JobAlertCadence
+  status              JobAlertMatchStatus @default(pending_digest)
+  fitReasons          String              @map("fit_reasons")
+  trustWarning        String?             @map("trust_warning")
+  suppressionReason   String?             @map("suppression_reason")
+  matchedAt           DateTime            @default(now()) @map("matched_at")
+  notifiedAt          DateTime?           @map("notified_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile   @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  savedJobSearch      SavedJobSearch      @relation(fields: [savedJobSearchId], references: [id], onDelete: Cascade)
+  jobPost             JobPost             @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  notification        Notification?       @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+
+  @@unique([savedJobSearchId, jobPostId])
+  @@index([freelancerProfileId, status, cadence])
+  @@index([jobPostId])
+  @@map("job_alert_matches")
 }
 
 model InterviewThread {
