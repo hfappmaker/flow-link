@@ -3,7 +3,6 @@
 import { put } from "@vercel/blob";
 import {
   ApplicationStatus,
-  InteractionFeedbackDirection,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
@@ -27,8 +26,13 @@ import {
 } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { loginErrorUrl } from "@/lib/registration-intent";
-import { getFreelancerReadiness } from "@/lib/readiness";
-import { buildScreeningPassedHandoffMessage, daysSince, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
+import { directContractChecklist, toOptionalText, toText } from "@/lib/utils";
+import {
+  applyToJobWorkflow,
+  screenApplicationWorkflow,
+  sendInterviewMessageWorkflow,
+  submitInteractionFeedbackWorkflow,
+} from "@/lib/workflows";
 
 async function currentUser() {
   const session = await auth();
@@ -402,38 +406,12 @@ export async function applyToJob(formData: FormData) {
   if ((proposedStart?.length ?? 0) > 120 || (contactPreference?.length ?? 0) > 120) {
     throw new Error("稼働開始目安と連絡希望は120文字以内で入力してください。");
   }
-  const readinessProfile = await prisma.freelancerProfile.findUnique({
-    where: { id: profile.id },
-    include: { documents: true, careerHistory: true },
-  });
-  const readiness = getFreelancerReadiness(readinessProfile);
-  if (!readiness.isReady) {
-    throw new Error("応募前にプロフィール、職務経歴フォーム、履歴書PDF、職務経歴書PDFを登録してください。");
-  }
-  const job = await prisma.jobPost.findUnique({ where: { id: jobPostId } });
-  if (!job || job.status !== "published" || job.applicationStatus !== "open") {
-    throw new Error("この案件には応募できません。");
-  }
-  const existingApplication = await prisma.jobApplication.findUnique({
-    where: {
-      jobPostId_freelancerProfileId: {
-        jobPostId,
-        freelancerProfileId: profile.id,
-      },
-    },
-  });
-  if (existingApplication) {
-    throw new Error("この案件には応募済みです。");
-  }
-
-  await prisma.jobApplication.create({
-    data: {
-      jobPostId,
-      freelancerProfileId: profile.id,
-      proposalMessage,
-      proposedStart,
-      contactPreference,
-    },
+  await applyToJobWorkflow(prisma, {
+    freelancerProfileId: profile.id,
+    jobPostId,
+    proposalMessage,
+    proposedStart,
+    contactPreference,
   });
 
   revalidatePath("/jobs");
@@ -525,59 +503,12 @@ export async function screenApplication(formData: FormData) {
   }
 
   const application = await assertOwnsApplication(companyUser.companyProfileId, applicationId);
-  let interviewThreadId: string | null = null;
-  await prisma.$transaction(async (tx) => {
-    await tx.jobApplication.update({
-      where: { id: applicationId },
-      data: {
-        status,
-        screenedAt: new Date(),
-        screenedByCompanyUserId: companyUser.id,
-      },
-    });
-    await tx.notification.create({
-      data: {
-        userId: application.freelancerProfile.userId,
-        type: status === "screening_passed" ? "screening_passed" : "screening_rejected",
-        title: status === "screening_passed" ? "書類選考を通過しました" : "書類選考結果のお知らせ",
-        body:
-          status === "screening_passed"
-            ? `${application.jobPost.title} の書類選考を通過しました。面談日程調整へ進んでください。`
-            : `${application.jobPost.title} は今回は見送りとなりました。`,
-      },
-    });
-    if (status === "screening_passed") {
-      const thread = await tx.interviewThread.upsert({
-        where: { jobApplicationId: applicationId },
-        create: { jobApplicationId: applicationId },
-        update: {},
-      });
-      interviewThreadId = thread.id;
-
-      const messageCount = await tx.interviewMessage.count({
-        where: { interviewThreadId: thread.id },
-      });
-      if (messageCount === 0) {
-        await tx.interviewMessage.create({
-          data: {
-            interviewThreadId: thread.id,
-            senderUserId: companyUser.userId,
-            messageType: InterviewMessageType.text,
-            body:
-              handoffMessage ||
-              buildScreeningPassedHandoffMessage({
-                companyName: companyUser.companyProfile.name,
-                freelancerName: application.freelancerProfile.fullName,
-                jobTitle: application.jobPost.title,
-                proposedStart: application.proposedStart,
-                contactPreference: application.contactPreference,
-                selectionFlow: application.jobPost.selectionFlow,
-                contractTerms: application.jobPost.contractTerms,
-              }),
-          },
-        });
-      }
-    }
+  const { interviewThreadId } = await screenApplicationWorkflow(prisma, {
+    applicationId,
+    status,
+    handoffMessage,
+    application,
+    companyUser,
   });
 
   revalidatePath(`/company/applications/${applicationId}`);
@@ -603,34 +534,12 @@ export async function sendInterviewMessage(formData: FormData) {
   const proposedAtText = toOptionalText(formData.get("proposedAt"));
   const body = toText(formData.get("body")) || proposedAtText || "";
   const proposedAt = proposedAtText ? new Date(proposedAtText) : null;
-  if ((messageType === "proposed_time" || messageType === "accepted_time") && (!proposedAt || Number.isNaN(proposedAt.getTime()))) {
-    throw new Error("候補日時を入力してください。");
-  }
-  if (messageType === "meeting_url" && !isHttpUrl(body)) {
-    throw new Error("会議URLは http:// または https:// から始まるURLを入力してください。");
-  }
-  await prisma.$transaction(async (tx) => {
-    await tx.interviewMessage.create({
-      data: {
-        interviewThreadId: threadId,
-        senderUserId: user.id,
-        messageType,
-        body,
-        proposedAt,
-      },
-    });
-    if (messageType === "accepted_time" && proposedAt) {
-      await tx.interviewThread.update({
-        where: { id: threadId },
-        data: { status: "scheduled", scheduledAt: proposedAt },
-      });
-    }
-    if (messageType === "meeting_url") {
-      await tx.interviewThread.update({
-        where: { id: threadId },
-        data: { meetingUrl: body },
-      });
-    }
+  await sendInterviewMessageWorkflow(prisma, {
+    threadId,
+    senderUserId: user.id,
+    messageType,
+    body,
+    proposedAt,
   });
 
   revalidatePath(`/interviews/${threadId}`);
@@ -679,16 +588,6 @@ export async function submitInteractionFeedback(formData: FormData) {
   const user = await currentUser();
   const threadId = toText(formData.get("threadId"));
   const thread = await assertCanUseThread(user.id, threadId);
-  const isCompanyAuthor = thread.jobApplication.jobPost.companyProfile.users.some((companyUser) => companyUser.userId === user.id);
-  const isFreelancerAuthor = thread.jobApplication.freelancerProfile.userId === user.id;
-  if (!isCompanyAuthor && !isFreelancerAuthor) throw new Error("このフィードバックは送信できません。");
-  if (!thread.scheduledAt) {
-    throw new Error("面談日時が確定したやりとりだけフィードバックを送信できます。");
-  }
-
-  const direction = isCompanyAuthor
-    ? InteractionFeedbackDirection.company_to_freelancer
-    : InteractionFeedbackDirection.freelancer_to_company;
   const followThroughRating = parseRating(formData.get("followThroughRating"), "返信・フォローの評価を選択してください。");
   const collaborationRating = parseRating(formData.get("collaborationRating"), "協働しやすさの評価を選択してください。");
   const privateNote = toOptionalText(formData.get("privateNote"));
@@ -698,48 +597,15 @@ export async function submitInteractionFeedback(formData: FormData) {
   const moderationStatus = formData.get("needsModeration") === "on"
     ? InteractionFeedbackModerationStatus.reported
     : InteractionFeedbackModerationStatus.visible;
-  const existingFeedback = await prisma.interactionFeedback.findUnique({
-    where: {
-      jobApplicationId_direction_authorUserId: {
-        jobApplicationId: thread.jobApplicationId,
-        direction,
-        authorUserId: user.id,
-      },
-    },
-  });
-  if (existingFeedback && daysSince(existingFeedback.createdAt) > 14) {
-    throw new Error("フィードバックの編集期限を過ぎています。");
-  }
-
-  await prisma.interactionFeedback.upsert({
-    where: {
-      jobApplicationId_direction_authorUserId: {
-        jobApplicationId: thread.jobApplicationId,
-        direction,
-        authorUserId: user.id,
-      },
-    },
-    create: {
-      jobApplicationId: thread.jobApplicationId,
-      authorUserId: user.id,
-      direction,
-      targetCompanyProfileId: isFreelancerAuthor ? thread.jobApplication.jobPost.companyProfileId : null,
-      targetFreelancerProfileId: isCompanyAuthor ? thread.jobApplication.freelancerProfileId : null,
-      followThroughRating,
-      collaborationRating,
-      interactionCompleted: formData.get("interactionCompleted") === "on",
-      wouldWorkAgain: parseOptionalBoolean(formData.get("wouldWorkAgain")),
-      privateNote,
-      moderationStatus,
-    },
-    update: {
-      followThroughRating,
-      collaborationRating,
-      interactionCompleted: formData.get("interactionCompleted") === "on",
-      wouldWorkAgain: parseOptionalBoolean(formData.get("wouldWorkAgain")),
-      privateNote,
-      moderationStatus,
-    },
+  await submitInteractionFeedbackWorkflow(prisma, {
+    thread,
+    authorUserId: user.id,
+    followThroughRating,
+    collaborationRating,
+    interactionCompleted: formData.get("interactionCompleted") === "on",
+    wouldWorkAgain: parseOptionalBoolean(formData.get("wouldWorkAgain")),
+    privateNote,
+    moderationStatus,
   });
 
   revalidatePath(`/interviews/${threadId}`);
@@ -778,15 +644,6 @@ function registrationRedirectForRole(role: UserRole, callbackUrl: string) {
   if (role === "freelancer" && callbackUrl.startsWith("/company")) return defaultPath;
   if (role === "company_user" && callbackUrl.startsWith("/freelancer")) return defaultPath;
   return callbackUrl;
-}
-
-function isHttpUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
 }
 
 async function assertOwnsApplication(companyProfileId: string, applicationId: string) {
