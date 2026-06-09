@@ -1,0 +1,9 @@
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+5 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-triage.sh --mode bug
+15 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-triage.sh --mode product
+25 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-triage.sh --mode ux
+35 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-triage.sh --mode visual-design
+45 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-triage.sh --mode maintainability
+10,40 * * * * node bash /workspaces/flow-link/scripts/codex-auto-issue-worker.sh
