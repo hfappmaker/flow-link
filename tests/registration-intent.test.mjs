@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
+  loginHref,
   loginErrorUrl,
   registrationRoleIntent,
   safeAuthCallbackUrl,
@@ -31,4 +32,13 @@ test("login errors preserve safe callback destinations", () => {
   assert.equal(loginErrorUrl("/"), "/login?error=CredentialsSignin");
   assert.equal(loginErrorUrl("https://example.com/company"), "/login?error=CredentialsSignin");
   assert.equal(loginErrorUrl("//example.com/company"), "/login?error=CredentialsSignin");
+});
+
+test("login links preserve safe callback destinations", () => {
+  assert.equal(loginHref("/jobs/demo-job"), "/login?callbackUrl=%2Fjobs%2Fdemo-job");
+  assert.equal(loginHref("/company/jobs/create?draft=1"), "/login?callbackUrl=%2Fcompany%2Fjobs%2Fcreate%3Fdraft%3D1");
+  assert.equal(loginHref(""), "/login");
+  assert.equal(loginHref("/"), "/login");
+  assert.equal(loginHref("https://example.com/company"), "/login");
+  assert.equal(loginHref("//example.com/company"), "/login");
 });

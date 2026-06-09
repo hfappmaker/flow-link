@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Briefcase, CheckCircle2, FileText, MessageSquare, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { loginHref } from "@/lib/registration-intent";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return <main className="min-h-screen bg-[#f6f7f3] text-stone-950">{children}</main>;
@@ -10,10 +11,12 @@ type TopNavSection = "jobs" | "freelancer" | "company" | "login" | "register";
 
 export function TopNav({
   activeSection,
+  loginCallbackUrl,
   registerCallbackUrl,
   sessionRole,
 }: {
   activeSection?: TopNavSection;
+  loginCallbackUrl?: string;
   registerCallbackUrl?: string;
   sessionRole?: string;
 }) {
@@ -23,6 +26,7 @@ export function TopNav({
   const registerHref = registerCallbackUrl
     ? `/register?callbackUrl=${encodeURIComponent(registerCallbackUrl)}`
     : "/register";
+  const loginLinkHref = loginHref(loginCallbackUrl ?? "");
 
   return (
     <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
@@ -46,7 +50,7 @@ export function TopNav({
             </NavLink>
           )}
           {!sessionRole && (
-            <NavLink href="/login" active={currentSection === "login"}>
+            <NavLink href={loginLinkHref} active={currentSection === "login"}>
               ログイン
             </NavLink>
           )}
