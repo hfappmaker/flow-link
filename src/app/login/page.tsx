@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { loginUser } from "@/lib/actions";
 import { Shell, TopNav, Card, TextField } from "@/components/ui";
+import { safeAuthCallbackUrl } from "@/lib/registration-intent";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
   const params = await searchParams;
-  const callbackUrl = safeLoginCallbackUrl(params.callbackUrl ?? "");
+  const callbackUrl = safeAuthCallbackUrl(params.callbackUrl ?? "");
   const registerHref = callbackUrl ? { pathname: "/register", query: { callbackUrl } } : "/register";
   return (
     <Shell>
-      <TopNav activeSection="login" />
+      <TopNav activeSection="login" registerCallbackUrl={callbackUrl} />
       <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-md place-items-center px-5 py-10">
         <Card className="w-full">
           <h1 className="text-2xl font-semibold">ログイン</h1>
@@ -26,8 +27,4 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </div>
     </Shell>
   );
-}
-
-function safeLoginCallbackUrl(value: string) {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "";
 }

@@ -8,10 +8,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 type TopNavSection = "jobs" | "freelancer" | "company" | "login" | "register";
 
-export function TopNav({ activeSection, sessionRole }: { activeSection?: TopNavSection; sessionRole?: string }) {
+export function TopNav({
+  activeSection,
+  registerCallbackUrl,
+  sessionRole,
+}: {
+  activeSection?: TopNavSection;
+  registerCallbackUrl?: string;
+  sessionRole?: string;
+}) {
   const currentSection =
     activeSection ??
     (sessionRole === "freelancer" ? "freelancer" : sessionRole === "company_user" ? "company" : undefined);
+  const registerHref = registerCallbackUrl
+    ? `/register?callbackUrl=${encodeURIComponent(registerCallbackUrl)}`
+    : "/register";
 
   return (
     <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
@@ -43,7 +54,7 @@ export function TopNav({ activeSection, sessionRole }: { activeSection?: TopNavS
             <Link
               aria-current={currentSection === "register" ? "page" : undefined}
               className={cn("btn btn-primary", currentSection === "register" && "nav-primary-active")}
-              href="/register"
+              href={registerHref}
             >
               登録
             </Link>
