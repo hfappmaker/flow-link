@@ -64,6 +64,7 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
   const requiredSkills = parseSkills(application.jobPost.requiredSkills);
   const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const missingSkillCount = Math.max(0, requiredSkills.length - requiredSkillMatches.length);
   const reviewSignals = [
     { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
     { done: (application.freelancerProfile.documents?.length ?? 0) >= 2, nextCheck: "PDF書類" },
@@ -86,6 +87,26 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
     interviewReadinessPercent,
     isInterviewReady: interviewReadinessPercent >= 80 && application.status === "applied",
     nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
+    reviewQuestions: [
+      ...(missingSkillCount > 0
+        ? [`必須スキルの未一致 ${missingSkillCount}件について、近い実務経験や補完できる進め方を確認する`]
+        : []),
+      ...(!application.proposedStart && !application.freelancerProfile.availableFrom && !application.freelancerProfile.availability
+        ? ["稼働開始時期と週あたりの稼働量を確認する"]
+        : []),
+      ...(!application.proposalMessage
+        ? ["この案件で最初に任せたい業務への貢献イメージを確認する"]
+        : []),
+      ...((application.freelancerProfile.documents?.length ?? 0) < 2
+        ? ["履歴書・職務経歴書の不足分を面談前に共有できるか確認する"]
+        : []),
+      ...(!application.freelancerProfile.careerHistory
+        ? ["直近プロジェクトの役割、担当範囲、成果を確認する"]
+        : []),
+      ...(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability
+        ? ["開始条件、契約・支払い条件、面談候補日時をすり合わせる"]
+        : []),
+    ].slice(0, 4),
   };
 }
 

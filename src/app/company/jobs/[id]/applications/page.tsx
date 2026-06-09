@@ -88,6 +88,7 @@ export default async function JobApplicationsPage({
   const appliedReviews = job?.applications.map((application) => buildApplicationReview({ ...application, jobPost: job })) ?? [];
   const interviewReadyCount = appliedReviews.filter((review) => review.isInterviewReady).length;
   const needsCheckCount = appliedReviews.filter((review) => review.nextChecks.length > 0).length;
+  const hasReviewQuestionsCount = appliedReviews.filter((review) => review.reviewQuestions.length > 0).length;
 
   return (
     <Shell>
@@ -138,7 +139,7 @@ export default async function JobApplicationsPage({
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
               <ReviewSignal label="面談候補" value={`${interviewReadyCount}件`} tone={interviewReadyCount > 0 ? "good" : "neutral"} />
               <ReviewSignal label="未選考" value={`${countByStatus.get("applied") ?? 0}件`} tone={(countByStatus.get("applied") ?? 0) > 0 ? "warn" : "neutral"} />
-              <ReviewSignal label="確認点あり" value={`${needsCheckCount}件`} tone={needsCheckCount > 0 ? "warn" : "good"} />
+              <ReviewSignal label="面談前の確認" value={`${hasReviewQuestionsCount}件`} tone={needsCheckCount > 0 ? "warn" : "good"} />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {statusTabs.map((tab) => {
@@ -199,6 +200,7 @@ type ApplicationReview = {
   interviewReadinessPercent: number;
   isInterviewReady: boolean;
   nextChecks: string[];
+  reviewQuestions: string[];
 };
 
 function ApplicationCard({
@@ -295,6 +297,19 @@ function ApplicationCard({
             <p className="mt-1 text-sm font-semibold text-stone-900">{nextReviewAction.title}</p>
             <p className="mt-1 text-sm leading-6 text-stone-600">{nextReviewAction.description}</p>
           </div>
+          {review.reviewQuestions.length > 0 && (
+            <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/60 p-3">
+              <p className="text-xs font-medium text-emerald-900">面談で確認すること</p>
+              <ul className="mt-2 grid gap-1.5 text-sm leading-6 text-stone-700">
+                {review.reviewQuestions.slice(0, 3).map((question) => (
+                  <li className="flex gap-2" key={question}>
+                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-700" />
+                    <span>{question}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <Link className="btn btn-primary shrink-0" href={`/company/applications/${application.id}`}>面談判断へ</Link>
       </div>
