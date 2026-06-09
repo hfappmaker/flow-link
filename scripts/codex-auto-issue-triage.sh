@@ -135,12 +135,16 @@ if [[ "$current_branch" != "$BRANCH" ]]; then
   fail "Expected branch $BRANCH, but current branch is $current_branch"
 fi
 
-if [[ -n "$(git status --porcelain)" && "$DRY_RUN" != "1" ]]; then
-  fail "Working tree is not clean before issue triage run."
+DIRTY_TREE=0
+if [[ -n "$(git status --porcelain)" ]]; then
+  DIRTY_TREE=1
+  log "Working tree is dirty; issue triage will continue and treat local code as provisional."
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log "DRY_RUN=1; skipping git fetch/pull."
+elif [[ "$DIRTY_TREE" == "1" ]]; then
+  log "Skipping git fetch/pull because the working tree is dirty."
 else
   git fetch "$REMOTE" "$BRANCH"
   git pull --ff-only "$REMOTE" "$BRANCH"
@@ -169,6 +173,14 @@ Hard rules:
 - You may read files, run read-only checks, inspect logs, use network access, and use the gh CLI to create or update GitHub issues.
 - Create or update at most one GitHub issue in this run.
 - If no worthwhile issue exists, create no issue and explain why.
+
+Dirty working tree policy:
+- This triage run may execute when the local working tree has uncommitted changes.
+- If the working tree is dirty, treat local code and browser observations as provisional.
+- Do not create an issue based only on uncommitted local changes.
+- Prefer evidence from Vercel logs, Preview, GitHub issues, committed code, or behavior that still applies to the intended develop branch.
+- If dirty-tree observations are included, explicitly say so in the issue Evidence section.
+- Never edit, format, revert, stage, commit, or push local changes from triage.
 
 Browser verification policy:
 - $BROWSER_POLICY
