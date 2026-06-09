@@ -1,5 +1,8 @@
 import {
   ApplicationStatus,
+  CompanySafetyReportStatus,
+  type CompanySafetyReportType,
+  CompanyVerificationStatus,
   InteractionFeedbackDirection,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
@@ -14,7 +17,14 @@ import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
 type WorkflowDb = Pick<
   PrismaClient,
-  "$transaction" | "freelancerProfile" | "jobPost" | "jobApplication" | "interactionFeedback" | "postInterviewOutcome"
+  | "$transaction"
+  | "companySafetyReport"
+  | "companyVerificationRequest"
+  | "freelancerProfile"
+  | "jobPost"
+  | "jobApplication"
+  | "interactionFeedback"
+  | "postInterviewOutcome"
 >;
 
 type ApplyToJobInput = {
@@ -281,6 +291,118 @@ export async function submitInteractionFeedbackWorkflow(db: WorkflowDb, input: S
       wouldWorkAgain: input.wouldWorkAgain,
       privateNote: input.privateNote,
       moderationStatus: input.moderationStatus,
+    },
+  });
+}
+
+const VERIFICATION_REVIEW_TRANSITIONS: Record<CompanyVerificationStatus, CompanyVerificationStatus[]> = {
+  [CompanyVerificationStatus.submitted]: [CompanyVerificationStatus.confirmed, CompanyVerificationStatus.rejected],
+  [CompanyVerificationStatus.confirmed]: [CompanyVerificationStatus.confirmed, CompanyVerificationStatus.needs_renewal, CompanyVerificationStatus.rejected],
+  [CompanyVerificationStatus.needs_renewal]: [CompanyVerificationStatus.confirmed, CompanyVerificationStatus.rejected],
+  [CompanyVerificationStatus.rejected]: [],
+};
+
+type ReviewCompanyVerificationInput = {
+  requestId: string;
+  status: CompanyVerificationStatus;
+  reviewerNotes: string | null;
+  reasonCode: string | null;
+  confirmedScope: string | null;
+  reviewedAt?: Date;
+  expiresAt: Date | null;
+  renewalRequestedAt?: Date | null;
+};
+
+export async function reviewCompanyVerificationWorkflow(db: WorkflowDb, input: ReviewCompanyVerificationInput) {
+  const request = await db.companyVerificationRequest.findUnique({
+    where: { id: input.requestId },
+    select: { id: true, status: true },
+  });
+  if (!request) throw new Error("確認リクエストが見つかりません。");
+
+  const allowedStatuses = VERIFICATION_REVIEW_TRANSITIONS[request.status as CompanyVerificationStatus] ?? [];
+  if (!allowedStatuses.includes(input.status)) {
+    throw new Error(`確認リクエストを ${request.status} から ${input.status} へ変更することはできません。`);
+  }
+
+  const reviewedAt = input.reviewedAt ?? new Date();
+  if (input.status === CompanyVerificationStatus.confirmed) {
+    if (!input.confirmedScope) throw new Error("承認する確認範囲を入力してください。");
+    if (input.expiresAt && input.expiresAt.getTime() <= reviewedAt.getTime()) {
+      throw new Error("有効期限はレビュー日時より後に設定してください。");
+    }
+  }
+  if (input.status === CompanyVerificationStatus.rejected && !input.reasonCode && !input.reviewerNotes) {
+    throw new Error("却下理由コードまたはレビューメモを入力してください。");
+  }
+  if (input.status === CompanyVerificationStatus.needs_renewal && !input.reasonCode && !input.reviewerNotes) {
+    throw new Error("更新依頼の理由コードまたはレビューメモを入力してください。");
+  }
+
+  return db.companyVerificationRequest.update({
+    where: { id: input.requestId },
+    data: {
+      status: input.status,
+      confirmedScope: input.status === CompanyVerificationStatus.confirmed ? input.confirmedScope : null,
+      reviewerNotes: input.reviewerNotes,
+      reasonCode: input.reasonCode,
+      reviewedAt,
+      expiresAt: input.status === CompanyVerificationStatus.confirmed ? input.expiresAt : null,
+      renewalRequestedAt:
+        input.status === CompanyVerificationStatus.needs_renewal ? (input.renewalRequestedAt ?? reviewedAt) : null,
+    },
+  });
+}
+
+type CreateCompanySafetyReportInput = {
+  companyProfileId: string;
+  reporterUserId: string | null;
+  jobPostId: string | null;
+  reportType: CompanySafetyReportType;
+  detail: string;
+};
+
+export async function createCompanySafetyReportWorkflow(db: WorkflowDb, input: CreateCompanySafetyReportInput) {
+  if (!input.detail.trim()) throw new Error("安全性レポートの詳細を入力してください。");
+
+  return db.companySafetyReport.create({
+    data: {
+      companyProfileId: input.companyProfileId,
+      reporterUserId: input.reporterUserId,
+      jobPostId: input.jobPostId,
+      reportType: input.reportType,
+      detail: input.detail,
+      status: CompanySafetyReportStatus.submitted,
+    },
+  });
+}
+
+type ResolveCompanySafetyReportInput = {
+  reportId: string;
+  internalNote: string;
+  affectedUserNote: string;
+  resolvedAt?: Date;
+};
+
+export async function resolveCompanySafetyReportWorkflow(db: WorkflowDb, input: ResolveCompanySafetyReportInput) {
+  const report = await db.companySafetyReport.findUnique({
+    where: { id: input.reportId },
+    select: { id: true, status: true },
+  });
+  if (!report) throw new Error("安全性レポートが見つかりません。");
+  if (report.status === CompanySafetyReportStatus.resolved) {
+    throw new Error("解決済みの安全性レポートは再解決できません。");
+  }
+  if (!input.internalNote.trim()) throw new Error("社内向けの対応メモを入力してください。");
+  if (!input.affectedUserNote.trim()) throw new Error("影響を受けるユーザー向けの案内を入力してください。");
+
+  return db.companySafetyReport.update({
+    where: { id: input.reportId },
+    data: {
+      status: CompanySafetyReportStatus.resolved,
+      internalNote: input.internalNote,
+      affectedUserNote: input.affectedUserNote,
+      resolvedAt: input.resolvedAt ?? new Date(),
     },
   });
 }

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ApplicationStatus,
+  CompanySafetyReportStatus,
+  CompanySafetyReportType,
+  CompanyVerificationStatus,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
@@ -11,8 +14,11 @@ import {
 
 const {
   applyToJobWorkflow,
+  createCompanySafetyReportWorkflow,
   recordCompanyPostInterviewOutcomeWorkflow,
   recordFreelancerPostInterviewOutcomeWorkflow,
+  resolveCompanySafetyReportWorkflow,
+  reviewCompanyVerificationWorkflow,
   screenApplicationWorkflow,
   sendInterviewMessageWorkflow,
   submitInteractionFeedbackWorkflow,
@@ -90,6 +96,30 @@ function workflowDb(overrides = {}) {
     $transaction: async (callbackOrOperations) => {
       if (typeof callbackOrOperations === "function") return callbackOrOperations(tx);
       return Promise.all(callbackOrOperations);
+    },
+    companyVerificationRequest: {
+      findUnique: async (args) => {
+        calls.push(["companyVerificationRequest.findUnique", args]);
+        return overrides.verificationRequest ?? { id: "verification-1", status: CompanyVerificationStatus.submitted };
+      },
+      update: async (args) => {
+        calls.push(["companyVerificationRequest.update", args]);
+        return { id: args.where.id, ...args.data };
+      },
+    },
+    companySafetyReport: {
+      findUnique: async (args) => {
+        calls.push(["companySafetyReport.findUnique", args]);
+        return overrides.safetyReport ?? { id: "safety-report-1", status: CompanySafetyReportStatus.submitted };
+      },
+      create: async (args) => {
+        calls.push(["companySafetyReport.create", args]);
+        return { id: "safety-report-1", ...args.data };
+      },
+      update: async (args) => {
+        calls.push(["companySafetyReport.update", args]);
+        return { id: args.where.id, ...args.data };
+      },
     },
   };
   return db;
@@ -334,4 +364,157 @@ test("feedback edit attempts after 14 days are rejected", async () => {
     /フィードバックの編集期限を過ぎています。/,
   );
   assert.equal(db.calls.filter(([name]) => name === "interactionFeedback.upsert").length, 0);
+});
+
+test("submitted verification request can be confirmed with review metadata", async () => {
+  const db = workflowDb();
+  const reviewedAt = new Date("2026-06-09T12:00:00.000Z");
+  const expiresAt = new Date("2026-12-09T12:00:00.000Z");
+
+  await reviewCompanyVerificationWorkflow(db, {
+    requestId: "verification-1",
+    status: CompanyVerificationStatus.confirmed,
+    reviewerNotes: "登記情報と公開連絡先を照合",
+    reasonCode: null,
+    confirmedScope: "法人名、公開URL、採用窓口",
+    reviewedAt,
+    expiresAt,
+  });
+
+  const update = db.calls.find(([name]) => name === "companyVerificationRequest.update");
+  assert.equal(update[1].where.id, "verification-1");
+  assert.deepEqual(update[1].data, {
+    status: CompanyVerificationStatus.confirmed,
+    confirmedScope: "法人名、公開URL、採用窓口",
+    reviewerNotes: "登記情報と公開連絡先を照合",
+    reasonCode: null,
+    reviewedAt,
+    expiresAt,
+    renewalRequestedAt: null,
+  });
+});
+
+test("confirmed verification request can be marked needs renewal with renewal timestamp", async () => {
+  const db = workflowDb({
+    verificationRequest: { id: "verification-1", status: CompanyVerificationStatus.confirmed },
+  });
+  const reviewedAt = new Date("2026-06-09T12:00:00.000Z");
+
+  await reviewCompanyVerificationWorkflow(db, {
+    requestId: "verification-1",
+    status: CompanyVerificationStatus.needs_renewal,
+    reviewerNotes: "支払い条件の公開情報が古い",
+    reasonCode: "payment_terms_expired",
+    confirmedScope: null,
+    reviewedAt,
+    expiresAt: null,
+  });
+
+  const update = db.calls.find(([name]) => name === "companyVerificationRequest.update");
+  assert.equal(update[1].data.status, CompanyVerificationStatus.needs_renewal);
+  assert.equal(update[1].data.confirmedScope, null);
+  assert.equal(update[1].data.expiresAt, null);
+  assert.equal(update[1].data.renewalRequestedAt, reviewedAt);
+});
+
+test("verification workflow rejects invalid transitions and expired confirmations", async () => {
+  const rejectedDb = workflowDb({
+    verificationRequest: { id: "verification-1", status: CompanyVerificationStatus.rejected },
+  });
+  await assert.rejects(
+    () =>
+      reviewCompanyVerificationWorkflow(rejectedDb, {
+        requestId: "verification-1",
+        status: CompanyVerificationStatus.confirmed,
+        reviewerNotes: "再審査",
+        reasonCode: null,
+        confirmedScope: "法人確認",
+        reviewedAt: new Date("2026-06-09T00:00:00.000Z"),
+        expiresAt: new Date("2026-12-09T00:00:00.000Z"),
+      }),
+    /rejected から confirmed へ変更することはできません。/,
+  );
+  assert.equal(rejectedDb.calls.filter(([name]) => name === "companyVerificationRequest.update").length, 0);
+
+  const expiredDb = workflowDb();
+  await assert.rejects(
+    () =>
+      reviewCompanyVerificationWorkflow(expiredDb, {
+        requestId: "verification-1",
+        status: CompanyVerificationStatus.confirmed,
+        reviewerNotes: "期限が不正",
+        reasonCode: null,
+        confirmedScope: "法人確認",
+        reviewedAt: new Date("2026-06-09T00:00:00.000Z"),
+        expiresAt: new Date("2026-06-08T00:00:00.000Z"),
+      }),
+    /有効期限はレビュー日時より後に設定してください。/,
+  );
+  assert.equal(expiredDb.calls.filter(([name]) => name === "companyVerificationRequest.update").length, 0);
+});
+
+test("safety report workflow creates submitted reports and resolves them with affected-user guidance", async () => {
+  const db = workflowDb();
+
+  await createCompanySafetyReportWorkflow(db, {
+    companyProfileId: "company-profile-1",
+    reporterUserId: "freelancer-user-1",
+    jobPostId: "job-1",
+    reportType: CompanySafetyReportType.off_platform_payment_request,
+    detail: "面談後に外部決済を求められた",
+  });
+
+  const create = db.calls.find(([name]) => name === "companySafetyReport.create");
+  assert.deepEqual(create[1].data, {
+    companyProfileId: "company-profile-1",
+    reporterUserId: "freelancer-user-1",
+    jobPostId: "job-1",
+    reportType: CompanySafetyReportType.off_platform_payment_request,
+    detail: "面談後に外部決済を求められた",
+    status: CompanySafetyReportStatus.submitted,
+  });
+
+  const resolvedAt = new Date("2026-06-09T13:00:00.000Z");
+  await resolveCompanySafetyReportWorkflow(db, {
+    reportId: "safety-report-1",
+    internalNote: "会社に確認し募集文の修正を依頼",
+    affectedUserNote: "外部決済には応じず、契約条件をFlow Link上で再確認してください。",
+    resolvedAt,
+  });
+
+  const update = db.calls.find(([name]) => name === "companySafetyReport.update");
+  assert.deepEqual(update[1].data, {
+    status: CompanySafetyReportStatus.resolved,
+    internalNote: "会社に確認し募集文の修正を依頼",
+    affectedUserNote: "外部決済には応じず、契約条件をFlow Link上で再確認してください。",
+    resolvedAt,
+  });
+});
+
+test("safety report resolution requires an open report and user-facing guidance", async () => {
+  const resolvedDb = workflowDb({
+    safetyReport: { id: "safety-report-1", status: CompanySafetyReportStatus.resolved },
+  });
+  await assert.rejects(
+    () =>
+      resolveCompanySafetyReportWorkflow(resolvedDb, {
+        reportId: "safety-report-1",
+        internalNote: "二重処理",
+        affectedUserNote: "対応済み",
+      }),
+    /解決済みの安全性レポートは再解決できません。/,
+  );
+  assert.equal(resolvedDb.calls.filter(([name]) => name === "companySafetyReport.update").length, 0);
+
+  const missingGuidanceDb = workflowDb();
+  await assert.rejects(
+    () =>
+      resolveCompanySafetyReportWorkflow(missingGuidanceDb, {
+        reportId: "safety-report-1",
+        internalNote: "会社へ確認済み",
+        affectedUserNote: " ",
+      }),
+    /影響を受けるユーザー向けの案内を入力してください。/,
+  );
+  assert.equal(missingGuidanceDb.calls.filter(([name]) => name === "companySafetyReport.update").length, 0);
 });
