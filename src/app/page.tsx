@@ -20,7 +20,7 @@ export default async function Home() {
       <section className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
         <div>
           <StatusBadge tone="good">条件確認から面談まで管理</StatusBadge>
-          <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-tight tracking-normal text-stone-950">
+          <h1 className="mt-5 max-w-3xl text-[2rem] font-semibold leading-[1.28] tracking-normal text-stone-950 sm:text-5xl sm:leading-tight">
             企業とフリーランスが、条件確認から面談まで迷わず進める。
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-stone-600">
