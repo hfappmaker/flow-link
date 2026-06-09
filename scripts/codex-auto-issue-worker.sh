@@ -5,7 +5,7 @@ REPO_DIR="${REPO_DIR:-/workspaces/flow-link}"
 BRANCH="${BRANCH:-develop}"
 REMOTE="${REMOTE:-origin}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/.codex-automation/issue-worker-logs}"
-LOCK_FILE="${LOCK_FILE:-$REPO_DIR/.codex-automation/automation.lock}"
+LOCK_FILE="${LOCK_FILE:-$REPO_DIR/.codex-automation/issue-worker.lock}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 NODE_BIN_DIR="${NODE_BIN_DIR:-/usr/local/bin}"
 ENV_FILE="${ENV_FILE:-$REPO_DIR/.devcontainer/.env}"
@@ -91,7 +91,7 @@ fi
 
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
-  log "Another Codex automation run is already active; exiting."
+  log "Another Codex issue worker run is already active; exiting."
   exit 0
 fi
 
