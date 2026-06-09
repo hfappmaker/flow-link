@@ -197,6 +197,15 @@ export default async function JobsPage({
   const freshCandidateCount = freelancerProfile
     ? jobs.filter((job) => !appliedJobIds.has(job.id) && !savedJobIds.has(job.id)).length
     : 0;
+  const discoveryIntentCounts = freelancerProfile
+    ? buildDiscoveryIntentCounts({
+        appliedJobIds,
+        freelancerSkills: freelancerProfile.skills,
+        jobs: rankedJobs,
+        readinessComplete: readiness.isReady,
+        savedJobIds,
+      })
+    : null;
 
   return (
     <Shell>
@@ -345,6 +354,14 @@ export default async function JobsPage({
             skills={parseSkills(freelancerProfile.skills).slice(0, 6)}
           />
         )}
+        {freelancerProfile && discoveryIntentCounts && (
+          <DiscoveryIntentPanel
+            counts={discoveryIntentCounts}
+            keyword={keyword}
+            remote={remote}
+            readinessComplete={readiness.isReady}
+          />
+        )}
         {priorityJobs.length > 0 && (
           <DirectPriorityStrip
             freelancerProfile={freelancerProfile}
@@ -393,6 +410,150 @@ type RankedJob = {
   directScore: number;
   contractReadinessPercent: number;
 };
+
+type DiscoveryIntentCounts = {
+  readyToApply: number;
+  skillMatched: number;
+  conditionReady: number;
+  fresh: number;
+  preparation: number;
+};
+
+function buildDiscoveryIntentCounts({
+  appliedJobIds,
+  freelancerSkills,
+  jobs,
+  readinessComplete,
+  savedJobIds,
+}: {
+  appliedJobIds: Set<string>;
+  freelancerSkills?: string | null;
+  jobs: RankedJob[];
+  readinessComplete: boolean;
+  savedJobIds: Set<string>;
+}) {
+  return jobs.reduce<DiscoveryIntentCounts>(
+    (counts, { job, directScore, contractReadinessPercent }) => {
+      const isOpen = job.applicationStatus === "open";
+      const isFresh = !appliedJobIds.has(job.id) && !savedJobIds.has(job.id);
+
+      if (isOpen && isFresh && readinessComplete && directScore >= 70 && contractReadinessPercent >= 80) {
+        counts.readyToApply += 1;
+      }
+      if (isOpen && isFresh && (skillMatchPercent(job.requiredSkills, freelancerSkills) ?? 0) > 0) {
+        counts.skillMatched += 1;
+      }
+      if (isOpen && contractReadinessPercent === 100) {
+        counts.conditionReady += 1;
+      }
+      if (isFresh) {
+        counts.fresh += 1;
+      }
+      if (isOpen && isFresh && !readinessComplete) {
+        counts.preparation += 1;
+      }
+
+      return counts;
+    },
+    { readyToApply: 0, skillMatched: 0, conditionReady: 0, fresh: 0, preparation: 0 },
+  );
+}
+
+function DiscoveryIntentPanel({
+  counts,
+  keyword,
+  readinessComplete,
+  remote,
+}: {
+  counts: DiscoveryIntentCounts;
+  keyword: string;
+  readinessComplete: boolean;
+  remote: boolean;
+}) {
+  const intents = [
+    readinessComplete
+      ? {
+          title: "応募へ進みやすい案件を確認",
+          description: "応募受付中で、条件と登録内容の確認材料が揃った候補を先に見ます。",
+          count: counts.readyToApply,
+          href: jobsHref({ q: keyword, remote, accepting: true, fit: "ready", sort: "direct", candidate: "fresh" }),
+          label: "候補を見る",
+          tone: "good" as const,
+        }
+      : {
+          title: "応募準備を終わらせる",
+          description: "応募前に不足しているプロフィール、職務経歴、PDF書類を先に整えます。",
+          count: counts.preparation,
+          href: "/freelancer",
+          label: "応募準備へ",
+          tone: "warn" as const,
+        },
+    {
+      title: "登録スキルに近い案件を探す",
+      description: "必須スキルとの一致がある未対応の候補に絞ります。",
+      count: counts.skillMatched,
+      href: jobsHref({ q: keyword, remote, accepting: true, fit: "skill", sort: "direct", candidate: "fresh" }),
+      label: "スキル一致を見る",
+      tone: counts.skillMatched > 0 ? "good" as const : "neutral" as const,
+    },
+    {
+      title: "条件確認しやすい案件を選ぶ",
+      description: "単価、稼働量、選考フロー、契約・支払い条件が揃った案件を確認します。",
+      count: counts.conditionReady,
+      href: jobsHref({ q: keyword, remote, accepting: true, directReady: true, sort: "direct" }),
+      label: "条件が揃った案件",
+      tone: counts.conditionReady > 0 ? "good" as const : "neutral" as const,
+    },
+    {
+      title: "未対応の候補を整理",
+      description: "保存・応募していない候補だけを見て、検討リストへ入れるか判断します。",
+      count: counts.fresh,
+      href: jobsHref({ q: keyword, remote, accepting: true, sort: "direct", candidate: "fresh" }),
+      label: "未対応を見る",
+      tone: counts.fresh > 0 ? "neutral" as const : "warn" as const,
+    },
+  ];
+
+  return (
+    <section className="mt-5 rounded-md border border-stone-200 bg-white p-5">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="font-semibold">案件探しの進め方</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
+            今の応募準備と検索条件に合わせて、次に見るべき候補を選べます。
+          </p>
+        </div>
+        <Link className="btn btn-secondary" href="/freelancer/saved-jobs">検討リストを見る</Link>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        {intents.map((intent) => (
+          <Link
+            className={`rounded-md border p-4 transition hover:border-emerald-400 ${
+              intent.tone === "good"
+                ? "border-emerald-200 bg-emerald-50/70"
+                : intent.tone === "warn"
+                  ? "border-amber-200 bg-amber-50/70"
+                  : "border-stone-200 bg-stone-50"
+            }`}
+            href={intent.href}
+            key={intent.title}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-sm font-semibold leading-6 text-stone-950">{intent.title}</h3>
+              <span className="shrink-0 rounded border border-white bg-white px-2 py-1 text-xs font-semibold text-stone-800">
+                {intent.count}件
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-stone-600">{intent.description}</p>
+            <span className="mt-3 inline-flex text-sm font-semibold text-emerald-700">
+              {intent.label} {icons.arrow}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function ProfileDiscoveryShortcuts({
   activeFit,
