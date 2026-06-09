@@ -159,6 +159,9 @@ export default async function JobDetailPage({
         contactSignal: freelancerProfile.remotePreference,
       })
     : "";
+  const jobCallbackUrl = `/jobs/${job.id}`;
+  const jobRegisterHref = `/register?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
+  const jobLoginHref = `/login?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
 
   return (
     <Shell>
@@ -431,7 +434,20 @@ export default async function JobDetailPage({
               ) : session ? (
                 <p className="text-sm text-stone-600">応募にはフリーランスアカウントが必要です。</p>
               ) : (
-                <Link className="btn btn-primary w-full" href={`/login?callbackUrl=/jobs/${job.id}`}>ログインして応募</Link>
+                <div>
+                  <p className="font-semibold">この案件への応募準備を始める</p>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    無料登録すると、この案件に戻ってプロフィールや提案文の準備を進められます。
+                  </p>
+                  <div className="mt-4 grid gap-2">
+                    <Link className="btn btn-primary w-full" href={jobRegisterHref}>
+                      登録して応募準備を始める
+                    </Link>
+                    <Link className="btn btn-secondary w-full" href={jobLoginHref}>
+                      ログインして応募
+                    </Link>
+                  </div>
+                </div>
               )}
             </Card>
           </div>
