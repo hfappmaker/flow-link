@@ -90,6 +90,19 @@ cleanup_success_worktree() {
   fi
 }
 
+cleanup_remote_branch() {
+  local branch_name="$1"
+
+  if git ls-remote --exit-code --heads "$REMOTE" "$branch_name" >/dev/null 2>&1; then
+    log "Deleting remote branch $REMOTE/$branch_name"
+    git push "$REMOTE" --delete "$branch_name" >/dev/null 2>&1 || \
+      gh api -X DELETE "repos/:owner/:repo/git/refs/heads/$branch_name" >/dev/null 2>&1 || \
+      log "WARNING: Failed to delete remote branch $REMOTE/$branch_name"
+  else
+    log "Remote branch $REMOTE/$branch_name is already deleted."
+  fi
+}
+
 export PATH="$NODE_BIN_DIR:$PATH"
 cd "$REPO_DIR"
 
@@ -358,6 +371,7 @@ gh issue edit "$ISSUE_NUMBER" --remove-label "codex:ready" >/dev/null 2>&1 || tr
 gh issue edit "$ISSUE_NUMBER" --add-label "codex:done" >/dev/null 2>&1 || true
 gh issue comment "$ISSUE_NUMBER" --body "Codex issue worker merged PR: $PR_URL" >/dev/null || true
 
+cleanup_remote_branch "$WORK_BRANCH"
 git fetch "$REMOTE" "$BRANCH"
 git pull --ff-only "$REMOTE" "$BRANCH"
 cleanup_success_worktree "$WORKTREE_DIR"
