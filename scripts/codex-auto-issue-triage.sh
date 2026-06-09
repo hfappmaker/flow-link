@@ -12,6 +12,11 @@ ENV_FILE="${ENV_FILE:-$REPO_DIR/.devcontainer/.env}"
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 MODE=""
 DRY_RUN="${DRY_RUN:-0}"
+MATURITY_GATE_ENABLED="${MATURITY_GATE_ENABLED:-1}"
+MAX_READY_ISSUES="${MAX_READY_ISSUES:-8}"
+MAX_READY_PER_MODE="${MAX_READY_PER_MODE:-3}"
+MAX_RECENT_MODE_ISSUES="${MAX_RECENT_MODE_ISSUES:-5}"
+RECENT_ISSUE_DAYS="${RECENT_ISSUE_DAYS:-7}"
 
 usage() {
   cat <<'EOF'
@@ -116,6 +121,50 @@ ensure_label() {
   fi
 }
 
+count_issues() {
+  gh issue list "$@" --json number --jq 'length' 2>/dev/null || printf '0\n'
+}
+
+count_recent_mode_issues() {
+  gh issue list \
+    --state all \
+    --label "codex" \
+    --label "$AREA_LABEL" \
+    --limit 100 \
+    --json createdAt \
+    --jq "[.[] | select((now - (.createdAt | fromdateiso8601)) <= ($RECENT_ISSUE_DAYS * 86400))] | length" \
+    2>/dev/null || printf '0\n'
+}
+
+run_maturity_gate() {
+  if [[ "$MATURITY_GATE_ENABLED" != "1" ]]; then
+    log "MATURITY_GATE_ENABLED=$MATURITY_GATE_ENABLED; maturity gate is disabled."
+    return 0
+  fi
+
+  local ready_total ready_mode recent_mode
+  ready_total="$(count_issues --state open --label "codex" --label "codex:ready" --limit 100)"
+  ready_mode="$(count_issues --state open --label "codex" --label "codex:ready" --label "$AREA_LABEL" --limit 100)"
+  recent_mode="$(count_recent_mode_issues)"
+
+  log "Maturity gate: ready_total=$ready_total/$MAX_READY_ISSUES ready_mode=$ready_mode/$MAX_READY_PER_MODE recent_mode_${RECENT_ISSUE_DAYS}d=$recent_mode/$MAX_RECENT_MODE_ISSUES"
+
+  if (( ready_total >= MAX_READY_ISSUES )); then
+    log "Maturity gate skipped $MODE triage: open codex:ready backlog is at or above threshold."
+    exit 0
+  fi
+
+  if (( ready_mode >= MAX_READY_PER_MODE )); then
+    log "Maturity gate skipped $MODE triage: this mode already has enough open codex:ready issues."
+    exit 0
+  fi
+
+  if (( recent_mode >= MAX_RECENT_MODE_ISSUES )); then
+    log "Maturity gate skipped $MODE triage: this mode created enough recent issues in the last $RECENT_ISSUE_DAYS days."
+    exit 0
+  fi
+}
+
 export PATH="$NODE_BIN_DIR:$PATH"
 cd "$REPO_DIR"
 
@@ -177,6 +226,8 @@ if ! gh auth status >/dev/null 2>&1; then
   fail "gh is not authenticated. Set GH_TOKEN or GITHUB_TOKEN and run gh auth login/setup."
 fi
 
+run_maturity_gate
+
 PROMPT=$(cat <<PROMPT_EOF
 You are running as a scheduled GitHub Issue triage automation for this repository.
 
@@ -189,6 +240,11 @@ Strategic goal:
 - Do not create an issue unless it clearly improves at least one of: freelancer acquisition or activation, company acquisition or activation, trust and perceived reliability, speed from registration to useful match/application, clarity of job/company/freelancer fit, reduction of friction compared with competitor workflows, or reliability of the core marketplace flow.
 - Prefer issues that create a concrete reason for a freelancer or company already using a competitor to try, trust, or switch to Flow Link.
 - Skip cosmetic, speculative, or internally interesting issues when their competitive relevance is weak.
+
+Maturity and stopping conditions:
+- The wrapper skips this run before Codex starts when open codex:ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds configured thresholds.
+- Even when the wrapper allows the run, do not create an issue if the main freelancer/company marketplace flows already appear competitively adequate for this mode and no high-leverage gap is found.
+- Treat "no issue created" as a valid successful outcome when further changes would be low-impact iteration rather than a credible reason for competitor users to try or switch to Flow Link.
 
 Hard rules:
 - Do not edit repository files.
