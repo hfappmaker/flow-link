@@ -264,11 +264,7 @@ export default async function JobsPage({
         {showDiscoveryControls && (
           <Card className="mt-6">
             <form
-              className={`grid gap-3 md:grid-cols-2 ${
-                freelancerProfile
-                  ? "lg:grid-cols-[minmax(220px,1fr)_repeat(7,minmax(112px,145px))_auto_auto]"
-                  : "lg:grid-cols-[minmax(220px,1fr)_repeat(6,minmax(118px,150px))_auto_auto]"
-              }`}
+              className="grid gap-3 md:grid-cols-2 lg:grid-cols-4"
               action="/jobs"
             >
               <label className="grid gap-1.5 text-sm font-medium text-stone-700">
@@ -360,8 +356,10 @@ export default async function JobsPage({
                 </select>
               </label>
               {fit && <input type="hidden" name="fit" value={fit} />}
-              <button className="btn btn-primary self-end" type="submit">検索</button>
-              <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
+              <div className="grid gap-3 md:col-span-2 md:grid-cols-2 lg:col-span-4 lg:flex lg:justify-end">
+                <button className="btn btn-primary w-full lg:w-32" type="submit">検索</button>
+                <Link className="btn btn-secondary w-full lg:w-32" href="/jobs">クリア</Link>
+              </div>
             </form>
             <p className="mt-3 text-sm text-stone-500">
               {resultSummary}
