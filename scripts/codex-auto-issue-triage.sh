@@ -49,26 +49,31 @@ case "$MODE" in
     AREA_LABEL="area:bug"
     MODE_TITLE="Bug triage"
     MODE_FOCUS="Find real runtime errors and broken flows from Vercel Preview logs, local checks, DB/Blob/API failures, form failures, redirects, and browser-visible errors. Navigation that fails with 404/500 belongs here."
+    BROWSER_POLICY="Playwright browser verification is required by default for bug triage. Reproduce or inspect the user-visible failure with Playwright against localhost or Preview before creating an issue. If Playwright cannot run, use HTTP/log checks as a fallback and state the exact browser launch or environment blocker in the issue Evidence and Verification plan."
     ;;
   product)
     AREA_LABEL="area:product"
     MODE_TITLE="Product triage"
     MODE_FOCUS="Find product gaps from competitor comparison, user value, positioning, business workflow, trust, matching quality, conversion, and whether the service solves the right user problem."
+    BROWSER_POLICY="Playwright is optional for product triage. Use it when evaluating an existing user flow; otherwise competitor research, static inspection, and product reasoning are sufficient."
     ;;
   ux)
     AREA_LABEL="area:ux"
     MODE_TITLE="UX triage"
     MODE_FOCUS="Find issues in navigation, screen transitions, user flow, confusing copy, input burden, empty/loading/error states, and developer-facing terms that freelancers or companies should not need to understand."
+    BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
     ;;
   visual-design)
     AREA_LABEL="area:visual-design"
     MODE_TITLE="Visual design triage"
     MODE_FOCUS="Find visual design issues in layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, component consistency, and whether screens look professionally composed."
+    BROWSER_POLICY="Playwright browser verification is required by default for visual-design triage. Capture or inspect at least desktop and mobile viewports before creating an issue. If screenshots or browser launch fail, state the exact blocker in the issue Evidence and Verification plan."
     ;;
   maintainability)
     AREA_LABEL="area:maintainability"
     MODE_TITLE="Maintainability triage"
     MODE_FOCUS="Find maintainability risks in code structure, responsibility boundaries, type safety, duplicated logic, missing tests, fragile data flow, unsafe assumptions, and operational risk."
+    BROWSER_POLICY="Playwright is not required for maintainability triage unless the maintainability concern is tied to a visible flow. Prefer static inspection, typecheck, lint, tests, and build signals."
     ;;
   *)
     echo "Missing or invalid --mode: $MODE" >&2
@@ -164,6 +169,12 @@ Hard rules:
 - You may read files, run read-only checks, inspect logs, use network access, and use the gh CLI to create or update GitHub issues.
 - Create or update at most one GitHub issue in this run.
 - If no worthwhile issue exists, create no issue and explain why.
+
+Browser verification policy:
+- $BROWSER_POLICY
+- Prefer Playwright with Chromium in headless mode and sandbox disabled when needed, for example: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
+- Prefer read-only browser checks. Do not write to Preview unless the issue truly needs it; if Preview write-path verification is needed, label the issue needs:preview-write and define cleanup requirements.
+- Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
 
 Repository workflow:
 - Use gh CLI in this repository.
