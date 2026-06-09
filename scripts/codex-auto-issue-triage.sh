@@ -131,8 +131,10 @@ if ! flock -n 9; then
 fi
 
 current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != "$BRANCH" ]]; then
+if [[ "$current_branch" != "$BRANCH" && "${GITHUB_ACTIONS:-}" != "true" && "${SKIP_BRANCH_CHECK:-0}" != "1" ]]; then
   fail "Expected branch $BRANCH, but current branch is $current_branch"
+elif [[ "$current_branch" != "$BRANCH" ]]; then
+  log "Skipping branch-name check in CI or because SKIP_BRANCH_CHECK=1. current_branch=${current_branch:-detached}, expected=$BRANCH"
 fi
 
 DIRTY_TREE=0
@@ -143,6 +145,8 @@ fi
 
 if [[ "$DRY_RUN" == "1" ]]; then
   log "DRY_RUN=1; skipping git fetch/pull."
+elif [[ "${TRIAGE_SKIP_GIT_SYNC:-0}" == "1" ]]; then
+  log "TRIAGE_SKIP_GIT_SYNC=1; skipping git fetch/pull."
 elif [[ "$DIRTY_TREE" == "1" ]]; then
   log "Skipping git fetch/pull because the working tree is dirty."
 else
@@ -188,6 +192,8 @@ Browser verification policy:
 - Prefer read-only browser checks. Do not write to Preview unless the issue truly needs it; if Preview write-path verification is needed, label the issue needs:preview-write and define cleanup requirements.
 - Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
 - For visual-design mode, screenshots are mandatory evidence. Store them in .codex-automation/screenshots/ and mention the exact paths in the issue body.
+- In GitHub Actions, use the local app and service Postgres by default. Start the app on 127.0.0.1 using an available non-default port such as 3010 when browser checks are needed.
+- In GitHub Actions, Preview browser checks are only for bug mode and only when VERCEL_AUTOMATION_BYPASS_SECRET is available. Use the x-vercel-protection-bypass header and x-vercel-set-bypass-cookie=true. If the secret is missing and Preview is protected, record that as Preview-protection evidence instead of failing the run.
 
 Repository workflow:
 - Use gh CLI in this repository.
@@ -255,10 +261,12 @@ log "Running Codex CLI for issue triage"
   --output-last-message "$LAST_MESSAGE_FILE" \
   "$PROMPT"
 
-if [[ -n "$(git status --porcelain)" ]]; then
+if [[ "$DIRTY_TREE" == "0" && -n "$(git status --porcelain)" ]]; then
   log "Codex issue triage left repository changes:"
   git status --short
   fail "Issue triage must not edit repository files."
+elif [[ "$DIRTY_TREE" == "1" ]]; then
+  log "Repository was dirty before triage; skipping final dirty-tree failure."
 fi
 
 log "Codex issue triage completed mode=$MODE"
