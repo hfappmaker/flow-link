@@ -1,15 +1,17 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { logoutUser } from "@/lib/actions";
+import {
+  buildJobRecommendation,
+  rankJobRecommendations,
+  sortJobRecommendations,
+} from "@/lib/job-recommendations";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   directContractChecklist,
   formatDateTime,
-  matchedSkills,
-  preferenceAwareMatchScore,
-  skillMatchPercent,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
 } from "@/lib/utils";
@@ -25,7 +27,7 @@ export default async function FreelancerDashboard() {
       documents: true,
       careerHistory: true,
       savedJobs: {
-        include: { jobPost: { include: { companyProfile: true } } },
+        include: { jobPost: { include: { companyProfile: { include: { verificationRequests: true } } } } },
         orderBy: { createdAt: "desc" },
       },
       savedJobSearches: { orderBy: { createdAt: "desc" }, take: 3 },
@@ -62,33 +64,38 @@ export default async function FreelancerDashboard() {
   const readiness = getFreelancerReadiness(profile);
   const preferenceCompleteness = workPreferenceCompleteness(profile.workPreference);
   const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
+  const savedJobIds = new Set(profile.savedJobs.map((savedJob) => savedJob.jobPostId));
   const recommendationCandidates = await prisma.jobPost.findMany({
     where: {
       status: "published",
       applicationStatus: "open",
       id: { notIn: Array.from(appliedJobIds) },
     },
-    include: { companyProfile: true },
+    include: { companyProfile: { include: { verificationRequests: true } } },
     orderBy: { createdAt: "desc" },
-    take: 24,
   });
-  const recommendedJobs = recommendationCandidates
-    .map((job) => {
-      const contractReadiness = directContractChecklist(job);
-      const matchPercent = skillMatchPercent(job.requiredSkills, profile.skills);
-      const matched = matchedSkills(job.requiredSkills, profile.skills);
-      const preferenceReasons = visiblePreferenceReasons({ ...job, workPreference: profile.workPreference }, 4);
-      const score = preferenceAwareMatchScore({
-        ...job,
-        freelancerReadinessPercent: readiness.percent,
-        freelancerSkills: profile.skills,
-        workPreference: profile.workPreference,
-      });
-
-      return { job, contractReadiness, matchPercent, matched, preferenceReasons, score };
+  const recommendedJobs = rankJobRecommendations(recommendationCandidates, {
+    appliedJobIds,
+    freelancerReadinessPercent: readiness.percent,
+    freelancerSkills: profile.skills,
+    savedJobIds,
+    workPreference: profile.workPreference,
+  }).slice(0, 3);
+  const savedJobByJobId = new Map(profile.savedJobs.map((savedJob) => [savedJob.jobPostId, savedJob]));
+  const rankedSavedJobs = sortJobRecommendations(
+    profile.savedJobs.map((savedJob) => buildJobRecommendation(savedJob.jobPost, {
+      appliedJobIds,
+      freelancerReadinessPercent: readiness.percent,
+      freelancerSkills: profile.skills,
+      savedJobIds,
+      workPreference: profile.workPreference,
+    }, { preferenceReasonLimit: 3 })),
+  )
+    .map((recommendation) => {
+      const savedJob = savedJobByJobId.get(recommendation.job.id);
+      return savedJob ? { savedJob, recommendation } : null;
     })
-    .sort((a, b) => b.score - a.score || b.contractReadiness.percent - a.contractReadiness.percent || b.job.createdAt.getTime() - a.job.createdAt.getTime())
-    .slice(0, 3);
+    .filter((item) => item !== null);
 
   return (
     <Shell>
@@ -179,16 +186,16 @@ export default async function FreelancerDashboard() {
           )}
           {recommendedJobs.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-3">
-              {recommendedJobs.map(({ job, contractReadiness, matchPercent, matched, preferenceReasons, score }) => (
+              {recommendedJobs.map(({ job, contractReadinessPercent, matchPercent, matched, preferenceReasons, directScore }) => (
                 <RecommendedJobCard
-                  contractPercent={contractReadiness.percent}
+                  contractPercent={contractReadinessPercent}
                   job={job}
                   key={job.id}
                   matched={matched}
                   matchPercent={matchPercent}
                   preferenceReasons={preferenceReasons}
                   readinessComplete={readiness.isReady}
-                  score={score}
+                  score={directScore}
                 />
               ))}
             </div>
@@ -212,27 +219,16 @@ export default async function FreelancerDashboard() {
           </div>
           {profile.savedJobs.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-3">
-              {profile.savedJobs
-                .map((savedJob) => ({
-                  savedJob,
-                  score: preferenceAwareMatchScore({
-                    ...savedJob.jobPost,
-                    freelancerReadinessPercent: readiness.percent,
-                    freelancerSkills: profile.skills,
-                    workPreference: profile.workPreference,
-                  }),
-                  preferenceReasons: visiblePreferenceReasons({ ...savedJob.jobPost, workPreference: profile.workPreference }, 3),
-                }))
-                .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime())
+              {rankedSavedJobs
                 .slice(0, 3)
-                .map(({ savedJob, preferenceReasons, score }) => (
+                .map(({ savedJob, recommendation }) => (
                 <SavedJobCard
                   job={savedJob.jobPost}
                   key={savedJob.id}
-                  preferenceReasons={preferenceReasons}
+                  preferenceReasons={recommendation.preferenceReasons}
                   savedAt={savedJob.createdAt}
                   savedNote={savedJob.note}
-                  score={score}
+                  score={recommendation.directScore}
                 />
               ))}
             </div>
@@ -258,7 +254,7 @@ export default async function FreelancerDashboard() {
   );
 }
 
-type SavedDashboardJob = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type SavedDashboardJob = Prisma.JobPostGetPayload<{ include: { companyProfile: { include: { verificationRequests: true } } } }>;
 
 type InterviewQueueApplication = Prisma.JobApplicationGetPayload<{
   include: {
@@ -395,7 +391,7 @@ function SavedJobCard({
   );
 }
 
-type RecommendedJob = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type RecommendedJob = Prisma.JobPostGetPayload<{ include: { companyProfile: { include: { verificationRequests: true } } } }>;
 
 function RecommendedJobCard({
   contractPercent,

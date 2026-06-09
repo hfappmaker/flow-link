@@ -1,15 +1,16 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { removeSavedJob, saveJobForReview } from "@/lib/actions";
+import {
+  buildJobRecommendation,
+  countReadySavedJobs,
+  sortJobRecommendations,
+} from "@/lib/job-recommendations";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   directContractChecklist,
   formatDateTime,
-  matchedSkills,
-  parseSkills,
-  preferenceAwareMatchScore,
-  skillMatchPercent,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
 } from "@/lib/utils";
@@ -26,7 +27,7 @@ export default async function SavedJobsPage() {
       workPreference: true,
       applications: { select: { jobPostId: true, status: true } },
       savedJobs: {
-        include: { jobPost: { include: { companyProfile: true } } },
+        include: { jobPost: { include: { companyProfile: { include: { verificationRequests: true } } } } },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -34,27 +35,28 @@ export default async function SavedJobsPage() {
   const readiness = getFreelancerReadiness(profile);
   const preferenceCompleteness = workPreferenceCompleteness(profile.workPreference);
   const appliedByJobId = new Map(profile.applications.map((application) => [application.jobPostId, application.status]));
+  const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
+  const savedJobIds = new Set(profile.savedJobs.map((savedJob) => savedJob.jobPostId));
   const savedJobs =
-    profile.savedJobs
-      .map((savedJob) => {
-        const job = savedJob.jobPost;
-        const contractReadiness = directContractChecklist(job);
-        const requiredSkills = parseSkills(job.requiredSkills);
-        const matchPercent = skillMatchPercent(job.requiredSkills, profile.skills);
-        const matched = matchedSkills(job.requiredSkills, profile.skills);
-        const matchedSkillSet = new Set(matched.map((skill) => skill.toLowerCase()));
-        const skillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
-        const score = preferenceAwareMatchScore({
-          ...job,
+    sortJobRecommendations(
+      profile.savedJobs.map((savedJob) =>
+        buildJobRecommendation(savedJob.jobPost, {
+          appliedJobIds,
           freelancerReadinessPercent: readiness.percent,
           freelancerSkills: profile.skills,
+          savedJobIds,
           workPreference: profile.workPreference,
-        });
-        const preferenceReasons = visiblePreferenceReasons({ ...job, workPreference: profile.workPreference }, 5);
+        }, { preferenceReasonLimit: 5 }),
+      ),
+    )
+      .map((recommendation) => {
+        const savedJob = profile.savedJobs.find((item) => item.jobPostId === recommendation.job.id);
+        if (!savedJob) return null;
+        const job = savedJob.jobPost;
         const prepSheet = buildSavedJobPrepSheet({
-          matched,
-          skillGaps,
-          contractMissingLabels: contractReadiness.items.filter((item) => !item.done).map((item) => item.label),
+          matched: recommendation.matched,
+          skillGaps: recommendation.skillGaps,
+          contractMissingLabels: recommendation.contractReadiness.items.filter((item) => !item.done).map((item) => item.label),
           missingReadinessLabels: readiness.items.filter((item) => !item.done).map((item) => item.label),
           availableFrom: profile.availableFrom,
           availability: profile.availability,
@@ -64,30 +66,36 @@ export default async function SavedJobsPage() {
 
         return {
           savedJob,
-          contractReadiness,
-          matchPercent,
-          matched,
+          contractReadiness: recommendation.contractReadiness,
+          matchPercent: recommendation.matchPercent,
+          matched: recommendation.matched,
           prepSheet,
-          preferenceReasons,
-          score,
+          preferenceReasons: recommendation.preferenceReasons,
+          score: recommendation.directScore,
           appliedStatus: appliedByJobId.get(job.id),
           nextStep: buildSavedJobNextStep({
             applicationOpen: job.applicationStatus === "open",
             applied: Boolean(appliedByJobId.get(job.id)),
-            contractMissingLabel: contractReadiness.items.find((item) => !item.done)?.label,
+            contractMissingLabel: recommendation.contractReadiness.items.find((item) => !item.done)?.label,
             missingReadinessLabel: readiness.items.find((item) => !item.done)?.label,
             note: savedJob.note,
-            score,
+            score: recommendation.directScore,
           }),
         };
       })
-      .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime());
+      .filter((item) => item !== null);
   const openSavedCount = savedJobs.filter(({ savedJob, appliedStatus }) => !appliedStatus && savedJob.jobPost.applicationStatus === "open").length;
   const notedSavedCount = savedJobs.filter(({ savedJob }) => Boolean(savedJob.note)).length;
-  const readySavedCount = savedJobs.filter(
-    ({ appliedStatus, contractReadiness, score, savedJob }) =>
-      !appliedStatus && savedJob.jobPost.applicationStatus === "open" && score >= 70 && contractReadiness.percent >= 80,
-  ).length;
+  const readySavedCount = countReadySavedJobs(
+    savedJobs.map(({ savedJob }) => buildJobRecommendation(savedJob.jobPost, {
+      appliedJobIds,
+      freelancerReadinessPercent: readiness.percent,
+      freelancerSkills: profile.skills,
+      savedJobIds,
+      workPreference: profile.workPreference,
+    })),
+    appliedByJobId,
+  );
 
   return (
     <Shell>
@@ -152,7 +160,7 @@ export default async function SavedJobsPage() {
   );
 }
 
-type SavedJobPost = Prisma.JobPostGetPayload<{ include: { companyProfile: true } }>;
+type SavedJobPost = Prisma.JobPostGetPayload<{ include: { companyProfile: { include: { verificationRequests: true } } } }>;
 type ContractMissingItem = ReturnType<typeof directContractChecklist>["items"][number];
 type SavedJobNextStep = {
   title: string;

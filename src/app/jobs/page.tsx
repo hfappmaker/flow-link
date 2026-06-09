@@ -6,15 +6,19 @@ import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
+  buildDiscoveryIntentCounts,
+  rankJobRecommendations,
+  sortJobRecommendations,
+  type DiscoveryIntentCounts,
+  type JobRecommendation,
+} from "@/lib/job-recommendations";
+import {
   buildTrustConfidence,
-  directContractChecklist,
   formatOpenings,
   matchedSkills,
   parseSkills,
-  preferenceAwareMatchScore,
   skillMatchPercent,
   skillPreview,
-  trustRecommendationAdjustment,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
   type TrustConfidenceStatus,
@@ -204,60 +208,38 @@ export default async function JobsPage({
     workload,
     rate,
   });
-  const rankedJobs = jobs
-    .map((job) => {
-      const trustConfidence = buildTrustConfidence({ company: job.companyProfile, job });
-      const baseDirectScore = preferenceAwareMatchScore({
-        ...job,
-        applicationStatus: job.applicationStatus,
-        freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
-        freelancerSkills: freelancerProfile?.skills,
-        workPreference: freelancerProfile?.workPreference,
-      });
-      return {
-        job,
-        directScore: Math.max(0, Math.min(100, baseDirectScore + trustRecommendationAdjustment(trustConfidence))),
-        contractReadinessPercent: directContractChecklist(job).percent,
-        preferenceReasons: freelancerProfile ? visiblePreferenceReasons({ ...job, workPreference: freelancerProfile.workPreference }, 4) : [],
-        trustConfidence,
-      };
-    })
-    .filter(({ job, contractReadinessPercent, directScore }) => {
-      const matchesCandidate = candidate !== "fresh" || (!appliedJobIds.has(job.id) && !savedJobIds.has(job.id));
-      if (fit === "skill") {
-        return matchesCandidate && job.applicationStatus === "open" && (skillMatchPercent(job.requiredSkills, freelancerProfile?.skills) ?? 0) > 0;
-      }
-      if (fit === "ready") {
-        return matchesCandidate && job.applicationStatus === "open" && directScore >= 70 && contractReadinessPercent >= 80;
-      }
-      return matchesCandidate;
-    })
-    .sort((a, b) => {
-      if (sort === "direct") {
-        return b.directScore - a.directScore || b.job.createdAt.getTime() - a.job.createdAt.getTime();
-      }
-      return b.job.createdAt.getTime() - a.job.createdAt.getTime();
-    });
+  const allRecommendedJobs = rankJobRecommendations(jobs, {
+    appliedJobIds,
+    freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
+    freelancerSkills: freelancerProfile?.skills,
+    savedJobIds,
+    workPreference: freelancerProfile?.workPreference,
+  }, {
+    sort,
+  });
+  const rankedJobs = rankJobRecommendations(jobs, {
+    appliedJobIds,
+    freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
+    freelancerSkills: freelancerProfile?.skills,
+    savedJobIds,
+    workPreference: freelancerProfile?.workPreference,
+  }, {
+    candidate,
+    fit,
+    sort,
+  });
   const resultSummary =
     jobs.length === 0 && !hasActiveFilters
       ? "公開案件はまだありません。"
       : `${rankedJobs.length}件の案件を表示中${activeFilterLabels.length > 0 ? ` / ${activeFilterLabels.join(" / ")}` : ""} / ${
           sort === "direct" ? "応募しやすい順" : "新着順"
         }`;
-  const priorityJobs = [...rankedJobs]
-    .sort((a, b) => b.directScore - a.directScore || b.contractReadinessPercent - a.contractReadinessPercent)
-    .slice(0, 3);
+  const priorityJobs = sortJobRecommendations(rankedJobs, "direct").slice(0, 3);
   const freshCandidateCount = freelancerProfile
-    ? jobs.filter((job) => !appliedJobIds.has(job.id) && !savedJobIds.has(job.id)).length
+    ? allRecommendedJobs.filter((recommendation) => recommendation.isFreshCandidate).length
     : 0;
   const discoveryIntentCounts = freelancerProfile
-    ? buildDiscoveryIntentCounts({
-        appliedJobIds,
-        freelancerSkills: freelancerProfile.skills,
-        jobs: rankedJobs,
-        readinessComplete: readiness.isReady,
-        savedJobIds,
-      })
+    ? buildDiscoveryIntentCounts({ jobs: allRecommendedJobs, readinessComplete: readiness.isReady })
     : null;
 
   return (
@@ -475,7 +457,7 @@ export default async function JobsPage({
               preferenceReasons={preferenceReasons}
               readiness={readiness}
               saved={savedJobIds.has(job.id)}
-              trustConfidence={trustConfidence}
+              trustConfidence={trustConfidence ?? buildTrustConfidence({ company: job.companyProfile, job })}
               returnTo={currentJobsPath}
             />
           ))}
@@ -503,61 +485,7 @@ type JobWithCompany = Prisma.JobPostGetPayload<{
   include: { companyProfile: { include: { verificationRequests: true } } };
 }>;
 type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
-type RankedJob = {
-  job: JobWithCompany;
-  directScore: number;
-  contractReadinessPercent: number;
-  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
-  trustConfidence: ReturnType<typeof buildTrustConfidence>;
-};
-
-type DiscoveryIntentCounts = {
-  readyToApply: number;
-  skillMatched: number;
-  conditionReady: number;
-  fresh: number;
-  preparation: number;
-};
-
-function buildDiscoveryIntentCounts({
-  appliedJobIds,
-  freelancerSkills,
-  jobs,
-  readinessComplete,
-  savedJobIds,
-}: {
-  appliedJobIds: Set<string>;
-  freelancerSkills?: string | null;
-  jobs: RankedJob[];
-  readinessComplete: boolean;
-  savedJobIds: Set<string>;
-}) {
-  return jobs.reduce<DiscoveryIntentCounts>(
-    (counts, { job, directScore, contractReadinessPercent }) => {
-      const isOpen = job.applicationStatus === "open";
-      const isFresh = !appliedJobIds.has(job.id) && !savedJobIds.has(job.id);
-
-      if (isOpen && isFresh && readinessComplete && directScore >= 70 && contractReadinessPercent >= 80) {
-        counts.readyToApply += 1;
-      }
-      if (isOpen && isFresh && (skillMatchPercent(job.requiredSkills, freelancerSkills) ?? 0) > 0) {
-        counts.skillMatched += 1;
-      }
-      if (isOpen && contractReadinessPercent === 100) {
-        counts.conditionReady += 1;
-      }
-      if (isFresh) {
-        counts.fresh += 1;
-      }
-      if (isOpen && isFresh && !readinessComplete) {
-        counts.preparation += 1;
-      }
-
-      return counts;
-    },
-    { readyToApply: 0, skillMatched: 0, conditionReady: 0, fresh: 0, preparation: 0 },
-  );
-}
+type RankedJob = JobRecommendation<JobWithCompany>;
 
 function SavedSearchPanel({
   currentJobsPath,
