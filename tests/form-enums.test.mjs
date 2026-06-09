@@ -6,6 +6,8 @@ import {
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
+  PostInterviewDeclineReason,
+  PostInterviewOutcomeStatus,
   RecommendationFeedbackReason,
   ResumeDocumentType,
   UserRole,
@@ -23,10 +25,14 @@ const {
   parseCompanyVerificationKind,
   parseInterviewMessageType,
   parseJobApplicationStatusFilter,
+  parseOptionalPostInterviewDeclineReason,
   parseJobPostStatus,
+  parsePostInterviewOutcomeStatus,
   parseRecommendationFeedbackReason,
   parseResumeDocumentType,
   recommendationFeedbackReasonValues,
+  postInterviewDeclineReasonValues,
+  postInterviewOutcomeStatusValues,
   parseScreeningResultStatus,
   parseUserRole,
   resumeDocumentTypeValues,
@@ -45,6 +51,8 @@ test("form enum value lists stay aligned with Prisma enums", () => {
   assert.deepEqual(sorted(companyVerificationKindValues), sorted(Object.values(CompanyVerificationKind)));
   assert.deepEqual(sorted(jobApplicationStatusValues), sorted(Object.values(JobApplicationStatus)));
   assert.deepEqual(sorted(interviewMessageTypeValues), sorted(Object.values(InterviewMessageType)));
+  assert.deepEqual(sorted(postInterviewOutcomeStatusValues), sorted(Object.values(PostInterviewOutcomeStatus)));
+  assert.deepEqual(sorted(postInterviewDeclineReasonValues), sorted(Object.values(PostInterviewDeclineReason)));
   assert.deepEqual(sorted(recommendationFeedbackReasonValues), sorted(Object.values(RecommendationFeedbackReason)));
 });
 
@@ -76,6 +84,12 @@ test("existing action enum parsers keep rejecting unsupported values", () => {
 
   assert.equal(parseInterviewMessageType("meeting_url"), InterviewMessageType.meeting_url);
   assert.throws(() => parseInterviewMessageType("file"), /メッセージ種別が不正です。/);
+
+  assert.equal(parsePostInterviewOutcomeStatus("offer_sent"), PostInterviewOutcomeStatus.offer_sent);
+  assert.throws(() => parsePostInterviewOutcomeStatus("contract_signed"), /面談後ステータスを確認してください。/);
+
+  assert.equal(parseOptionalPostInterviewDeclineReason("rate_mismatch"), PostInterviewDeclineReason.rate_mismatch);
+  assert.equal(parseOptionalPostInterviewDeclineReason("public_rating"), null);
 
   assert.equal(parseRecommendationFeedbackReason("good_fit"), RecommendationFeedbackReason.good_fit);
   assert.throws(() => parseRecommendationFeedbackReason("auto_reject"), /推薦フィードバックの理由を確認してください。/);

@@ -1,5 +1,21 @@
-import { sendInterviewMessage, sendInterviewTimeOptions, submitInteractionFeedback } from "@/lib/actions";
+import {
+  recordCompanyPostInterviewOutcome,
+  recordFreelancerPostInterviewOutcome,
+  sendInterviewMessage,
+  sendInterviewTimeOptions,
+  submitInteractionFeedback,
+} from "@/lib/actions";
 import { getInterviewThreadForPage } from "@/lib/page-guards";
+import {
+  companyOutcomeStatusValues,
+  freelancerOutcomeStatusValues,
+  outcomeNextAction,
+  outcomeSnapshotItems,
+  outcomeTone,
+  postInterviewDeclineReasonLabels,
+  postInterviewOutcomeLabels,
+} from "@/lib/post-interview-outcomes";
+import type { PostInterviewOutcome } from "@prisma/client";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
@@ -153,6 +169,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     openQuestions: meetingBrief.openQuestions,
   });
   const existingFeedback = thread.jobApplication.interactionFeedback[0] ?? null;
+  const outcome = thread.jobApplication.postInterviewOutcome;
+  const outcomeAction = outcomeNextAction({ isCompany: isCompanySender, outcome });
   const feedbackTarget = isCompanySender ? freelancer.fullName : company.name;
   const feedbackEligible = Boolean(thread.scheduledAt);
 
@@ -437,6 +455,38 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                 />
                 <button className="btn btn-secondary" type="submit">確認文を送る</button>
               </form>
+            </Card>
+
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">面談後の進捗</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    オファー、辞退、契約準備、稼働開始までの状態と合意条件を、評価とは別に残します。
+                  </p>
+                </div>
+                <StatusBadge tone={outcomeTone(outcome?.status)}>
+                  {postInterviewOutcomeLabels[outcome?.status ?? "waiting_company_decision"]}
+                </StatusBadge>
+              </div>
+              <p className="mt-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                {outcomeAction}
+              </p>
+              <div className="mt-4 grid gap-2">
+                {outcomeSnapshotItems(outcome).map((item) => (
+                  <OutcomeSnapshotItem item={item} key={item.label} />
+                ))}
+              </div>
+              {outcome?.declineReason && (
+                <p className="mt-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                  理由: {postInterviewDeclineReasonLabels[outcome.declineReason]}
+                </p>
+              )}
+              {isCompanySender ? (
+                <CompanyOutcomeForm outcome={outcome} threadId={thread.id} />
+              ) : (
+                <FreelancerOutcomeForm outcome={outcome} threadId={thread.id} />
+              )}
             </Card>
 
             <Card>
@@ -785,6 +835,127 @@ function buildTimeOptionNote({
     questionLine,
     requestLine,
   ].join("\n");
+}
+
+function CompanyOutcomeForm({
+  outcome,
+  threadId,
+}: {
+  outcome: PostInterviewOutcome | null;
+  threadId: string;
+}) {
+  const needsJobDecision =
+    outcome?.status === "accepted" ||
+    outcome?.status === "contract_agreed" ||
+    outcome?.status === "work_started";
+
+  return (
+    <form action={recordCompanyPostInterviewOutcome} className="mt-4 grid gap-4">
+      <input type="hidden" name="threadId" value={threadId} />
+      <SelectField name="status" label="企業側の面談後ステータス" defaultValue={outcome?.status ?? "waiting_company_decision"}>
+        {companyOutcomeStatusValues.map((status) => (
+          <option key={status} value={status}>{postInterviewOutcomeLabels[status]}</option>
+        ))}
+      </SelectField>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <TextField name="proposedStartDate" label="提示開始日" defaultValue={outcome?.proposedStartDate ?? ""} />
+        <TextField name="responseDeadline" label="回答期限" defaultValue={outcome?.responseDeadline ?? ""} />
+        <TextField name="agreedStartDate" label="合意開始日" defaultValue={outcome?.agreedStartDate ?? ""} />
+        <TextField name="agreedRate" label="合意単価" defaultValue={outcome?.agreedRate ?? ""} />
+        <TextField name="agreedWorkload" label="合意稼働量" defaultValue={outcome?.agreedWorkload ?? ""} />
+        <SelectField name="declineReason" label="見送り理由" defaultValue={outcome?.declineReason ?? ""}>
+          <option value="">未選択</option>
+          {Object.entries(postInterviewDeclineReasonLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </SelectField>
+      </div>
+      <TextArea
+        name="contractPaymentNotes"
+        label="契約・支払いメモ"
+        defaultValue={outcome?.contractPaymentNotes}
+        maxLength={800}
+        placeholder="外部契約で確認する締め日、支払いサイト、契約主体など。Flow Link上で契約や支払いを実行するものではありません。"
+      />
+      <TextArea
+        name="externalConfirmationNeeded"
+        label="外部で残っている確認"
+        defaultValue={outcome?.externalConfirmationNeeded}
+        maxLength={800}
+      />
+      <TextArea
+        name="privateOutcomeNote"
+        label="非公開の進捗メモ"
+        defaultValue={outcome?.privateOutcomeNote}
+        maxLength={800}
+      />
+      <div className={`rounded border p-3 ${needsJobDecision ? "border-amber-200 bg-amber-50 text-amber-900" : "border-stone-200 bg-stone-50 text-stone-700"}`}>
+        <p className="text-sm font-semibold">募集継続の判断</p>
+        <p className="mt-1 text-sm leading-6">
+          承諾・契約合意・稼働開始に進む場合も、複数名募集に備えて企業側が手動で募集状態を決めます。
+        </p>
+        <SelectField name="jobPostAction" label="案件の応募受付" defaultValue={outcome?.jobShouldStayOpen === false ? "pause_applications" : "keep_open"}>
+          <option value="keep_open">募集を継続する</option>
+          <option value="pause_applications">応募受付を一時停止する</option>
+          <option value="close_job">案件をクローズする</option>
+        </SelectField>
+      </div>
+      <button className="btn btn-primary" type="submit">面談後ステータスを保存</button>
+    </form>
+  );
+}
+
+function FreelancerOutcomeForm({
+  outcome,
+  threadId,
+}: {
+  outcome: PostInterviewOutcome | null;
+  threadId: string;
+}) {
+  return (
+    <form action={recordFreelancerPostInterviewOutcome} className="mt-4 grid gap-4">
+      <input type="hidden" name="threadId" value={threadId} />
+      <SelectField name="status" label="フリーランス側の返答" defaultValue={outcome?.status ?? "waiting_company_decision"}>
+        {freelancerOutcomeStatusValues.map((status) => (
+          <option key={status} value={status}>{postInterviewOutcomeLabels[status]}</option>
+        ))}
+      </SelectField>
+      <SelectField name="declineReason" label="辞退・懸念理由" defaultValue={outcome?.declineReason ?? ""}>
+        <option value="">未選択</option>
+        {Object.entries(postInterviewDeclineReasonLabels).map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </SelectField>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <TextField name="agreedStartDate" label="確認した開始日" defaultValue={outcome?.agreedStartDate ?? ""} />
+        <TextField name="agreedRate" label="確認した単価" defaultValue={outcome?.agreedRate ?? ""} />
+        <TextField name="agreedWorkload" label="確認した稼働量" defaultValue={outcome?.agreedWorkload ?? ""} />
+      </div>
+      <TextArea
+        name="externalConfirmationNeeded"
+        label="まだ確認したいこと"
+        defaultValue={outcome?.externalConfirmationNeeded}
+        maxLength={800}
+        placeholder="契約書、支払い条件、稼働開始前の準備など。"
+      />
+      <TextArea
+        name="privateOutcomeNote"
+        label="非公開メモ"
+        defaultValue={outcome?.privateOutcomeNote}
+        maxLength={800}
+      />
+      <button className="btn btn-primary" type="submit">返答を保存</button>
+    </form>
+  );
+}
+
+function OutcomeSnapshotItem({ item }: { item: { label: string; value: string } }) {
+  return (
+    <div className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+      <p className="text-xs font-medium text-stone-500">{item.label}</p>
+      <p className="mt-1 whitespace-pre-wrap font-semibold leading-6 text-stone-800">{item.value}</p>
+    </div>
+  );
 }
 
 function buildPostInterviewPlan({

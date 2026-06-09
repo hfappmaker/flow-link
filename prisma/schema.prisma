@@ -70,6 +70,31 @@ enum InteractionFeedbackModerationStatus {
   hidden
 }
 
+enum PostInterviewOutcomeStatus {
+  waiting_company_decision
+  offer_sent
+  freelancer_considering
+  clarification_requested
+  accepted
+  declined_by_company
+  declined_by_freelancer
+  contract_preparing
+  contract_agreed
+  work_started
+  closed_no_hire
+}
+
+enum PostInterviewDeclineReason {
+  rate_mismatch
+  workload_mismatch
+  timing
+  company_trust_concern
+  contract_payment_concern
+  role_mismatch
+  accepted_elsewhere
+  other
+}
+
 enum WorkPreferenceStatus {
   active
   passive
@@ -409,6 +434,7 @@ model JobApplication {
   notes                   ScreeningNote[]
   interviewThread         InterviewThread?
   interactionFeedback     InteractionFeedback[]
+  postInterviewOutcome    PostInterviewOutcome?
 
   @@unique([jobPostId, freelancerProfileId])
   @@map("job_applications")
@@ -492,4 +518,28 @@ model InteractionFeedback {
   @@index([targetCompanyProfileId, moderationStatus])
   @@index([targetFreelancerProfileId, moderationStatus])
   @@map("interaction_feedback")
+}
+
+model PostInterviewOutcome {
+  id                         String                       @id @default(cuid())
+  jobApplicationId           String                       @unique @map("job_application_id")
+  status                     PostInterviewOutcomeStatus   @default(waiting_company_decision)
+  proposedStartDate          String?                      @map("proposed_start_date")
+  agreedStartDate            String?                      @map("agreed_start_date")
+  agreedRate                 String?                      @map("agreed_rate")
+  agreedWorkload             String?                      @map("agreed_workload")
+  contractPaymentNotes       String?                      @map("contract_payment_notes")
+  externalConfirmationNeeded String?                      @map("external_confirmation_needed")
+  responseDeadline           String?                      @map("response_deadline")
+  declineReason              PostInterviewDeclineReason?  @map("decline_reason")
+  privateOutcomeNote         String?                      @map("private_outcome_note")
+  jobShouldStayOpen          Boolean?                     @map("job_should_stay_open")
+  companyUpdatedAt           DateTime?                    @map("company_updated_at")
+  freelancerUpdatedAt        DateTime?                    @map("freelancer_updated_at")
+  createdAt                  DateTime                     @default(now()) @map("created_at")
+  updatedAt                  DateTime                     @updatedAt @map("updated_at")
+  jobApplication             JobApplication               @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("post_interview_outcomes")
 }

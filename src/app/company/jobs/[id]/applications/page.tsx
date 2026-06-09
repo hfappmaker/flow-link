@@ -4,6 +4,7 @@ import { JobApplicationStatus, type Prisma } from "@prisma/client";
 import { requireCompanyUser } from "@/lib/page-guards";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
+import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
 import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
@@ -63,6 +64,7 @@ export default async function JobApplicationsPage({
               documents: true,
             },
           },
+          postInterviewOutcome: true,
         },
         orderBy: { appliedAt: "desc" },
       },
@@ -226,6 +228,7 @@ type JobWithApplications = Prisma.JobPostGetPayload<{
             documents: true;
           };
         };
+        postInterviewOutcome: true;
       };
     };
   };
@@ -307,6 +310,7 @@ function ApplicationCard({
     hasContactSignal: Boolean(application.contactPreference),
     hasStartSignal: startSignal !== "未設定",
   });
+  const outcome = application.postInterviewOutcome;
 
   return (
     <Card>
@@ -316,6 +320,11 @@ function ApplicationCard({
             <StatusBadge tone={application.status === "screening_passed" ? "good" : application.status === "screening_rejected" ? "bad" : "neutral"}>
               {applicationStatusLabel(application.status)}
             </StatusBadge>
+            {application.status === "screening_passed" && (
+              <StatusBadge tone={outcomeTone(outcome?.status)}>
+                {postInterviewOutcomeLabels[outcome?.status ?? "waiting_company_decision"]}
+              </StatusBadge>
+            )}
             <StatusBadge tone={review.interviewReadinessPercent >= 80 ? "good" : review.interviewReadinessPercent >= 50 ? "neutral" : "warn"}>
               面談判断 {review.interviewReadinessPercent}%
             </StatusBadge>
@@ -378,8 +387,12 @@ function ApplicationCard({
           </div>
           <div className="mt-3 rounded border border-stone-200 bg-stone-50 p-3">
             <p className="text-xs font-medium text-stone-500">次の確認</p>
-            <p className="mt-1 text-sm font-semibold text-stone-900">{nextReviewAction.title}</p>
-            <p className="mt-1 text-sm leading-6 text-stone-600">{nextReviewAction.description}</p>
+            <p className="mt-1 text-sm font-semibold text-stone-900">
+              {outcome ? postInterviewOutcomeLabels[outcome.status] : nextReviewAction.title}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-stone-600">
+              {outcome ? outcomeNextAction({ isCompany: true, outcome }) : nextReviewAction.description}
+            </p>
             {application.status === "applied" && (
               <p className="mt-2 text-sm leading-6 text-stone-600">{responseState.detail}</p>
             )}

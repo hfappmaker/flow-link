@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { saveScreeningNote, screenApplication } from "@/lib/actions";
 import { requireCompanyUser } from "@/lib/page-guards";
+import {
+  outcomeNextAction,
+  outcomeSnapshotItems,
+  outcomeTone,
+  postInterviewOutcomeLabels,
+} from "@/lib/post-interview-outcomes";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { getFreelancerReputationSummary } from "@/lib/reputation";
@@ -30,6 +36,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       freelancerProfile: { include: { careerHistory: true, documents: true, workPreference: true } },
       notes: { orderBy: { createdAt: "desc" }, include: { companyUser: { include: { user: true } } } },
       interviewThread: true,
+      postInterviewOutcome: true,
     },
   });
   if (!application) {
@@ -269,6 +276,33 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               summary={freelancerReputation}
               subjectLabel="freelancer"
             />
+
+            {application.interviewThread && (
+              <Card>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-semibold">面談後ステータス</h2>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      オファー、辞退、契約準備、稼働開始までの進捗を面談チャットで更新します。
+                    </p>
+                  </div>
+                  <StatusBadge tone={outcomeTone(application.postInterviewOutcome?.status)}>
+                    {postInterviewOutcomeLabels[application.postInterviewOutcome?.status ?? "waiting_company_decision"]}
+                  </StatusBadge>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-stone-600">
+                  {outcomeNextAction({ isCompany: true, outcome: application.postInterviewOutcome })}
+                </p>
+                <div className="mt-3 grid gap-2">
+                  {outcomeSnapshotItems(application.postInterviewOutcome).slice(0, 3).map((item) => (
+                    <SummaryInfo label={item.label} value={item.value} key={item.label} />
+                  ))}
+                </div>
+                <Link className="btn btn-secondary mt-4 w-full" href={`/interviews/${application.interviewThread.id}`}>
+                  面談後ステータスを更新
+                </Link>
+              </Card>
+            )}
 
             <Card>
               <div className="flex items-start justify-between gap-4">
