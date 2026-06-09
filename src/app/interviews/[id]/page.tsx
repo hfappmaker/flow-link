@@ -152,6 +152,23 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     contactPreference: thread.jobApplication.contactPreference,
     openQuestions: meetingBrief.openQuestions,
   });
+  const postInterviewPlan = buildPostInterviewPlan({
+    isCompanySender,
+    companyName: company.name,
+    freelancerName: freelancer.fullName,
+    jobTitle: jobPost.title,
+    scheduledAt: thread.scheduledAt,
+    meetingUrl: thread.meetingUrl,
+    selectionFlow: jobPost.selectionFlow,
+    contractTerms: jobPost.contractTerms,
+    rate: jobPost.rate,
+    desiredRate: freelancer.desiredRate,
+    workload: jobPost.workload,
+    availability: freelancer.availability,
+    proposedStart: thread.jobApplication.proposedStart,
+    contactPreference: thread.jobApplication.contactPreference,
+    openQuestions: meetingBrief.openQuestions,
+  });
 
   return (
     <Shell>
@@ -404,6 +421,36 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
               </div>
+            </Card>
+
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">面談後の確認</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    面談が終わったあとに、条件確認、判断期限、次の連絡を迷わず進めるための整理です。
+                  </p>
+                </div>
+                <StatusBadge tone={postInterviewPlan.completed === postInterviewPlan.total ? "good" : "warn"}>
+                  {postInterviewPlan.completed}/{postInterviewPlan.total}
+                </StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {postInterviewPlan.items.map((item) => (
+                  <PostInterviewItem detail={item.detail} done={item.done} key={item.label} label={item.label} />
+                ))}
+              </div>
+              <form action={sendInterviewMessage} className="mt-4 grid gap-3">
+                <input type="hidden" name="threadId" value={thread.id} />
+                <input type="hidden" name="messageType" value="text" />
+                <TextArea
+                  name="body"
+                  label="面談後に送る確認文"
+                  defaultValue={postInterviewPlan.followUpMessage}
+                  maxLength={1600}
+                />
+                <button className="btn btn-secondary" type="submit">確認文を送る</button>
+              </form>
             </Card>
 
             {proposedMessages.length > 0 && thread.status !== "scheduled" && (
@@ -681,6 +728,109 @@ function buildTimeOptionNote({
   ].join("\n");
 }
 
+function buildPostInterviewPlan({
+  isCompanySender,
+  companyName,
+  freelancerName,
+  jobTitle,
+  scheduledAt,
+  meetingUrl,
+  selectionFlow,
+  contractTerms,
+  rate,
+  desiredRate,
+  workload,
+  availability,
+  proposedStart,
+  contactPreference,
+  openQuestions,
+}: {
+  isCompanySender: boolean;
+  companyName: string;
+  freelancerName: string;
+  jobTitle: string;
+  scheduledAt: Date | null;
+  meetingUrl: string | null;
+  selectionFlow: string | null;
+  contractTerms: string | null;
+  rate: string | null;
+  desiredRate: string | null;
+  workload: string | null;
+  availability: string | null;
+  proposedStart: string | null;
+  contactPreference: string | null;
+  openQuestions: string[];
+}) {
+  const items = [
+    {
+      label: "面談実施条件",
+      detail:
+        scheduledAt && meetingUrl
+          ? `${formatDateTime(scheduledAt)}の面談日時と会議URLが揃っています。`
+          : "面談日時と会議URLを揃えてから、面談後の判断に進んでください。",
+      done: Boolean(scheduledAt && meetingUrl),
+    },
+    {
+      label: "契約・支払い条件",
+      detail: contractTerms || "支払いサイト、請求方法、契約期間、更新条件を面談後に確認してください。",
+      done: Boolean(contractTerms),
+    },
+    {
+      label: "報酬・稼働条件",
+      detail: `単価: ${rate || desiredRate || "確認が必要"} / 稼働: ${workload || availability || "確認が必要"}`,
+      done: Boolean((rate || desiredRate) && (workload || availability)),
+    },
+    {
+      label: "次の判断期限",
+      detail: selectionFlow || "面談後いつまでに結果連絡するか、次の確認文で明確にしてください。",
+      done: Boolean(selectionFlow),
+    },
+    {
+      label: "企業とのやりとり",
+      detail: contactPreference || "面談後の連絡手段と返信目安をこのチャットで確認してください。",
+      done: Boolean(contactPreference),
+    },
+  ];
+  const unresolvedItems = items.filter((item) => !item.done).map((item) => item.label);
+  const recipient = isCompanySender ? `${freelancerName}さん` : `${companyName} ご担当者様`;
+  const sender = isCompanySender ? companyName : freelancerName;
+  const decisionLine = isCompanySender
+    ? "面談後の判断について、確認したい条件と次の進め方を共有します。"
+    : "面談後の検討に向けて、確認したい条件と次の進め方を共有します。";
+  const unresolvedLine =
+    unresolvedItems.length > 0
+      ? unresolvedItems.join("、")
+      : "主要条件は揃っています。面談後は最終意思確認と開始手続きに進めます。";
+  const questionLines = openQuestions.length > 0
+    ? openQuestions.slice(0, 4).map((question) => `- ${question}`)
+    : ["- 面談で確認した内容に相違がないか", "- 参画可否の判断期限", "- 開始までに必要な手続き"];
+
+  return {
+    items,
+    completed: items.filter((item) => item.done).length,
+    total: items.length,
+    followUpMessage: [
+      recipient,
+      "",
+      `${jobTitle}の面談について、ありがとうございます。`,
+      decisionLine,
+      "",
+      `面談日時: ${scheduledAt ? formatDateTime(scheduledAt) : "未確定"}`,
+      `稼働開始目安: ${proposedStart || "面談後に確認"}`,
+      `報酬・稼働条件: ${rate || desiredRate || "確認が必要"} / ${workload || availability || "確認が必要"}`,
+      `契約・支払い条件: ${contractTerms || "確認が必要"}`,
+      `次の判断期限: ${selectionFlow || "面談後に確認"}`,
+      "",
+      `未確認の項目: ${unresolvedLine}`,
+      "面談後に確認したいこと:",
+      ...questionLines,
+      "",
+      "上記を確認したうえで、次に進めるかどうかをこのチャットで共有してください。",
+      sender,
+    ].join("\n"),
+  };
+}
+
 function buildMeetingBrief({
   freelancer,
   jobPost,
@@ -773,6 +923,24 @@ function DealReadinessItem({ label, detail, done }: { label: string; detail: str
         <span className="text-xs font-semibold">{done ? "完了" : "要確認"}</span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+    </div>
+  );
+}
+
+function PostInterviewItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-stone-200 bg-white text-stone-800"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{label}</span>
+        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${done ? "bg-white/80 text-emerald-800" : "bg-stone-100 text-stone-600"}`}>
+          {done ? "確認済み" : "面談後に確認"}
+        </span>
+      </div>
+      <p className="mt-1 break-words leading-6 text-stone-600">{detail}</p>
     </div>
   );
 }
