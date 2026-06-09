@@ -3,6 +3,7 @@ import { requireFreelancerPage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,11 @@ export default async function NotificationsPage() {
                   <h2 className="mt-2 font-semibold">{notification.title}</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">{notification.body}</p>
                   <p className="mt-2 text-xs text-stone-500">{formatDateTime(notification.createdAt)}</p>
+                  {notification.actionUrl && (
+                    <Link className="mt-3 inline-flex text-sm font-semibold text-emerald-700 underline" href={notification.actionUrl}>
+                      詳細を見る
+                    </Link>
+                  )}
                 </div>
                 {!notification.readAt && (
                   <form action={markNotificationRead}>

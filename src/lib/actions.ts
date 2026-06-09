@@ -15,6 +15,7 @@ import { AuthError } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
+import { evaluateSavedFeedJobAlerts, normalizeAlertCadence } from "@/lib/job-alerts";
 import {
   parseApplicationStatus,
   parseCompanyVerificationKind,
@@ -261,7 +262,7 @@ export async function saveCurrentJobSearch(formData: FormData) {
       workload: toOptionalText(formData.get("workload")),
       rate: toOptionalText(formData.get("rate")),
       sort: toText(formData.get("sort")) === "new" ? "new" : "direct",
-      notificationCadence: toOptionalText(formData.get("notificationCadence")),
+      notificationCadence: normalizeAlertCadence(formData.get("notificationCadence")),
     },
   });
 
@@ -436,17 +437,56 @@ export async function saveJobPost(formData: FormData) {
     data.applicationStatus = ApplicationStatus.paused;
   }
 
+  let savedJob;
   if (id) {
-    await prisma.jobPost.update({
+    savedJob = await prisma.jobPost.update({
       where: { id, companyProfileId: companyUser.companyProfileId },
       data,
     });
   } else {
-    await prisma.jobPost.create({ data });
+    savedJob = await prisma.jobPost.create({ data });
+  }
+
+  if (savedJob.status === JobPostStatus.published && savedJob.applicationStatus === ApplicationStatus.open) {
+    await evaluateSavedFeedJobAlerts(prisma, { jobPostId: savedJob.id });
   }
 
   revalidatePath("/company/jobs");
+  revalidatePath("/freelancer/notifications");
   redirect(heldAsDraft ? "/company/jobs?publish=needs-conditions" : "/company/jobs");
+}
+
+export async function updateSavedJobSearch(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const id = toText(formData.get("savedJobSearchId"));
+  const name = toText(formData.get("name")) || "保存した仕事フィード";
+  if (name.length > 80) {
+    throw new Error("保存フィード名は80文字以内で入力してください。");
+  }
+
+  await prisma.savedJobSearch.update({
+    where: { id, freelancerProfileId: profile.id },
+    data: {
+      name,
+      notificationCadence: normalizeAlertCadence(formData.get("notificationCadence")),
+    },
+  });
+
+  revalidatePath("/freelancer/preferences");
+  revalidatePath("/jobs");
+}
+
+export async function deleteSavedJobSearch(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  await prisma.savedJobSearch.deleteMany({
+    where: {
+      id: toText(formData.get("savedJobSearchId")),
+      freelancerProfileId: profile.id,
+    },
+  });
+
+  revalidatePath("/freelancer/preferences");
+  revalidatePath("/jobs");
 }
 
 export async function applyToJob(formData: FormData) {

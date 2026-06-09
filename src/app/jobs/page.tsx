@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { removeSavedJob, saveCurrentJobSearch, saveJobForReview } from "@/lib/actions";
+import { alertCadenceLabel } from "@/lib/job-alerts";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead, publicDbReadResult } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
@@ -612,12 +613,17 @@ function SavedSearchPanel({
             />
           </label>
           <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-            今後の通知方針
-            <input
+            アラート頻度
+            <select
               className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
               name="notificationCadence"
-              placeholder="例: 週1回、条件一致だけ、通知なし"
-            />
+              defaultValue="immediate"
+            >
+              <option value="immediate">{alertCadenceLabel("immediate")}</option>
+              <option value="daily">{alertCadenceLabel("daily")}</option>
+              <option value="weekly">{alertCadenceLabel("weekly")}</option>
+              <option value="paused">{alertCadenceLabel("paused")}</option>
+            </select>
           </label>
           <button className="btn btn-primary" type="submit">仕事フィードに保存</button>
         </form>
