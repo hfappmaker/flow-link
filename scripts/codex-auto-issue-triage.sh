@@ -48,30 +48,35 @@ case "$MODE" in
   bug)
     AREA_LABEL="area:bug"
     MODE_TITLE="Bug triage"
+    LOCAL_APP_PORT="3011"
     MODE_FOCUS="Find real runtime errors and broken flows from Vercel Preview logs, local checks, DB/Blob/API failures, form failures, redirects, and browser-visible errors. Navigation that fails with 404/500 belongs here."
     BROWSER_POLICY="Playwright browser verification is required by default for bug triage. Reproduce or inspect the user-visible failure with Playwright against localhost or Preview before creating an issue. If Playwright cannot run, use HTTP/log checks as a fallback and state the exact browser launch or environment blocker in the issue Evidence and Verification plan."
     ;;
   product)
     AREA_LABEL="area:product"
     MODE_TITLE="Product triage"
+    LOCAL_APP_PORT="3012"
     MODE_FOCUS="Find product gaps from competitor comparison, user value, positioning, business workflow, trust, matching quality, conversion, and whether the service solves the right user problem."
     BROWSER_POLICY="Playwright is optional for product triage. Use it when evaluating an existing user flow; otherwise competitor research, static inspection, and product reasoning are sufficient."
     ;;
   ux)
     AREA_LABEL="area:ux"
     MODE_TITLE="UX triage"
+    LOCAL_APP_PORT="3013"
     MODE_FOCUS="Find issues in navigation, screen transitions, user flow, confusing copy, input burden, empty/loading/error states, and developer-facing terms that freelancers or companies should not need to understand."
     BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
     ;;
   visual-design)
     AREA_LABEL="area:visual-design"
     MODE_TITLE="Visual design triage"
+    LOCAL_APP_PORT="3014"
     MODE_FOCUS="Find visual design issues in layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, component consistency, and whether screens look professionally composed."
     BROWSER_POLICY="Playwright browser verification and screenshots are required for visual-design triage. Capture at least desktop and mobile screenshots before creating an issue, normally 1280x900 and 375x812. Save screenshots under .codex-automation/screenshots/ with stable names that include the mode, route, viewport, and timestamp. Include screenshot paths and visual observations in the issue Evidence section. If screenshots or browser launch fail, do not create a visual-design issue unless the issue is still critical; state the exact blocker in Evidence and Verification plan."
     ;;
   maintainability)
     AREA_LABEL="area:maintainability"
     MODE_TITLE="Maintainability triage"
+    LOCAL_APP_PORT="3015"
     MODE_FOCUS="Find maintainability risks in code structure, responsibility boundaries, type safety, duplicated logic, missing tests, fragile data flow, unsafe assumptions, and operational risk."
     BROWSER_POLICY="Playwright is not required for maintainability triage unless the maintainability concern is tied to a visible flow. Prefer static inspection, typecheck, lint, tests, and build signals."
     ;;
@@ -204,7 +209,10 @@ Browser verification policy:
 - Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
 - For visual-design mode, screenshots are mandatory evidence. Store them in .codex-automation/screenshots/ and mention the exact paths in the issue body.
 - This automation runs in the local devcontainer using the locally authenticated Codex CLI session.
-- Prefer local app checks when the issue can be reproduced with local data. Start the app on 127.0.0.1 using an available non-default port such as 3010 when browser checks are needed.
+- Prefer local app checks when the issue can be reproduced with local data.
+- Use localhost port $LOCAL_APP_PORT for this $MODE triage run when starting the app for browser checks, for example HOSTNAME=127.0.0.1 PORT=$LOCAL_APP_PORT npm run dev.
+- If port $LOCAL_APP_PORT is already in use, choose the next available port in the same range and record the actual port in the issue Environment section.
+- Do not stop another automation's dev server unless it was started by this same run and is no longer needed.
 - For bug mode, Preview URL read-only checks are strongly preferred when a Preview URL is discoverable from Vercel or GitHub deployment metadata. If Vercel Protection is enabled and VERCEL_AUTOMATION_BYPASS_SECRET is available, use the x-vercel-protection-bypass header and x-vercel-set-bypass-cookie=true. If the secret is missing and Preview is protected, record that as Preview-protection evidence instead of failing the run.
 
 Repository workflow:

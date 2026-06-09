@@ -7,6 +7,7 @@ REMOTE="${REMOTE:-origin}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/.codex-automation/issue-worker-logs}"
 LOCK_FILE="${LOCK_FILE:-$REPO_DIR/.codex-automation/issue-worker.lock}"
 WORKTREE_ROOT="${WORKTREE_ROOT:-$REPO_DIR/.codex-automation/worktrees}"
+LOCAL_APP_PORT="${LOCAL_APP_PORT:-3020}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 NODE_BIN_DIR="${NODE_BIN_DIR:-/usr/local/bin}"
 ENV_FILE="${ENV_FILE:-$REPO_DIR/.devcontainer/.env}"
@@ -230,6 +231,9 @@ Playwright verification policy:
 - For area:ux, verify the relevant navigation, screen transition, form, login/register flow, empty/loading/error state, or task completion in a browser when feasible.
 - For area:visual-design, screenshots are mandatory. Verify at least desktop and mobile viewports in a browser, normally 1280x900 and 375x812, and save screenshots under .codex-automation/screenshots/ with stable names that include the issue number, route, viewport, and timestamp.
 - Use Chromium headless with sandbox disabled if needed: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
+- Use localhost port $LOCAL_APP_PORT for worker browser verification when starting the app, for example HOSTNAME=127.0.0.1 PORT=$LOCAL_APP_PORT npm run dev.
+- If port $LOCAL_APP_PORT is already in use, choose the next available port in the same range and record the actual port in the final message.
+- Do not stop another automation's dev server unless it was started by this same run and is no longer needed.
 - If Playwright cannot run, do not silently skip it. State the exact blocker, use the best available fallback such as HTTP checks or static inspection, and leave enough detail in your final message for the PR and issue comment.
 - For product or maintainability issues, Playwright is optional unless the issue acceptance criteria require visible flow verification.
 
