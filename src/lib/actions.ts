@@ -26,6 +26,7 @@ import {
   parseWorkPreferenceStatus,
 } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
+import { loginErrorUrl } from "@/lib/registration-intent";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { buildScreeningPassedHandoffMessage, daysSince, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 
@@ -120,7 +121,7 @@ export async function loginUser(formData: FormData) {
 
   const user = await authorizeCredentials({ email, password });
   if (!user) {
-    redirect("/login?error=CredentialsSignin");
+    redirect(loginErrorUrl(callbackUrl));
   }
   const redirectTo = callbackUrl === "/" ? (user.role === "freelancer" ? "/freelancer" : "/company") : callbackUrl;
 
@@ -132,7 +133,7 @@ export async function loginUser(formData: FormData) {
     });
   } catch (error) {
     if (error instanceof AuthError) {
-      redirect("/login?error=CredentialsSignin");
+      redirect(loginErrorUrl(callbackUrl));
     }
     throw error;
   }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
+  loginErrorUrl,
   registrationRoleIntent,
   safeAuthCallbackUrl,
 } = await import("../src/lib/registration-intent.ts");
@@ -20,4 +21,14 @@ test("registration role intent follows protected destination scope", () => {
   assert.equal(registrationRoleIntent("/freelancer/saved-jobs"), "freelancer");
   assert.equal(registrationRoleIntent("/jobs"), "freelancer");
   assert.equal(registrationRoleIntent(""), "freelancer");
+});
+
+test("login errors preserve safe callback destinations", () => {
+  assert.equal(
+    loginErrorUrl("/company/jobs/create?draft=1"),
+    "/login?error=CredentialsSignin&callbackUrl=%2Fcompany%2Fjobs%2Fcreate%3Fdraft%3D1",
+  );
+  assert.equal(loginErrorUrl("/"), "/login?error=CredentialsSignin");
+  assert.equal(loginErrorUrl("https://example.com/company"), "/login?error=CredentialsSignin");
+  assert.equal(loginErrorUrl("//example.com/company"), "/login?error=CredentialsSignin");
 });
