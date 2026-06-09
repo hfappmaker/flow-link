@@ -72,9 +72,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
-  const companyTrustItems = buildCompanyTrustItems({ company: job.companyProfile, job });
-  const companyTrustCompleted = companyTrustItems.filter((item) => item.done).length;
-  const companyTrustPercent = Math.round((companyTrustCompleted / companyTrustItems.length) * 100);
+  const companyConfidence = buildCompanyConfidence({ company: job.companyProfile, job });
   const proposalDraft = freelancerProfile
     ? buildProposalDraft({
         companyName: job.companyProfile.name,
@@ -128,16 +126,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <div>
                   <h2 className="font-semibold">応募前に確認できる情報</h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    企業が登録・公開している会社情報と案件条件です。Flow Linkによる本人確認や支払い保証ではありません。
+                    Flow Linkが確認した項目と、企業が自己申告している項目を分けて表示します。支払い保証や法務確認を示すものではありません。
                   </p>
                 </div>
-                <StatusBadge tone={companyTrustPercent >= 80 ? "good" : companyTrustPercent >= 50 ? "neutral" : "warn"}>
-                  {companyTrustCompleted}/{companyTrustItems.length}
-                </StatusBadge>
+                <StatusBadge tone={companyConfidence.tone}>{companyConfidence.label}</StatusBadge>
               </div>
               <div className="mt-4 grid gap-2">
-                {companyTrustItems.map((item) => (
-                  <TrustSnapshotItem detail={item.detail} done={item.done} key={item.label} label={item.label} />
+                {companyConfidence.items.map((item) => (
+                  <TrustSnapshotItem detail={item.detail} key={item.label} label={item.label} status={item.status} />
                 ))}
               </div>
             </Card>
@@ -366,16 +362,25 @@ function ContractReadinessItem({ label, detail, done }: { label: string; detail:
   );
 }
 
-function TrustSnapshotItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {
+type ConfidenceStatus = "reviewed" | "selfReported" | "missing";
+type ConfidenceTone = "neutral" | "good" | "warn";
+
+function TrustSnapshotItem({ label, detail, status }: { label: string; detail: string; status: ConfidenceStatus }) {
+  const statusClasses = {
+    reviewed: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    selfReported: "border-stone-200 bg-stone-50 text-stone-800",
+    missing: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+  const statusLabels = {
+    reviewed: "Flow Link確認済み",
+    selfReported: "自己申告",
+    missing: "要確認",
+  };
   return (
-    <div
-      className={`rounded border px-3 py-2 text-sm ${
-        done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
-      }`}
-    >
+    <div className={`rounded border px-3 py-2 text-sm ${statusClasses[status]}`}>
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium">{label}</span>
-        <span className="text-xs font-semibold">{done ? "記載あり" : "未記載"}</span>
+        <span className="text-right text-xs font-semibold">{statusLabels[status]}</span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
     </div>
@@ -400,7 +405,7 @@ function DirectInfo({ label, value }: { label: string; value?: string | null }) 
   );
 }
 
-function buildCompanyTrustItems({
+function buildCompanyConfidence({
   company,
   job,
 }: {
@@ -410,6 +415,10 @@ function buildCompanyTrustItems({
     contactTeam?: string | null;
     operatingArea?: string | null;
     paymentPolicy?: string | null;
+    flowLinkReviewedCompanyAt?: Date | string | null;
+    flowLinkReviewedCompanyScope?: string | null;
+    flowLinkReviewedPaymentAt?: Date | string | null;
+    flowLinkReviewedPaymentScope?: string | null;
     updatedAt?: Date | string | null;
   };
   job: {
@@ -424,48 +433,56 @@ function buildCompanyTrustItems({
     updatedAt?: Date | string | null;
   };
 }) {
+  const companyReviewed = Boolean(company.flowLinkReviewedCompanyAt);
+  const paymentReviewed = Boolean(company.flowLinkReviewedPaymentAt);
+  const companySelfReported = Boolean(company.description || company.websiteUrl || company.contactTeam || company.operatingArea);
+  const paymentSelfReported = Boolean(company.paymentPolicy || job.contractTerms);
   const conditionCount = [job.rate, job.workload, job.contractPeriod, job.location || job.remotePolicy].filter(Boolean).length;
-  return [
+  const missingCount = [!companySelfReported, !paymentSelfReported, conditionCount < 3].filter(Boolean).length;
+  const reviewedCount = [companyReviewed, paymentReviewed].filter(Boolean).length;
+  const label =
+    reviewedCount === 2
+      ? "Flow Link確認済み"
+      : missingCount > 0
+        ? "要確認あり"
+        : reviewedCount > 0
+          ? "一部確認済み"
+          : "自己申告のみ";
+  const tone: ConfidenceTone = reviewedCount === 2 ? "good" : missingCount > 0 ? "warn" : "neutral";
+  const items: Array<{ label: string; detail: string; status: ConfidenceStatus }> = [
     {
-      label: "会社情報",
-      detail: company.description ? company.description : "会社概要が未記載です。企業プロフィールに事業内容や募集背景があると判断しやすくなります。",
-      done: Boolean(company.description),
+      label: "会社・Web公開情報",
+      detail: companyReviewed
+        ? `${company.flowLinkReviewedCompanyScope || "会社概要、公開Webサイト、連絡窓口の整合性をFlow Linkが確認しました。"} 確認日: ${formatDateTime(company.flowLinkReviewedCompanyAt)}`
+        : companySelfReported
+          ? [company.description, company.websiteUrl, company.contactTeam, company.operatingArea].filter(Boolean).join(" / ")
+          : "会社概要、公開Webサイト、担当窓口、所在地・稼働エリアが未記載です。応募前に外部で確認できる材料が不足しています。",
+      status: companyReviewed ? "reviewed" : companySelfReported ? "selfReported" : "missing",
     },
     {
-      label: "公開Webサイト",
-      detail: company.websiteUrl ? company.websiteUrl : "公開Webサイトが未登録です。応募前に外部で確認できる情報があると安心材料になります。",
-      done: Boolean(company.websiteUrl),
+      label: "支払い・契約条件",
+      detail: paymentReviewed
+        ? `${company.flowLinkReviewedPaymentScope || "請求締め、支払い時期、契約条件の説明をFlow Linkが確認しました。"} 確認日: ${formatDateTime(company.flowLinkReviewedPaymentAt)}`
+        : paymentSelfReported
+          ? [job.contractTerms && `案件条件: ${job.contractTerms}`, company.paymentPolicy && `企業方針: ${company.paymentPolicy}`].filter(Boolean).join(" / ")
+          : "契約・支払い条件、請求方針が未記載です。支払い時期、請求方法、契約主体を応募前または面談で確認してください。",
+      status: paymentReviewed ? "reviewed" : paymentSelfReported ? "selfReported" : "missing",
     },
     {
-      label: "担当窓口・稼働エリア",
-      detail:
-        company.contactTeam || company.operatingArea
-          ? [company.contactTeam, company.operatingArea].filter(Boolean).join(" / ")
-          : "担当チームや所在地・稼働エリアが未記載です。面談前の連絡先や稼働場所を確認してください。",
-      done: Boolean(company.contactTeam || company.operatingArea),
-    },
-    {
-      label: "案件条件",
+      label: "案件条件の具体性",
       detail:
         conditionCount >= 3
           ? `単価・稼働率・期間・働き方のうち${conditionCount}/4項目が記載されています。`
           : `単価・稼働率・期間・働き方の記載は${conditionCount}/4項目です。不足条件は応募前または面談で確認してください。`,
-      done: conditionCount >= 3,
-    },
-    {
-      label: "選考・支払い条件",
-      detail:
-        job.selectionFlow && (job.contractTerms || company.paymentPolicy)
-          ? "選考フローと契約・支払いに関する説明が記載されています。"
-          : "選考フロー、契約・支払い条件、請求方針のいずれかが不足しています。応募前に確認点として残してください。",
-      done: Boolean(job.selectionFlow && (job.contractTerms || company.paymentPolicy)),
+      status: conditionCount >= 3 ? "selfReported" : "missing",
     },
     {
       label: "掲載・更新日",
       detail: `掲載: ${formatDateTime(job.createdAt)} / 更新: ${formatDateTime(job.updatedAt)} / 会社情報更新: ${formatDateTime(company.updatedAt)}`,
-      done: Boolean(job.createdAt || job.updatedAt || company.updatedAt),
+      status: "selfReported",
     },
   ];
+  return { items, label, tone };
 }
 
 function buildProposalDraft({
