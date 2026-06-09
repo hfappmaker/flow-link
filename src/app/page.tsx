@@ -20,11 +20,17 @@ export default async function Home() {
   return (
     <Shell>
       <TopNav sessionRole={session?.user?.role} />
-      <section className="mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
+      <section className="mx-auto grid max-w-7xl gap-8 px-5 py-8 lg:grid-cols-[minmax(0,1.03fr)_minmax(420px,0.97fr)] lg:items-start lg:gap-12 lg:py-12">
         <div>
           <StatusBadge tone="good">条件確認から面談まで管理</StatusBadge>
-          <h1 className="mt-5 max-w-3xl text-[2rem] font-semibold leading-[1.28] tracking-normal text-stone-950 sm:text-5xl sm:leading-tight">
-            企業とフリーランスが、条件確認から面談まで迷わず進める。
+          <h1 className="mt-5 max-w-3xl text-[2rem] font-semibold leading-[1.28] tracking-normal text-stone-950 sm:text-[2.75rem] sm:leading-[1.18] xl:text-5xl xl:leading-tight">
+            <span className="block">企業とフリーランスが、</span>
+            <span className="block sm:whitespace-nowrap">
+              <span className="whitespace-nowrap">条件確認</span>から面談まで
+            </span>
+            <span className="block">
+              <span className="whitespace-nowrap">迷わず</span>進める。
+            </span>
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-stone-600">
             Flow Link は案件条件、応募提案、書類選考、面談チャットを同じ場所に集約します。
