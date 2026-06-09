@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <Shell>
       <TopNav activeSection="login" registerCallbackUrl={callbackUrl} />
-      <div className="mx-auto grid min-h-[calc(100vh-65px)] max-w-md place-items-center px-5 py-10">
+      <div className="mx-auto grid max-w-md px-5 pb-12 pt-8 sm:pt-12 lg:pt-16">
         <Card className="w-full">
           <h1 className="text-2xl font-semibold">ログイン</h1>
           {params.error && <p className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">メールアドレスまたはパスワードが違います。</p>}
