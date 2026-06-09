@@ -30,12 +30,12 @@ export function TopNav({
 
   return (
     <header className="border-b border-stone-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
+      <div className="top-nav-inner mx-auto flex max-w-7xl items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
+        <Link href="/" className="top-nav-brand flex items-center gap-2 text-lg font-semibold">
           <span className="grid size-8 place-items-center rounded bg-emerald-700 text-sm text-white">FL</span>
           Flow Link
         </Link>
-        <nav className="flex items-center gap-2 text-sm">
+        <nav className="top-nav-menu flex items-center gap-2 text-sm">
           <NavLink href="/jobs" active={currentSection === "jobs"}>
             案件
           </NavLink>
