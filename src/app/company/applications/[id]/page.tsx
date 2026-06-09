@@ -75,6 +75,24 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     selectionFlow: application.jobPost.selectionFlow,
     contractTerms: application.jobPost.contractTerms,
   });
+  const screeningRubric = buildScreeningRubric({
+    freelancerName: application.freelancerProfile.fullName,
+    jobTitle: application.jobPost.title,
+    matchPercent,
+    matchedSkills: requiredSkillMatches,
+    skillGaps: requiredSkillGaps,
+    readinessPercent: readiness.percent,
+    hasCareerHistory: Boolean(application.freelancerProfile.careerHistory),
+    documentCount: application.freelancerProfile.documents.length,
+    hasProposal: Boolean(application.proposalMessage),
+    proposedStart: application.proposedStart,
+    contactPreference: application.contactPreference,
+    availability: application.freelancerProfile.availability,
+    desiredRate: application.freelancerProfile.desiredRate,
+    jobRate: application.jobPost.rate,
+    workload: application.jobPost.workload,
+    contractTerms: application.jobPost.contractTerms,
+  });
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({
     companyName: companyUser!.companyProfile.name,
     freelancerName: application.freelancerProfile.fullName,
@@ -125,6 +143,34 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <SummaryInfo label="稼働開始目安" value={application.proposedStart} />
                 <SummaryInfo label="連絡希望" value={application.contactPreference} />
               </dl>
+            </Card>
+            <Card>
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="font-semibold">面談判断ルーブリック</h2>
+                  <p className="mt-2 text-sm leading-6 text-stone-600">
+                    応募者を同じ観点で確認し、面談へ進める理由と確認事項を企業内メモに残します。
+                  </p>
+                </div>
+                <StatusBadge tone={screeningRubric.readyCount >= 4 ? "good" : screeningRubric.readyCount >= 3 ? "neutral" : "warn"}>
+                  {screeningRubric.readyCount}/{screeningRubric.items.length}
+                </StatusBadge>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {screeningRubric.items.map((item) => (
+                  <RubricItem item={item} key={item.label} />
+                ))}
+              </div>
+              <form action={saveScreeningNote} className="mt-4 grid gap-3">
+                <input type="hidden" name="applicationId" value={application.id} />
+                <TextArea
+                  name="note"
+                  label="判断メモ"
+                  defaultValue={screeningRubric.note}
+                  maxLength={2400}
+                />
+                <button className="btn btn-secondary" type="submit">判断メモを保存</button>
+              </form>
             </Card>
             {(application.jobPost.selectionFlow || application.jobPost.contractTerms) && (
               <Card>
@@ -364,6 +410,42 @@ function SkillReview({
   );
 }
 
+type RubricItem = {
+  label: string;
+  grade: "確認済み" | "追加確認" | "未確認";
+  detail: string;
+  questions: string[];
+};
+
+function RubricItem({ item }: { item: RubricItem }) {
+  const tone =
+    item.grade === "確認済み"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : item.grade === "追加確認"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-stone-200 bg-stone-50 text-stone-700";
+
+  return (
+    <div className={`rounded border p-3 text-sm ${tone}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-semibold">{item.label}</p>
+        <span className="shrink-0 rounded bg-white/70 px-2 py-1 text-xs font-semibold">{item.grade}</span>
+      </div>
+      <p className="mt-2 leading-6 text-stone-700">{item.detail}</p>
+      {item.questions.length > 0 && (
+        <ul className="mt-2 grid gap-1.5 text-stone-700">
+          {item.questions.map((question) => (
+            <li className="flex gap-2" key={question}>
+              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-current opacity-60" />
+              <span>{question}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 type HandoffCheck = {
   label: string;
   detail: string;
@@ -457,6 +539,103 @@ function buildInterviewPrepSheet({
     `- 選考フロー: ${selectionFlow || "面談で説明"}`,
     "- 面談後の判断期限:",
   ].join("\n");
+}
+
+function buildScreeningRubric({
+  freelancerName,
+  jobTitle,
+  matchPercent,
+  matchedSkills,
+  skillGaps,
+  readinessPercent,
+  hasCareerHistory,
+  documentCount,
+  hasProposal,
+  proposedStart,
+  contactPreference,
+  availability,
+  desiredRate,
+  jobRate,
+  workload,
+  contractTerms,
+}: {
+  freelancerName: string;
+  jobTitle: string;
+  matchPercent: number | null;
+  matchedSkills: string[];
+  skillGaps: string[];
+  readinessPercent: number;
+  hasCareerHistory: boolean;
+  documentCount: number;
+  hasProposal: boolean;
+  proposedStart?: string | null;
+  contactPreference?: string | null;
+  availability?: string | null;
+  desiredRate?: string | null;
+  jobRate?: string | null;
+  workload?: string | null;
+  contractTerms?: string | null;
+}) {
+  const hasStartCondition = Boolean(proposedStart || availability);
+  const hasRateCondition = Boolean(desiredRate || jobRate);
+  const hasContractCondition = Boolean(workload && contractTerms);
+  const items: RubricItem[] = [
+    {
+      label: "スキル適合",
+      grade: matchPercent === null ? "追加確認" : matchPercent >= 60 ? "確認済み" : matchedSkills.length > 0 ? "追加確認" : "未確認",
+      detail:
+        matchPercent === null
+          ? "案件の必須スキルが未設定です。職務経歴と提案文から担当範囲を確認してください。"
+          : `必須スキル一致は${matchPercent}%です。一致: ${matchedSkills.length > 0 ? matchedSkills.slice(0, 5).join("、") : "未確認"}`,
+      questions:
+        skillGaps.length > 0
+          ? [`未一致項目（${skillGaps.slice(0, 4).join("、")}）に近い経験や補完方法を確認する`]
+          : ["初回に任せたい業務で、どの経験を活かせるか確認する"],
+    },
+    {
+      label: "実績・書類",
+      grade: readinessPercent >= 80 && hasCareerHistory && documentCount >= 2 ? "確認済み" : readinessPercent >= 60 ? "追加確認" : "未確認",
+      detail: `応募準備は${readinessPercent}%です。職務経歴${hasCareerHistory ? "あり" : "未登録"}、PDF ${documentCount}/2。`,
+      questions: [
+        hasCareerHistory ? "直近プロジェクトの役割、成果、担当範囲を確認する" : "職務経歴の不足分を面談前に共有できるか確認する",
+      ],
+    },
+    {
+      label: "提案内容",
+      grade: hasProposal ? "確認済み" : "未確認",
+      detail: hasProposal ? "応募時の提案が登録されています。案件への貢献内容を面談で深掘りできます。" : "応募時の提案が未登録です。",
+      questions: ["最初の2週間で期待する成果と、応募者が担える範囲をすり合わせる"],
+    },
+    {
+      label: "稼働・連絡",
+      grade: hasStartCondition && contactPreference ? "確認済み" : hasStartCondition || contactPreference ? "追加確認" : "未確認",
+      detail: `開始目安: ${proposedStart || availability || "未設定"} / 連絡希望: ${contactPreference || "未設定"}`,
+      questions: ["面談候補日時、開始時期、週あたりの稼働量を確認する"],
+    },
+    {
+      label: "契約・支払い条件",
+      grade: hasRateCondition && hasContractCondition ? "確認済み" : hasRateCondition || hasContractCondition ? "追加確認" : "未確認",
+      detail: `単価: ${desiredRate || jobRate || "未設定"} / 稼働量: ${workload || "未設定"} / 条件: ${contractTerms || "未設定"}`,
+      questions: ["契約期間、支払い条件、稼働開始後の確認サイクルを面談前に整理する"],
+    },
+  ];
+  const readyCount = items.filter((item) => item.grade === "確認済み").length;
+  const note = [
+    `面談判断ルーブリック: ${freelancerName} / ${jobTitle}`,
+    "",
+    ...items.flatMap((item) => [
+      `【${item.label}】${item.grade}`,
+      item.detail,
+      ...item.questions.map((question) => `- ${question}`),
+      "",
+    ]),
+    "判断",
+    "- 面談へ進める理由:",
+    "- 面談前に依頼すること:",
+    "- 見送りの場合の理由:",
+  ].join("\n");
+
+  return { items, note, readyCount };
 }
 
 function buildHandoffChecks({
