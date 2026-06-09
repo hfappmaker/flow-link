@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { getCompanyReputationSummary } from "@/lib/reputation";
+import { activeSafetyReviewSummary } from "@/lib/safety-reports";
 import {
   applicationStatusLabel,
   buildTrustConfidence,
@@ -20,11 +21,19 @@ import {
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
 import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
+import { SafetyReportPanel } from "@/components/safety-reporting";
 
 export const dynamic = "force-dynamic";
 
-export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function JobDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ safetyReport?: string }>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const job = await publicDbRead(
     () =>
@@ -33,6 +42,10 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         include: {
           companyProfile: {
             include: {
+              safetyReports: {
+                where: { status: { not: "resolved" } },
+                select: { status: true, reportType: true },
+              },
               verificationRequests: {
                 orderBy: { createdAt: "desc" },
                 take: 4,
@@ -92,6 +105,18 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         null,
       )
     : null;
+  const reporterSafetyReports =
+    session?.user?.role === "freelancer"
+      ? await publicDbRead(
+          () =>
+            prisma.companySafetyReport.findMany({
+              where: { reporterUserId: session.user.id, jobPostId: id },
+              orderBy: { createdAt: "desc" },
+              take: 5,
+            }),
+          [],
+        )
+      : [];
 
   if (!job) {
     notFound();
@@ -113,6 +138,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
   const companyConfidence = buildTrustConfidence({ company: job.companyProfile, job });
+  const activeSafetyReview = activeSafetyReviewSummary(job.companyProfile.safetyReports);
   const preferenceReasons = freelancerProfile
     ? visiblePreferenceReasons({
         ...job,
@@ -187,6 +213,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               {companyConfidence.tone !== "good" && (
                 <div className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
                   支払い・会社情報が未確認、確認中、期限切れ、または再提出待ちの場合でも応募は可能です。応募前に検討リストへ保存し、提案文や面談で契約主体、締め日、支払い時期、外部支払い依頼の有無を確認してください。
+                </div>
+              )}
+              {activeSafetyReview && (
+                <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-900">
+                  この企業には現在、Flow Linkが確認中の安全性レポートがあります。個別の報告内容や報告者は公開しませんが、外部支払い依頼や不審なリンクなどがあれば応募前に安全性レポートを送ってください。
                 </div>
               )}
             </Card>
@@ -303,6 +334,21 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                     source="job_detail"
                     sourceContext={`/jobs/${job.id}`}
                     visibleReasons={preferenceReasons}
+                  />
+                </div>
+              )}
+              {session?.user?.role === "freelancer" && (
+                <div className="mb-4">
+                  <SafetyReportPanel
+                    acknowledgement={query.safetyReport === "submitted"}
+                    compact
+                    context={{
+                      jobPostId: job.id,
+                      jobApplicationId: existingApplication?.id,
+                      interviewThreadId: existingApplication?.interviewThread?.id,
+                    }}
+                    reports={reporterSafetyReports}
+                    returnTo={`/jobs/${job.id}`}
                   />
                 </div>
               )}

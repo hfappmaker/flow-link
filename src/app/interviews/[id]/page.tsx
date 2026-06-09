@@ -16,14 +16,23 @@ import {
   postInterviewOutcomeLabels,
 } from "@/lib/post-interview-outcomes";
 import type { PostInterviewOutcome } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
+import { SafetyReportPanel } from "@/components/safety-reporting";
 
 export const dynamic = "force-dynamic";
 
-export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InterviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ safetyReport?: string }>;
+}) {
   const { id } = await params;
+  const query = await searchParams;
   const { user, thread } = await getInterviewThreadForPage(id);
 
   if (!thread) {
@@ -173,6 +182,13 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const outcomeAction = outcomeNextAction({ isCompany: isCompanySender, outcome });
   const feedbackTarget = isCompanySender ? freelancer.fullName : company.name;
   const feedbackEligible = Boolean(thread.scheduledAt);
+  const reporterSafetyReports = !isCompanySender
+    ? await prisma.companySafetyReport.findMany({
+        where: { reporterUserId: user.id, interviewThreadId: thread.id },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      })
+    : [];
 
   return (
     <Shell>
@@ -387,6 +403,20 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                 <SummaryRow label="応募時の連絡希望" value={thread.jobApplication.contactPreference ?? "未設定"} />
               </dl>
             </Card>
+
+            {!isCompanySender && (
+              <SafetyReportPanel
+                acknowledgement={query.safetyReport === "submitted"}
+                compact
+                context={{
+                  jobPostId: jobPost.id,
+                  jobApplicationId: thread.jobApplicationId,
+                  interviewThreadId: thread.id,
+                }}
+                reports={reporterSafetyReports}
+                returnTo={`/interviews/${thread.id}`}
+              />
+            )}
 
             <Card>
               <div className="flex items-start justify-between gap-4">

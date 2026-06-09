@@ -18,6 +18,7 @@ import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
 import { evaluateSavedFeedJobAlerts, normalizeAlertCadence } from "@/lib/job-alerts";
 import {
   parseApplicationStatus,
+  parseCompanySafetyReportType,
   parseCompanyVerificationKind,
   parseInterviewMessageType,
   parseOptionalPostInterviewDeclineReason,
@@ -38,6 +39,7 @@ import { loginErrorUrl } from "@/lib/registration-intent";
 import { directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 import {
   applyToJobWorkflow,
+  createCompanySafetyReportWorkflow,
   recordCompanyPostInterviewOutcomeWorkflow,
   recordFreelancerPostInterviewOutcomeWorkflow,
   screenApplicationWorkflow,
@@ -620,6 +622,43 @@ export async function submitRecommendationFeedback(formData: FormData) {
   redirect(returnTo);
 }
 
+export async function submitCompanySafetyReport(formData: FormData) {
+  const { user, profile } = await currentFreelancer();
+  const reportType = parseCompanySafetyReportType(formData.get("reportType"));
+  const detail = toText(formData.get("detail"));
+  const returnTo = safetyReportReturnPath(safeReturnPath(toText(formData.get("returnTo")) || "/freelancer/applications"));
+  const jobPostId = toOptionalText(formData.get("jobPostId"));
+  const jobApplicationId = toOptionalText(formData.get("jobApplicationId"));
+  const interviewThreadId = toOptionalText(formData.get("interviewThreadId"));
+
+  if (detail.length < 20 || detail.length > 1200) {
+    throw new Error("安全性レポートの詳細は20文字以上1200文字以内で入力してください。");
+  }
+
+  const context = await resolveSafetyReportContext({
+    freelancerProfileId: profile.id,
+    jobPostId,
+    jobApplicationId,
+    interviewThreadId,
+  });
+
+  await createCompanySafetyReportWorkflow(prisma, {
+    companyProfileId: context.companyProfileId,
+    reporterUserId: user.id,
+    jobPostId: context.jobPostId,
+    jobApplicationId: context.jobApplicationId,
+    interviewThreadId: context.interviewThreadId,
+    reportType,
+    detail,
+  });
+
+  revalidatePath("/jobs");
+  if (context.jobPostId) revalidatePath(`/jobs/${context.jobPostId}`);
+  revalidatePath("/freelancer/applications");
+  if (context.interviewThreadId) revalidatePath(`/interviews/${context.interviewThreadId}`);
+  redirect(returnTo);
+}
+
 export async function removeSavedJob(formData: FormData) {
   const { profile } = await currentFreelancer();
   const jobPostId = toText(formData.get("jobPostId"));
@@ -862,6 +901,84 @@ function formatDateForMessage(value: Date) {
 
 function safeReturnPath(value: string) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
+function safetyReportReturnPath(value: string) {
+  const separator = value.includes("?") ? "&" : "?";
+  return `${value}${separator}safetyReport=submitted`;
+}
+
+async function resolveSafetyReportContext({
+  freelancerProfileId,
+  jobPostId,
+  jobApplicationId,
+  interviewThreadId,
+}: {
+  freelancerProfileId: string;
+  jobPostId: string | null;
+  jobApplicationId: string | null;
+  interviewThreadId: string | null;
+}) {
+  if (interviewThreadId) {
+    const thread = await prisma.interviewThread.findFirst({
+      where: {
+        id: interviewThreadId,
+        jobApplication: { freelancerProfileId },
+      },
+      select: {
+        id: true,
+        jobApplicationId: true,
+        jobApplication: {
+          select: {
+            jobPostId: true,
+            jobPost: { select: { companyProfileId: true } },
+          },
+        },
+      },
+    });
+    if (!thread) throw new Error("安全性レポートを送信できる面談が見つかりません。");
+    return {
+      companyProfileId: thread.jobApplication.jobPost.companyProfileId,
+      jobPostId: thread.jobApplication.jobPostId,
+      jobApplicationId: thread.jobApplicationId,
+      interviewThreadId: thread.id,
+    };
+  }
+
+  if (jobApplicationId) {
+    const application = await prisma.jobApplication.findFirst({
+      where: { id: jobApplicationId, freelancerProfileId },
+      select: {
+        id: true,
+        jobPostId: true,
+        interviewThread: { select: { id: true } },
+        jobPost: { select: { companyProfileId: true } },
+      },
+    });
+    if (!application) throw new Error("安全性レポートを送信できる応募が見つかりません。");
+    return {
+      companyProfileId: application.jobPost.companyProfileId,
+      jobPostId: application.jobPostId,
+      jobApplicationId: application.id,
+      interviewThreadId: application.interviewThread?.id ?? null,
+    };
+  }
+
+  if (jobPostId) {
+    const job = await prisma.jobPost.findFirst({
+      where: { id: jobPostId, status: "published" },
+      select: { id: true, companyProfileId: true },
+    });
+    if (!job) throw new Error("安全性レポートを送信できる案件が見つかりません。");
+    return {
+      companyProfileId: job.companyProfileId,
+      jobPostId: job.id,
+      jobApplicationId: null,
+      interviewThreadId: null,
+    };
+  }
+
+  throw new Error("安全性レポートの対象を確認してください。");
 }
 
 function parseRating(value: FormDataEntryValue | null, errorMessage: string) {

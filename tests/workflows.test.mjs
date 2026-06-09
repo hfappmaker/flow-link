@@ -460,6 +460,8 @@ test("safety report workflow creates submitted reports and resolves them with af
     companyProfileId: "company-profile-1",
     reporterUserId: "freelancer-user-1",
     jobPostId: "job-1",
+    jobApplicationId: "application-1",
+    interviewThreadId: "thread-1",
     reportType: CompanySafetyReportType.off_platform_payment_request,
     detail: "面談後に外部決済を求められた",
   });
@@ -469,6 +471,8 @@ test("safety report workflow creates submitted reports and resolves them with af
     companyProfileId: "company-profile-1",
     reporterUserId: "freelancer-user-1",
     jobPostId: "job-1",
+    jobApplicationId: "application-1",
+    interviewThreadId: "thread-1",
     reportType: CompanySafetyReportType.off_platform_payment_request,
     detail: "面談後に外部決済を求められた",
     status: CompanySafetyReportStatus.submitted,

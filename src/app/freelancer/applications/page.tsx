@@ -4,6 +4,7 @@ import { JobApplicationStatus } from "@prisma/client";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
+import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   applicationStatusLabel,
@@ -14,6 +15,7 @@ import {
   skillMatchPercent,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
+import { SafetyReportPanel } from "@/components/safety-reporting";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ const statusTabs: Array<{ label: string; value: JobApplicationStatus | "all" }> 
 export default async function FreelancerApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; action?: string; sort?: string }>;
+  searchParams: Promise<{ status?: string; action?: string; sort?: string; safetyReport?: string }>;
 }) {
   const filters = await searchParams;
   const selectedStatus = parseJobApplicationStatusFilter(filters.status, applicationStatusFilterValues);
@@ -50,6 +52,25 @@ export default async function FreelancerApplicationsPage({
       },
     },
   });
+  const applicationIds = profile.applications.map((application) => application.id);
+  const safetyReports =
+    applicationIds.length > 0
+      ? await prisma.companySafetyReport.findMany({
+          where: {
+            reporterUserId: user.id,
+            jobApplicationId: { in: applicationIds },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+  const safetyReportsByApplication = new Map<string, typeof safetyReports>();
+  for (const report of safetyReports) {
+    if (!report.jobApplicationId) continue;
+    safetyReportsByApplication.set(report.jobApplicationId, [
+      ...(safetyReportsByApplication.get(report.jobApplicationId) ?? []),
+      report,
+    ]);
+  }
   const readiness = getFreelancerReadiness(profile);
   const applications =
     profile.applications.map((application) => {
@@ -271,6 +292,19 @@ export default async function FreelancerApplicationsPage({
                       {application.proposedStart && <StatusBadge>開始目安: {application.proposedStart}</StatusBadge>}
                       {application.contactPreference && <StatusBadge>連絡希望: {application.contactPreference}</StatusBadge>}
                       {application.interviewThread?.meetingUrl && <StatusBadge tone="good">会議URL共有済み</StatusBadge>}
+                    </div>
+                    <div className="mt-4">
+                      <SafetyReportPanel
+                        acknowledgement={filters.safetyReport === "submitted"}
+                        compact
+                        context={{
+                          jobPostId: application.jobPost.id,
+                          jobApplicationId: application.id,
+                          interviewThreadId: application.interviewThread?.id,
+                        }}
+                        reports={safetyReportsByApplication.get(application.id)}
+                        returnTo="/freelancer/applications"
+                      />
                     </div>
                   </div>
 

@@ -139,6 +139,8 @@ enum CompanySafetyReportType {
   off_platform_payment_request
   suspicious_evidence
   unsafe_company
+  mismatched_job_company_details
+  other_trust_concern
 }
 
 enum CompanySafetyReportStatus {
@@ -351,6 +353,8 @@ model CompanySafetyReport {
   companyProfileId String                    @map("company_profile_id")
   reporterUserId   String?                   @map("reporter_user_id")
   jobPostId        String?                   @map("job_post_id")
+  jobApplicationId String?                   @map("job_application_id")
+  interviewThreadId String?                  @map("interview_thread_id")
   reportType       CompanySafetyReportType   @map("report_type")
   status           CompanySafetyReportStatus @default(submitted)
   detail           String
@@ -362,8 +366,13 @@ model CompanySafetyReport {
   companyProfile   CompanyProfile            @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
   reporterUser     User?                     @relation(fields: [reporterUserId], references: [id], onDelete: SetNull)
   jobPost          JobPost?                  @relation(fields: [jobPostId], references: [id], onDelete: SetNull)
+  jobApplication   JobApplication?           @relation(fields: [jobApplicationId], references: [id], onDelete: SetNull)
+  interviewThread  InterviewThread?          @relation(fields: [interviewThreadId], references: [id], onDelete: SetNull)
 
   @@index([companyProfileId, status])
+  @@index([reporterUserId, status])
+  @@index([jobApplicationId])
+  @@index([interviewThreadId])
   @@index([reportType, status])
   @@map("company_safety_reports")
 }
@@ -453,6 +462,7 @@ model JobApplication {
   interviewThread         InterviewThread?
   interactionFeedback     InteractionFeedback[]
   postInterviewOutcome    PostInterviewOutcome?
+  safetyReports           CompanySafetyReport[]
 
   @@unique([jobPostId, freelancerProfileId])
   @@map("job_applications")
@@ -522,6 +532,7 @@ model InterviewThread {
   updatedAt        DateTime              @updatedAt @map("updated_at")
   jobApplication   JobApplication        @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
   messages         InterviewMessage[]
+  safetyReports    CompanySafetyReport[]
 
   @@map("interview_threads")
 }
