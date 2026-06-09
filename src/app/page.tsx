@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { publicDbRead } from "@/lib/public-db";
+import { publicDbReadResult } from "@/lib/public-db";
 import { Shell, TopNav, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
-  const [jobs, companies, applications] = await Promise.all([
-    publicDbRead(() => prisma.jobPost.count({ where: { status: "published" } }), 0),
-    publicDbRead(() => prisma.companyProfile.count(), 0),
-    publicDbRead(() => prisma.jobApplication.count(), 0),
+  const [jobsResult, companiesResult, applicationsResult] = await Promise.all([
+    publicDbReadResult(() => prisma.jobPost.count({ where: { status: "published" } }), 0),
+    publicDbReadResult(() => prisma.companyProfile.count(), 0),
+    publicDbReadResult(() => prisma.jobApplication.count(), 0),
   ]);
+  const marketplaceCountsUnavailable = [jobsResult, companiesResult, applicationsResult].some(
+    (result) => result.status === "unavailable",
+  );
 
   return (
     <Shell>
@@ -32,11 +35,15 @@ export default async function Home() {
             </Link>
             {!session && <Link className="btn btn-secondary" href="/register">プロフィールを作る</Link>}
           </div>
-          <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
-            <Metric label="公開中案件" value={jobs} />
-            <Metric label="登録企業" value={companies} />
-            <Metric label="応募数" value={applications} />
-          </div>
+          {marketplaceCountsUnavailable ? (
+            <MarketplaceStatsUnavailable />
+          ) : (
+            <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
+              <Metric label="公開中案件" value={jobsResult.data} />
+              <Metric label="登録企業" value={companiesResult.data} />
+              <Metric label="応募数" value={applicationsResult.data} />
+            </div>
+          )}
         </div>
 
         <div className="rounded-md border border-stone-200 bg-white p-4 shadow-sm">
@@ -84,6 +91,20 @@ export default async function Home() {
         </div>
       </section>
     </Shell>
+  );
+}
+
+function MarketplaceStatsUnavailable() {
+  return (
+    <div className="mt-8 max-w-2xl rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+      <p className="font-semibold">マーケットプレイスの最新状況を読み込めません。</p>
+      <p className="mt-1 text-amber-900">
+        公開案件数、登録企業数、応募数は現在確認できません。時間をおいて再読み込みしてください。
+      </p>
+      <Link className="btn btn-secondary mt-3" href="/">
+        再読み込み
+      </Link>
+    </div>
   );
 }
 

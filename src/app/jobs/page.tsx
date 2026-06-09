@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { removeSavedJob, saveCurrentJobSearch, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
-import { publicDbRead } from "@/lib/public-db";
+import { publicDbRead, publicDbReadResult } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   buildDiscoveryIntentCounts,
@@ -121,7 +121,7 @@ export default async function JobsPage({
       : {}),
     ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
-  const jobs = await publicDbRead(
+  const jobsResult = await publicDbReadResult(
     () =>
       prisma.jobPost.findMany({
         where,
@@ -139,8 +139,10 @@ export default async function JobsPage({
       }),
     [],
   );
+  const jobs = jobsResult.data;
+  const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
-    session?.user?.role === "freelancer"
+    !jobsUnavailable && session?.user?.role === "freelancer"
       ? await publicDbRead(
           () =>
             prisma.freelancerProfile.findUnique({
@@ -185,8 +187,9 @@ export default async function JobsPage({
     fit === "ready" && "応募へ進みやすい",
   ].filter(Boolean);
   const hasActiveFilters = activeFilterLabels.length > 0;
-  const showMarketplaceEmptyState = jobs.length === 0 && !hasActiveFilters;
-  const showDiscoveryControls = !showMarketplaceEmptyState;
+  const showMarketplaceUnavailableState = jobsUnavailable;
+  const showMarketplaceEmptyState = !showMarketplaceUnavailableState && jobs.length === 0 && !hasActiveFilters;
+  const showDiscoveryControls = !showMarketplaceUnavailableState && !showMarketplaceEmptyState;
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -276,6 +279,19 @@ export default async function JobsPage({
       <TopNav activeSection="jobs" sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
+        {showMarketplaceUnavailableState && (
+          <div className="mt-6">
+            <EmptyState
+              title="公開案件を読み込めません。"
+              description="マーケットプレイスのデータに一時的に接続できません。公開案件の有無は現在確認できないため、時間をおいて再読み込みしてください。"
+              action={
+                <Link className="btn btn-primary" href={currentJobsPath}>
+                  再読み込み {icons.arrow}
+                </Link>
+              }
+            />
+          </div>
+        )}
         {showMarketplaceEmptyState && (
           <div className="mt-6">
             <EmptyState
