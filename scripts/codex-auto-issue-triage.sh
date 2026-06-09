@@ -147,11 +147,21 @@ if [[ "$DRY_RUN" == "1" ]]; then
   log "DRY_RUN=1; skipping git fetch/pull."
 elif [[ "${TRIAGE_SKIP_GIT_SYNC:-0}" == "1" ]]; then
   log "TRIAGE_SKIP_GIT_SYNC=1; skipping git fetch/pull."
-elif [[ "$DIRTY_TREE" == "1" ]]; then
-  log "Skipping git fetch/pull because the working tree is dirty."
 else
   git fetch "$REMOTE" "$BRANCH"
-  git pull --ff-only "$REMOTE" "$BRANCH"
+  remote_head="$(git rev-parse "$REMOTE/$BRANCH")"
+  local_head="$(git rev-parse HEAD)"
+
+  if [[ "$DIRTY_TREE" == "1" ]]; then
+    if [[ "$local_head" != "$remote_head" ]]; then
+      log "Working tree is dirty and local HEAD is not current with $REMOTE/$BRANCH; skipping triage to avoid stale issue creation."
+      log "local_head=$local_head remote_head=$remote_head"
+      exit 0
+    fi
+    log "Working tree is dirty but already current with $REMOTE/$BRANCH; continuing with provisional local observations."
+  else
+    git pull --ff-only "$REMOTE" "$BRANCH"
+  fi
 fi
 
 if ! command -v gh >/dev/null 2>&1; then
@@ -181,6 +191,7 @@ Hard rules:
 Dirty working tree policy:
 - This triage run may execute when the local working tree has uncommitted changes.
 - If the working tree is dirty, treat local code and browser observations as provisional.
+- If the working tree is dirty and local HEAD is behind or different from origin/develop, the wrapper skips the run before Codex starts so issues are not created from stale code.
 - Do not create an issue based only on uncommitted local changes.
 - Prefer evidence from Vercel logs, Preview, GitHub issues, committed code, or behavior that still applies to the intended develop branch.
 - If dirty-tree observations are included, explicitly say so in the issue Evidence section.
