@@ -25,6 +25,7 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
   const missingItems = contractReadiness.items.filter((item) => !item.done);
   const isPublishingIncomplete = formValues.status === "published" && missingItems.length > 0;
   const nextGuide = buildConditionGuide(formValues).find((guide) => !guide.done);
+  const applicantPreview = buildApplicantPreview(formValues, missingItems.map((item) => item.label));
 
   function updateField(name: keyof typeof formValues, value: string) {
     setFormValues((current) => ({ ...current, [name]: value }));
@@ -121,47 +122,87 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
         <button className="btn btn-primary md:col-span-2" type="submit">保存</button>
       </form>
       <aside className="grid h-fit gap-4">
-        <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-semibold">応募前に見せる条件</h2>
-            <p className="mt-1 text-sm leading-6 text-stone-600">応募者が判断しやすい案件情報の充足状況です。</p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-semibold">{contractReadiness.percent}%</p>
-            <p className="text-xs text-stone-500">{contractReadiness.completed}/{contractReadiness.total}</p>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {contractReadiness.items.map((item) => (
-            <div
-              className={`rounded border px-3 py-2 text-sm ${
-                item.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
-              }`}
-              key={item.key}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-medium">{item.label}</span>
-                <span className="text-xs font-semibold">{item.done ? "完了" : "未設定"}</span>
-              </div>
-              <p className="mt-1 leading-6 text-stone-600">{item.detail}</p>
+        <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold">応募者に見える内容</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">
+                公開前に、案件詳細で伝わる判断材料を確認できます。
+              </p>
             </div>
-          ))}
-        </div>
-        {missingItems.length > 0 ? (
-          <div className="mt-4 rounded border border-white bg-white p-3">
-            <p className="text-sm font-semibold">保存前に埋める項目</p>
-            <ul className="mt-2 grid gap-2 text-sm leading-6 text-stone-600">
-              {missingItems.map((item) => (
-                <li key={item.key}>・{item.label}</li>
-              ))}
-            </ul>
+            <span className="rounded border border-emerald-200 bg-white px-2 py-1 text-xs font-semibold text-emerald-800">
+              {contractReadiness.percent}%
+            </span>
           </div>
-        ) : (
-          <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">
-            条件確認に必要な情報が揃っています。応募者は業務内容、報酬、稼働条件、面談の流れを応募前に確認できます。
-          </p>
-        )}
+          <div className="mt-4 rounded border border-emerald-200 bg-white p-3">
+            <p className="text-xs font-medium text-stone-500">案件名</p>
+            <p className="mt-1 text-sm font-semibold text-stone-950">{applicantPreview.title}</p>
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-stone-600">{applicantPreview.summary}</p>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-1">
+            {applicantPreview.highlights.map((highlight) => (
+              <div className="rounded border border-emerald-200 bg-white px-3 py-2" key={highlight.label}>
+                <p className="font-medium text-stone-500">{highlight.label}</p>
+                <p className="mt-1 font-semibold text-stone-800">{highlight.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-3">
+            <ApplicantPreviewList
+              empty="応募者が最初に確認したい情報はまだ不足しています。"
+              items={applicantPreview.readyPoints}
+              label="応募前に確認できること"
+              tone="good"
+            />
+            <ApplicantPreviewList
+              empty="現時点で大きな不足はありません。"
+              items={applicantPreview.openQuestions}
+              label="まだ伝わりにくいこと"
+              tone="warn"
+            />
+          </div>
+        </div>
+        <div className="rounded-md border border-stone-200 bg-stone-50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-semibold">応募前に見せる条件</h2>
+              <p className="mt-1 text-sm leading-6 text-stone-600">応募者が判断しやすい案件情報の充足状況です。</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-semibold">{contractReadiness.percent}%</p>
+              <p className="text-xs text-stone-500">{contractReadiness.completed}/{contractReadiness.total}</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {contractReadiness.items.map((item) => (
+              <div
+                className={`rounded border px-3 py-2 text-sm ${
+                  item.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+                }`}
+                key={item.key}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium">{item.label}</span>
+                  <span className="text-xs font-semibold">{item.done ? "完了" : "未設定"}</span>
+                </div>
+                <p className="mt-1 leading-6 text-stone-600">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+          {missingItems.length > 0 ? (
+            <div className="mt-4 rounded border border-white bg-white p-3">
+              <p className="text-sm font-semibold">保存前に埋める項目</p>
+              <ul className="mt-2 grid gap-2 text-sm leading-6 text-stone-600">
+                {missingItems.map((item) => (
+                  <li key={item.key}>・{item.label}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">
+              条件確認に必要な情報が揃っています。応募者は業務内容、報酬、稼働条件、面談の流れを応募前に確認できます。
+            </p>
+          )}
         </div>
         <div className="rounded-md border border-stone-200 bg-white p-4">
           <h2 className="font-semibold">入力ガイド</h2>
@@ -334,6 +375,75 @@ type ConditionGuide = {
     value: string;
   }>;
 };
+
+type ApplicantPreview = {
+  title: string;
+  summary: string;
+  highlights: Array<{
+    label: string;
+    value: string;
+  }>;
+  readyPoints: string[];
+  openQuestions: string[];
+};
+
+function ApplicantPreviewList({
+  empty,
+  items,
+  label,
+  tone,
+}: {
+  empty: string;
+  items: string[];
+  label: string;
+  tone: "good" | "warn";
+}) {
+  const toneClasses = {
+    good: "border-emerald-200 bg-white text-emerald-900",
+    warn: "border-amber-200 bg-white text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border p-3 ${toneClasses[tone]}`}>
+      <p className="text-xs font-semibold">{label}</p>
+      {items.length > 0 ? (
+        <ul className="mt-2 grid gap-1.5 text-xs leading-5 text-stone-700">
+          {items.map((item) => (
+            <li className="break-words" key={item}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-stone-600">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+function buildApplicantPreview(values: Record<FieldName, string>, missingLabels: string[]): ApplicantPreview {
+  const readyPoints = [
+    values.description && values.requiredSkills ? "業務範囲と必須スキルを見て、自分の経験を提案文に書ける" : null,
+    values.rate && values.contractTerms ? "単価と契約・支払い条件を応募前に確認できる" : null,
+    values.workload && values.contractPeriod ? "稼働量と契約期間から、開始後の予定を判断できる" : null,
+    values.selectionFlow ? "応募後の面談回数と判断までの流れを確認できる" : null,
+    values.location || values.remotePolicy ? "勤務地またはリモート条件を確認できる" : null,
+  ].filter((item): item is string => Boolean(item));
+  const openQuestions = missingLabels.map((label) => `${label}を応募前に確認したくなります`);
+
+  return {
+    title: values.title || "案件タイトル未入力",
+    summary: values.description || "業務内容を入力すると、応募者が担当範囲と期待される成果を確認できます。",
+    highlights: [
+      { label: "単価", value: values.rate || "未設定" },
+      { label: "稼働率", value: values.workload || "未設定" },
+      { label: "契約期間", value: values.contractPeriod || "未設定" },
+      { label: "働き方", value: [values.location, values.remotePolicy].filter(Boolean).join(" / ") || "未設定" },
+    ],
+    readyPoints,
+    openQuestions,
+  };
+}
 
 function buildConditionGuide(values: Record<FieldName, string>): ConditionGuide[] {
   return [
