@@ -132,6 +132,8 @@ export default async function JobsPage({
     fit === "ready" && "応募へ進みやすい",
   ].filter(Boolean);
   const hasActiveFilters = activeFilterLabels.length > 0;
+  const showMarketplaceEmptyState = jobs.length === 0 && !hasActiveFilters;
+  const showDiscoveryControls = !showMarketplaceEmptyState;
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -233,137 +235,167 @@ export default async function JobsPage({
       <TopNav activeSection="jobs" sessionRole={session?.user?.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
-        <Card className="mt-6">
-          <form
-            className={`grid gap-3 md:grid-cols-2 ${
-              freelancerProfile
-                ? "lg:grid-cols-[minmax(220px,1fr)_repeat(7,minmax(112px,145px))_auto_auto]"
-                : "lg:grid-cols-[minmax(220px,1fr)_repeat(6,minmax(118px,150px))_auto_auto]"
-            }`}
-            action="/jobs"
-          >
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              キーワード
-              <input
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="q"
-                defaultValue={keyword}
-                placeholder="職種、スキル、会社名、勤務地"
-              />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              勤務形態
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="remote"
-                defaultValue={remote ? "remote" : ""}
-              >
-                <option value="">すべて</option>
-                <option value="remote">リモート可</option>
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              応募受付
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="accepting"
-                defaultValue={accepting ? "open" : ""}
-              >
-                <option value="">すべて</option>
-                <option value="open">受付中のみ</option>
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              条件確認
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="directReady"
-                defaultValue={directReady ? "ready" : ""}
-              >
-                <option value="">すべて</option>
-                <option value="ready">条件が揃った案件</option>
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              稼働量
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="workload"
-                defaultValue={workload}
-              >
-                <option value="">すべて</option>
-                <option value="light">週2-3日目安</option>
-              </select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              単価
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="rate"
-                defaultValue={rate}
-              >
-                <option value="">すべて</option>
-                <option value="high">80万円以上目安</option>
-              </select>
-            </label>
-            {freelancerProfile && (
-              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                対応状況
-                <select
-                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                  name="candidate"
-                  defaultValue={candidate}
-                >
-                  <option value="">すべて</option>
-                  <option value="fresh">未対応の候補</option>
-                </select>
-              </label>
-            )}
-            <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-              並び順
-              <select
-                className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                name="sort"
-                defaultValue={sort}
-              >
-                <option value="direct">応募しやすい順</option>
-                <option value="new">新着順</option>
-              </select>
-            </label>
-            {fit && <input type="hidden" name="fit" value={fit} />}
-            <button className="btn btn-primary self-end" type="submit">検索</button>
-            <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
-          </form>
-          <p className="mt-3 text-sm text-stone-500">
-            {resultSummary}
-          </p>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-            <DiscoverySignal
-              label="条件フィルター"
-              value={directReady || fit === "ready" || workload || rate ? "有効" : "任意"}
-              tone={directReady || fit === "ready" || workload || rate ? "good" : "neutral"}
-            />
-            <DiscoverySignal
-              label="高スコア案件"
-              value={`${rankedJobs.filter(({ directScore }) => directScore >= 70).length}件`}
-              tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
-            />
-            <DiscoverySignal
-              label={freelancerProfile ? "未対応の候補" : "条件確認100%"}
-              value={
-                freelancerProfile
-                  ? `${freshCandidateCount}件`
-                  : `${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`
-              }
-              tone={
-                freelancerProfile
-                  ? freshCandidateCount > 0 ? "good" : "warn"
-                  : rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"
+        {showMarketplaceEmptyState && (
+          <div className="mt-6">
+            <EmptyState
+              title="公開案件はまだありません。"
+              description="企業が案件を公開すると、このページで条件や応募受付状況を確認できます。新しい案件を見逃さないよう、プロフィールを用意してお待ちください。"
+              action={
+                <div className="flex flex-wrap justify-center gap-3">
+                  {session?.user?.role === "company_user" ? (
+                    <Link className="btn btn-primary" href="/company/jobs/create">
+                      最初の案件を作成 {icons.arrow}
+                    </Link>
+                  ) : session?.user?.role === "freelancer" ? (
+                    <Link className="btn btn-primary" href="/freelancer">
+                      応募準備を確認 {icons.arrow}
+                    </Link>
+                  ) : (
+                    <Link className="btn btn-primary" href="/register">
+                      プロフィールを作る {icons.arrow}
+                    </Link>
+                  )}
+                  {!session && <Link className="btn btn-secondary" href="/login">ログイン</Link>}
+                </div>
               }
             />
           </div>
-        </Card>
-        {freelancerProfile && (
+        )}
+        {showDiscoveryControls && (
+          <Card className="mt-6">
+            <form
+              className={`grid gap-3 md:grid-cols-2 ${
+                freelancerProfile
+                  ? "lg:grid-cols-[minmax(220px,1fr)_repeat(7,minmax(112px,145px))_auto_auto]"
+                  : "lg:grid-cols-[minmax(220px,1fr)_repeat(6,minmax(118px,150px))_auto_auto]"
+              }`}
+              action="/jobs"
+            >
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                キーワード
+                <input
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="q"
+                  defaultValue={keyword}
+                  placeholder="職種、スキル、会社名、勤務地"
+                />
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                勤務形態
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="remote"
+                  defaultValue={remote ? "remote" : ""}
+                >
+                  <option value="">すべて</option>
+                  <option value="remote">リモート可</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                応募受付
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="accepting"
+                  defaultValue={accepting ? "open" : ""}
+                >
+                  <option value="">すべて</option>
+                  <option value="open">受付中のみ</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                条件確認
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="directReady"
+                  defaultValue={directReady ? "ready" : ""}
+                >
+                  <option value="">すべて</option>
+                  <option value="ready">条件が揃った案件</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                稼働量
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="workload"
+                  defaultValue={workload}
+                >
+                  <option value="">すべて</option>
+                  <option value="light">週2-3日目安</option>
+                </select>
+              </label>
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                単価
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="rate"
+                  defaultValue={rate}
+                >
+                  <option value="">すべて</option>
+                  <option value="high">80万円以上目安</option>
+                </select>
+              </label>
+              {freelancerProfile && (
+                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                  対応状況
+                  <select
+                    className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                    name="candidate"
+                    defaultValue={candidate}
+                  >
+                    <option value="">すべて</option>
+                    <option value="fresh">未対応の候補</option>
+                  </select>
+                </label>
+              )}
+              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                並び順
+                <select
+                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                  name="sort"
+                  defaultValue={sort}
+                >
+                  <option value="direct">応募しやすい順</option>
+                  <option value="new">新着順</option>
+                </select>
+              </label>
+              {fit && <input type="hidden" name="fit" value={fit} />}
+              <button className="btn btn-primary self-end" type="submit">検索</button>
+              <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
+            </form>
+            <p className="mt-3 text-sm text-stone-500">
+              {resultSummary}
+            </p>
+            {rankedJobs.length > 0 && (
+              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                <DiscoverySignal
+                  label="条件フィルター"
+                  value={directReady || fit === "ready" || workload || rate ? "有効" : "任意"}
+                  tone={directReady || fit === "ready" || workload || rate ? "good" : "neutral"}
+                />
+                <DiscoverySignal
+                  label="高スコア案件"
+                  value={`${rankedJobs.filter(({ directScore }) => directScore >= 70).length}件`}
+                  tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
+                />
+                <DiscoverySignal
+                  label={freelancerProfile ? "未対応の候補" : "条件確認100%"}
+                  value={
+                    freelancerProfile
+                      ? `${freshCandidateCount}件`
+                      : `${rankedJobs.filter(({ contractReadinessPercent }) => contractReadinessPercent === 100).length}件`
+                  }
+                  tone={
+                    freelancerProfile
+                      ? freshCandidateCount > 0 ? "good" : "warn"
+                      : rankedJobs.some(({ contractReadinessPercent }) => contractReadinessPercent === 100) ? "good" : "warn"
+                  }
+                />
+              </div>
+            )}
+          </Card>
+        )}
+        {showDiscoveryControls && freelancerProfile && jobs.length > 0 && (
           <ProfileDiscoveryShortcuts
             activeFit={fit}
             activeRate={rate}
@@ -375,7 +407,7 @@ export default async function JobsPage({
             skills={parseSkills(freelancerProfile.skills).slice(0, 6)}
           />
         )}
-        {freelancerProfile && discoveryIntentCounts && (
+        {showDiscoveryControls && freelancerProfile && discoveryIntentCounts && jobs.length > 0 && (
           <DiscoveryIntentPanel
             counts={discoveryIntentCounts}
             keyword={keyword}
@@ -404,12 +436,6 @@ export default async function JobsPage({
               returnTo={currentJobsPath}
             />
           ))}
-          {jobs.length === 0 && !hasActiveFilters && (
-            <EmptyState
-              title="公開案件はまだありません。"
-              description="企業が公開した案件が表示されます。新しい案件が公開されると、このページで確認できます。"
-            />
-          )}
           {jobs.length === 0 && hasActiveFilters && (
             <EmptyState
               title="条件に合う公開案件はありません。"
