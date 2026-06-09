@@ -3,7 +3,7 @@ import type { LinkProps } from "next/link";
 import type { JobApplicationStatus, Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { applicationStatusLabel, buildApplicationReview, formatDateTime } from "@/lib/utils";
+import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -76,19 +76,28 @@ export default async function JobApplicationsPage({
     job?.applications
       .map((application) => ({
         application,
+        responseState: buildApplicationResponseState(application),
         review: buildApplicationReview({ ...application, jobPost: job }),
       }))
       .filter(({ review }) => !readyOnly || review.isInterviewReady)
       .sort((a, b) => {
         if (selectedSort === "review") {
-          return b.review.interviewReadinessPercent - a.review.interviewReadinessPercent || b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
+          return (
+            b.responseState.priorityBoost - a.responseState.priorityBoost ||
+            b.review.interviewReadinessPercent - a.review.interviewReadinessPercent ||
+            b.application.appliedAt.getTime() - a.application.appliedAt.getTime()
+          );
         }
         return b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
       }) ?? [];
-  const appliedReviews = job?.applications.map((application) => buildApplicationReview({ ...application, jobPost: job })) ?? [];
-  const interviewReadyCount = appliedReviews.filter((review) => review.isInterviewReady).length;
-  const needsCheckCount = appliedReviews.filter((review) => review.nextChecks.length > 0).length;
-  const hasReviewQuestionsCount = appliedReviews.filter((review) => review.reviewQuestions.length > 0).length;
+  const appliedReviews =
+    job?.applications.map((application) => ({
+      responseState: buildApplicationResponseState(application),
+      review: buildApplicationReview({ ...application, jobPost: job }),
+    })) ?? [];
+  const interviewReadyCount = appliedReviews.filter(({ review }) => review.isInterviewReady).length;
+  const needsCheckCount = appliedReviews.filter(({ review }) => review.nextChecks.length > 0).length;
+  const responseDueCount = appliedReviews.filter(({ responseState }) => responseState.priorityBoost >= 15).length;
   const highlightedApplications = reviewedApplications
     .filter(({ application, review }) => application.status === "applied" && review.isInterviewReady)
     .slice(0, 3);
@@ -130,7 +139,7 @@ export default async function JobApplicationsPage({
                     name="sort"
                     defaultValue={selectedSort}
                   >
-                    <option value="review">判断しやすい順</option>
+                    <option value="review">対応期限順</option>
                     <option value="new">新着順</option>
                   </select>
                 </label>
@@ -142,7 +151,7 @@ export default async function JobApplicationsPage({
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
               <ReviewSignal label="面談候補" value={`${interviewReadyCount}件`} tone={interviewReadyCount > 0 ? "good" : "neutral"} />
               <ReviewSignal label="未選考" value={`${countByStatus.get("applied") ?? 0}件`} tone={(countByStatus.get("applied") ?? 0) > 0 ? "warn" : "neutral"} />
-              <ReviewSignal label="面談前の確認" value={`${hasReviewQuestionsCount}件`} tone={needsCheckCount > 0 ? "warn" : "good"} />
+              <ReviewSignal label="対応期限" value={`${responseDueCount}件`} tone={responseDueCount > 0 ? "warn" : needsCheckCount > 0 ? "neutral" : "good"} />
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {statusTabs.map((tab) => {
@@ -177,15 +186,15 @@ export default async function JobApplicationsPage({
               </Link>
             </div>
             <div className="mt-4 grid gap-3">
-              {highlightedApplications.map(({ application, review }) => (
-                <HighlightedApplicationRow application={application} key={application.id} review={review} />
+              {highlightedApplications.map(({ application, responseState, review }) => (
+                <HighlightedApplicationRow application={application} key={application.id} responseState={responseState} review={review} />
               ))}
             </div>
           </Card>
         )}
         <div className="mt-6 grid gap-4">
-          {reviewedApplications.map(({ application, review }) => (
-            <ApplicationCard application={application} key={application.id} review={review} />
+          {reviewedApplications.map(({ application, responseState, review }) => (
+            <ApplicationCard application={application} key={application.id} responseState={responseState} review={review} />
           ))}
           {job && reviewedApplications.length === 0 && (
             <EmptyState
@@ -229,9 +238,11 @@ type ApplicationReview = {
 function HighlightedApplicationRow({
   application,
   review,
+  responseState,
 }: {
   application: ApplicationWithProfile;
   review: ApplicationReview;
+  responseState: ReturnType<typeof buildApplicationResponseState>;
 }) {
   const startSignal =
     application.proposedStart ||
@@ -248,6 +259,7 @@ function HighlightedApplicationRow({
       <div>
         <div className="flex flex-wrap gap-2">
           <StatusBadge tone="good">面談判断 {review.interviewReadinessPercent}%</StatusBadge>
+          <StatusBadge tone={responseState.tone}>{responseState.label}</StatusBadge>
           <StatusBadge tone={review.matchPercent === null ? "neutral" : review.matchPercent >= 50 ? "good" : "neutral"}>
             必須一致 {review.matchPercent === null ? "要確認" : `${review.matchPercent}%`}
           </StatusBadge>
@@ -269,9 +281,11 @@ function HighlightedApplicationRow({
 function ApplicationCard({
   application,
   review,
+  responseState,
 }: {
   application: ApplicationWithProfile;
   review: ApplicationReview;
+  responseState: ReturnType<typeof buildApplicationResponseState>;
 }) {
   const startSignal =
     application.proposedStart ||
@@ -299,6 +313,7 @@ function ApplicationCard({
             <StatusBadge tone={review.interviewReadinessPercent >= 80 ? "good" : review.interviewReadinessPercent >= 50 ? "neutral" : "warn"}>
               面談判断 {review.interviewReadinessPercent}%
             </StatusBadge>
+            <StatusBadge tone={responseState.tone}>{responseState.label}</StatusBadge>
             <StatusBadge tone={review.matchPercent === null ? "neutral" : review.matchPercent >= 50 ? "good" : review.matchPercent > 0 ? "neutral" : "warn"}>
               必須一致 {review.matchPercent === null ? "要確認" : `${review.matchPercent}%`}
             </StatusBadge>
@@ -359,6 +374,9 @@ function ApplicationCard({
             <p className="text-xs font-medium text-stone-500">次の確認</p>
             <p className="mt-1 text-sm font-semibold text-stone-900">{nextReviewAction.title}</p>
             <p className="mt-1 text-sm leading-6 text-stone-600">{nextReviewAction.description}</p>
+            {application.status === "applied" && (
+              <p className="mt-2 text-sm leading-6 text-stone-600">{responseState.detail}</p>
+            )}
           </div>
           {review.reviewQuestions.length > 0 && (
             <div className="mt-3 rounded border border-emerald-100 bg-emerald-50/60 p-3">

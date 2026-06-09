@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { buildApplicationReview, directMatchScore, formatDateTime, skillMatchPercent } from "@/lib/utils";
+import { buildApplicationResponseState, buildApplicationReview, directMatchScore, formatDateTime, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -73,13 +73,14 @@ export default async function CompanyDashboard() {
     .map((application) => {
       const readiness = getFreelancerReadiness(application.freelancerProfile);
       const review = buildApplicationReview(application);
+      const responseState = buildApplicationResponseState(application);
       const score = directMatchScore({
         ...application.jobPost,
         freelancerReadinessPercent: readiness.percent,
         freelancerSkills: application.freelancerProfile.skills,
       });
 
-      return { application, readiness, review, score };
+      return { application, readiness, review, responseState, score: Math.min(100, score + responseState.priorityBoost) };
     })
     .sort((a, b) => b.score - a.score || b.application.appliedAt.getTime() - a.application.appliedAt.getTime())
     .slice(0, 4);
@@ -137,13 +138,14 @@ export default async function CompanyDashboard() {
           {contactQueue.length > 0 ? (
             <Card className="p-0">
               <div className="divide-y divide-stone-200">
-                {contactQueue.map(({ application, readiness, review, score }) => (
+                {contactQueue.map(({ application, readiness, responseState, review, score }) => (
                   <ContactQueueRow
                     application={application}
                     key={application.id}
                     matchedSkills={review.requiredSkillMatches}
                     nextChecks={review.nextChecks}
                     readinessPercent={readiness.percent}
+                    responseState={responseState}
                     score={score}
                   />
                 ))}
@@ -279,12 +281,14 @@ function ContactQueueRow({
   matchedSkills,
   nextChecks,
   readinessPercent,
+  responseState,
   score,
 }: {
   application: ContactQueueApplication;
   matchedSkills: string[];
   nextChecks: string[];
   readinessPercent: number;
+  responseState: ReturnType<typeof buildApplicationResponseState>;
   score: number;
 }) {
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
@@ -299,6 +303,7 @@ function ContactQueueRow({
       <div>
         <div className="flex flex-wrap gap-2">
           <StatusBadge tone={score >= 80 ? "good" : score >= 55 ? "neutral" : "warn"}>連絡優先 {score}%</StatusBadge>
+          <StatusBadge tone={responseState.tone}>{responseState.label}</StatusBadge>
           <StatusBadge tone={matchPercent === null ? "neutral" : matchPercent >= 50 ? "good" : matchPercent > 0 ? "neutral" : "warn"}>
             必須一致 {matchPercent === null ? "要確認" : `${matchPercent}%`}
           </StatusBadge>
@@ -317,6 +322,7 @@ function ContactQueueRow({
           {application.proposedStart && <span>開始: {application.proposedStart}</span>}
           {application.contactPreference && <span>連絡: {application.contactPreference}</span>}
         </div>
+        <p className="mt-2 text-sm leading-6 text-stone-600">{responseState.detail}</p>
         {matchedSkills.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {matchedSkills.slice(0, 5).map((skill) => (

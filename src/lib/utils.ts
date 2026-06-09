@@ -21,6 +21,58 @@ export function formatDateTime(value: Date | string | null | undefined) {
   }).format(new Date(value));
 }
 
+export function daysSince(value: Date | string | null | undefined, now = new Date()) {
+  if (!value) return 0;
+  const startedAt = new Date(value).getTime();
+  if (Number.isNaN(startedAt)) return 0;
+  return Math.max(0, Math.floor((now.getTime() - startedAt) / (1000 * 60 * 60 * 24)));
+}
+
+export function buildApplicationResponseState({
+  appliedAt,
+  status,
+}: {
+  appliedAt: Date | string | null | undefined;
+  status?: string | null;
+}) {
+  if (status && status !== "applied") {
+    return {
+      daysWaiting: 0,
+      label: "対応済み",
+      detail: "選考結果は更新済みです。",
+      tone: "good" as const,
+      priorityBoost: 0,
+    };
+  }
+
+  const daysWaiting = daysSince(appliedAt);
+  if (daysWaiting >= 5) {
+    return {
+      daysWaiting,
+      label: "至急対応",
+      detail: `応募から${daysWaiting}日経過しています。今日中に面談判断または見送りを更新してください。`,
+      tone: "bad" as const,
+      priorityBoost: 25,
+    };
+  }
+  if (daysWaiting >= 3) {
+    return {
+      daysWaiting,
+      label: "対応期限",
+      detail: `応募から${daysWaiting}日経過しています。面談へ進めるか確認してください。`,
+      tone: "warn" as const,
+      priorityBoost: 15,
+    };
+  }
+  return {
+    daysWaiting,
+    label: daysWaiting === 0 ? "本日応募" : `${daysWaiting}日経過`,
+    detail: "応募内容と確認点を見て、早めに次の連絡へ進めてください。",
+    tone: "neutral" as const,
+    priorityBoost: daysWaiting * 3,
+  };
+}
+
 export function skillPreview(value: string | null | undefined, limit = 3) {
   return parseSkills(value).slice(0, limit);
 }
