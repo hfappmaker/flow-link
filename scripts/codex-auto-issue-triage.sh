@@ -184,6 +184,12 @@ Mode:
 - $MODE
 - $MODE_FOCUS
 
+Strategic goal:
+- Flow Link's automation exists to help win users from competitor services such as レバテック, Findy Freelance, and adjacent freelance/job marketplace services.
+- Do not create an issue unless it clearly improves at least one of: freelancer acquisition or activation, company acquisition or activation, trust and perceived reliability, speed from registration to useful match/application, clarity of job/company/freelancer fit, reduction of friction compared with competitor workflows, or reliability of the core marketplace flow.
+- Prefer issues that create a concrete reason for a freelancer or company already using a competitor to try, trust, or switch to Flow Link.
+- Skip cosmetic, speculative, or internally interesting issues when their competitive relevance is weak.
+
 Hard rules:
 - Do not edit repository files.
 - Do not commit.
@@ -237,6 +243,7 @@ Classification:
 Issue body format:
 ## Summary
 ## Evidence
+## Competitive relevance
 ## User impact
 ## Acceptance criteria
 ## Out of scope
@@ -247,6 +254,7 @@ Issue body format:
 
 Quality bar:
 - Write issues from the freelancer/company user's perspective.
+- In the Competitive relevance section, state which competitor user behavior this could affect, why this would make Flow Link more attractive, and why it is worth doing now.
 - Avoid developer-facing UI terms such as MVC, MVP, direct matching, direct contract, direct match, core differentiation, or implementation jargon unless the issue is explicitly about source code maintainability.
 - For product mode, use current public competitor or adjacent-market information when network access is available, and include source URLs in the issue body.
 - For bug mode, treat Vercel Preview logs as strong signals but describe the likely user-visible failure, not just the stack trace.

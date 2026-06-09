@@ -218,6 +218,8 @@ Primary goal:
 - Read the selected issue and implement exactly the requested fix or improvement.
 - Do not broaden the scope beyond the issue body and comments.
 - Handle only this one issue in this run.
+- Preserve the issue's competitive purpose: Flow Link is being improved to win users from competitor services such as レバテック, Findy Freelance, and adjacent freelance/job marketplace services.
+- If implementation choices trade off simplicity, user value, and polish, prefer the option that most directly improves freelancer/company acquisition, activation, trust, speed to useful match/application, fit clarity, or core marketplace reliability.
 
 Issue rules:
 - If the issue is unclear, risky, impossible, or missing required credentials/configuration, leave the worktree clean and explain the blocker in your final message.
@@ -262,6 +264,7 @@ Final message:
 - Say whether the issue was fixed or blocked.
 - Include the commit SHA if fixed.
 - Include verification commands and any Preview/local checks.
+- Include one sentence explaining how the change supports the issue's competitive relevance when the issue body includes that section.
 PROMPT_EOF
 )
 
