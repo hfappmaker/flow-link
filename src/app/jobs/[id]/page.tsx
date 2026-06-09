@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { applyToJob, removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
@@ -63,12 +64,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     : null;
 
   if (!job) {
-    return (
-      <Shell>
-        <TopNav sessionRole={session?.user?.role} />
-        <div className="mx-auto max-w-4xl px-5 py-8"><Card>案件が見つかりません。</Card></div>
-      </Shell>
-    );
+    notFound();
   }
   const requiredSkills = parseSkills(job.requiredSkills);
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
