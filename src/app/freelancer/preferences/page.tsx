@@ -85,7 +85,7 @@ export default async function WorkPreferencesPage() {
             <Card>
               <h2 className="font-semibold">通知への接続</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                初期実装ではメール送信は行わず、保存フィードと通知方針だけを持ちます。ジョブダイジェスト実装時に、この条件と保存フィードを配信対象にします。
+                保存すると、この通知方針が現在の希望条件と保存フィードに残ります。条件に合う案件を見直す目安として使えますが、この設定によるメール配信や定期ダイジェスト配信は現在行っていません。
               </p>
               <div className="mt-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm">
                 <p className="text-xs text-stone-500">現在の方針</p>
