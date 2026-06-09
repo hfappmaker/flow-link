@@ -19,6 +19,8 @@ import {
   parseApplicationStatus,
   parseCompanyVerificationKind,
   parseInterviewMessageType,
+  parseOptionalPostInterviewDeclineReason,
+  parsePostInterviewOutcomeStatus,
   parseJobPostStatus,
   parseRecommendationFeedbackReason,
   parseResumeDocumentType,
@@ -35,10 +37,13 @@ import { loginErrorUrl } from "@/lib/registration-intent";
 import { directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 import {
   applyToJobWorkflow,
+  recordCompanyPostInterviewOutcomeWorkflow,
+  recordFreelancerPostInterviewOutcomeWorkflow,
   screenApplicationWorkflow,
   sendInterviewMessageWorkflow,
   submitInteractionFeedbackWorkflow,
 } from "@/lib/workflows";
+import { companyOutcomeStatusValues, freelancerOutcomeStatusValues } from "@/lib/post-interview-outcomes";
 
 async function currentUser() {
   const session = await auth();
@@ -730,6 +735,82 @@ export async function submitInteractionFeedback(formData: FormData) {
   revalidatePath(`/jobs/${thread.jobApplication.jobPostId}`);
   revalidatePath(`/company/applications/${thread.jobApplicationId}`);
   revalidatePath(`/company/jobs/${thread.jobApplication.jobPostId}/applications`);
+}
+
+export async function recordCompanyPostInterviewOutcome(formData: FormData) {
+  const { companyUser } = await currentCompanyUser();
+  const threadId = toText(formData.get("threadId"));
+  const thread = await assertCanUseThread(companyUser.userId, threadId);
+  if (thread.jobApplication.jobPost.companyProfileId !== companyUser.companyProfileId) {
+    throw new Error("この面談結果は更新できません。");
+  }
+
+  const status = parsePostInterviewOutcomeStatus(formData.get("status"), companyOutcomeStatusValues);
+  const textFields = outcomeTextFields(formData);
+  await recordCompanyPostInterviewOutcomeWorkflow(prisma, {
+    jobApplicationId: thread.jobApplicationId,
+    jobPostId: thread.jobApplication.jobPostId,
+    status,
+    ...textFields,
+    declineReason: parseOptionalPostInterviewDeclineReason(formData.get("declineReason")),
+    jobPostAction: parseJobPostAction(formData.get("jobPostAction")),
+  });
+
+  revalidateOutcomePaths(threadId, thread.jobApplicationId, thread.jobApplication.jobPostId);
+}
+
+export async function recordFreelancerPostInterviewOutcome(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const threadId = toText(formData.get("threadId"));
+  const thread = await assertCanUseThread(profile.userId, threadId);
+  if (thread.jobApplication.freelancerProfileId !== profile.id) {
+    throw new Error("この面談結果は更新できません。");
+  }
+
+  const status = parsePostInterviewOutcomeStatus(formData.get("status"), freelancerOutcomeStatusValues);
+  const textFields = outcomeTextFields(formData);
+  await recordFreelancerPostInterviewOutcomeWorkflow(prisma, {
+    jobApplicationId: thread.jobApplicationId,
+    status,
+    declineReason: parseOptionalPostInterviewDeclineReason(formData.get("declineReason")),
+    agreedStartDate: textFields.agreedStartDate,
+    agreedRate: textFields.agreedRate,
+    agreedWorkload: textFields.agreedWorkload,
+    externalConfirmationNeeded: textFields.externalConfirmationNeeded,
+    privateOutcomeNote: textFields.privateOutcomeNote,
+  });
+
+  revalidateOutcomePaths(threadId, thread.jobApplicationId, thread.jobApplication.jobPostId);
+}
+
+function outcomeTextFields(formData: FormData) {
+  const fields = {
+    proposedStartDate: toOptionalText(formData.get("proposedStartDate")),
+    agreedStartDate: toOptionalText(formData.get("agreedStartDate")),
+    agreedRate: toOptionalText(formData.get("agreedRate")),
+    agreedWorkload: toOptionalText(formData.get("agreedWorkload")),
+    contractPaymentNotes: toOptionalText(formData.get("contractPaymentNotes")),
+    externalConfirmationNeeded: toOptionalText(formData.get("externalConfirmationNeeded")),
+    responseDeadline: toOptionalText(formData.get("responseDeadline")),
+    privateOutcomeNote: toOptionalText(formData.get("privateOutcomeNote")),
+  };
+  const tooLong = Object.entries(fields).find(([, value]) => (value?.length ?? 0) > 800);
+  if (tooLong) throw new Error("面談後ステータスの入力内容は各800文字以内で入力してください。");
+  return fields;
+}
+
+function parseJobPostAction(value: FormDataEntryValue | null) {
+  const text = toText(value);
+  if (text === "pause_applications" || text === "close_job") return text;
+  return "keep_open";
+}
+
+function revalidateOutcomePaths(threadId: string, applicationId: string, jobPostId: string) {
+  revalidatePath(`/interviews/${threadId}`);
+  revalidatePath(`/company/applications/${applicationId}`);
+  revalidatePath(`/company/jobs/${jobPostId}/applications`);
+  revalidatePath("/freelancer/applications");
+  revalidatePath("/company/jobs");
 }
 
 function formatDateForMessage(value: Date) {

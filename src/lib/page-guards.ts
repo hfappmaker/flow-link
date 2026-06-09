@@ -101,6 +101,7 @@ export type InterviewThreadForPage = Prisma.InterviewThreadGetPayload<{
         freelancerProfile: { include: { careerHistory: true; documents: true } };
         jobPost: { include: { companyProfile: { include: { users: true } } } };
         interactionFeedback: true;
+        postInterviewOutcome: true;
       };
     };
   };
@@ -117,6 +118,7 @@ export async function getInterviewThreadForPage(threadId: string) {
           freelancerProfile: { include: { careerHistory: true, documents: true } },
           jobPost: { include: { companyProfile: { include: { users: true } } } },
           interactionFeedback: { where: { authorUserId: user.id } },
+          postInterviewOutcome: true,
         },
       },
     },

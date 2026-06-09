@@ -5,10 +5,14 @@ import {
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
+  PostInterviewDeclineReason,
+  PostInterviewOutcomeStatus,
 } from "@prisma/client";
 
 const {
   applyToJobWorkflow,
+  recordCompanyPostInterviewOutcomeWorkflow,
+  recordFreelancerPostInterviewOutcomeWorkflow,
   screenApplicationWorkflow,
   sendInterviewMessageWorkflow,
   submitInteractionFeedbackWorkflow,
@@ -31,8 +35,14 @@ function workflowDb(overrides = {}) {
     jobApplication: {
       update: async (args) => calls.push(["jobApplication.update", args]),
     },
+    jobPost: {
+      update: async (args) => calls.push(["jobPost.update", args]),
+    },
     notification: {
       create: async (args) => calls.push(["notification.create", args]),
+    },
+    postInterviewOutcome: {
+      upsert: async (args) => calls.push(["postInterviewOutcome.upsert", args]),
     },
     interviewThread: {
       upsert: async (args) => {
@@ -68,10 +78,14 @@ function workflowDb(overrides = {}) {
         calls.push(["jobApplication.create", args]);
         return { id: "application-1" };
       },
+      update: async (args) => calls.push(["jobPost.update", args]),
     },
     interactionFeedback: {
       findUnique: async () => overrides.existingFeedback ?? null,
       upsert: async (args) => calls.push(["interactionFeedback.upsert", args]),
+    },
+    postInterviewOutcome: {
+      upsert: async (args) => calls.push(["postInterviewOutcome.upsert", args]),
     },
     $transaction: async (callbackOrOperations) => {
       if (typeof callbackOrOperations === "function") return callbackOrOperations(tx);
@@ -201,6 +215,90 @@ test("meeting URL updates only for valid URLs", async () => {
   const updates = validDb.calls.filter(([name]) => name === "interviewThread.update");
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0][1].data, { meetingUrl: "https://meet.example.com/abc" });
+});
+
+test("company post-interview outcome stores agreement snapshot and manual job decision", async () => {
+  const db = workflowDb();
+
+  await recordCompanyPostInterviewOutcomeWorkflow(db, {
+    jobApplicationId: "application-1",
+    jobPostId: "job-1",
+    status: PostInterviewOutcomeStatus.accepted,
+    proposedStartDate: "2026-07-01",
+    agreedStartDate: "2026-07-01",
+    agreedRate: "月80万円",
+    agreedWorkload: "週4日",
+    contractPaymentNotes: "外部契約書で支払いサイト確認",
+    externalConfirmationNeeded: "契約主体の最終確認",
+    responseDeadline: "2026-06-15",
+    declineReason: null,
+    privateOutcomeNote: "複数名採用のため募集は継続",
+    jobPostAction: "keep_open",
+    updatedAt: new Date("2026-06-10T00:00:00.000Z"),
+  });
+
+  const upsert = db.calls.find(([name]) => name === "postInterviewOutcome.upsert");
+  assert.equal(upsert[1].update.status, PostInterviewOutcomeStatus.accepted);
+  assert.equal(upsert[1].update.agreedRate, "月80万円");
+  assert.equal(upsert[1].update.jobShouldStayOpen, true);
+  assert.equal(db.calls.filter(([name]) => name === "jobPost.update").length, 0);
+});
+
+test("company can pause applications after accepted or started outcome", async () => {
+  const db = workflowDb();
+
+  await recordCompanyPostInterviewOutcomeWorkflow(db, {
+    jobApplicationId: "application-1",
+    jobPostId: "job-1",
+    status: PostInterviewOutcomeStatus.work_started,
+    proposedStartDate: null,
+    agreedStartDate: "2026-07-01",
+    agreedRate: null,
+    agreedWorkload: null,
+    contractPaymentNotes: null,
+    externalConfirmationNeeded: null,
+    responseDeadline: null,
+    declineReason: null,
+    privateOutcomeNote: null,
+    jobPostAction: "pause_applications",
+  });
+
+  const jobUpdate = db.calls.find(([name]) => name === "jobPost.update");
+  assert.deepEqual(jobUpdate[1].data, { applicationStatus: ApplicationStatus.paused });
+});
+
+test("freelancer decline requires a structured private reason", async () => {
+  const db = workflowDb();
+
+  await assert.rejects(
+    () =>
+      recordFreelancerPostInterviewOutcomeWorkflow(db, {
+        jobApplicationId: "application-1",
+        status: PostInterviewOutcomeStatus.declined_by_freelancer,
+        declineReason: null,
+        agreedStartDate: null,
+        agreedRate: null,
+        agreedWorkload: null,
+        externalConfirmationNeeded: null,
+        privateOutcomeNote: null,
+      }),
+    /辞退理由を選択してください。/,
+  );
+
+  await recordFreelancerPostInterviewOutcomeWorkflow(db, {
+    jobApplicationId: "application-1",
+    status: PostInterviewOutcomeStatus.declined_by_freelancer,
+    declineReason: PostInterviewDeclineReason.contract_payment_concern,
+    agreedStartDate: null,
+    agreedRate: null,
+    agreedWorkload: null,
+    externalConfirmationNeeded: "支払いサイトが合わない",
+    privateOutcomeNote: "公開評価ではなく進捗メモ",
+  });
+
+  const upsert = db.calls.find(([name]) => name === "postInterviewOutcome.upsert");
+  assert.equal(upsert[1].update.declineReason, PostInterviewDeclineReason.contract_payment_concern);
+  assert.equal(upsert[1].update.privateOutcomeNote, "公開評価ではなく進捗メモ");
 });
 
 test("feedback edit attempts after 14 days are rejected", async () => {

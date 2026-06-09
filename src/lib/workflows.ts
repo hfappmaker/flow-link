@@ -4,6 +4,8 @@ import {
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
+  PostInterviewOutcomeStatus,
+  type PostInterviewDeclineReason,
   type JobApplicationStatus,
   type PrismaClient,
 } from "@prisma/client";
@@ -12,7 +14,7 @@ import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
 type WorkflowDb = Pick<
   PrismaClient,
-  "$transaction" | "freelancerProfile" | "jobPost" | "jobApplication" | "interactionFeedback"
+  "$transaction" | "freelancerProfile" | "jobPost" | "jobApplication" | "interactionFeedback" | "postInterviewOutcome"
 >;
 
 type ApplyToJobInput = {
@@ -279,6 +281,132 @@ export async function submitInteractionFeedbackWorkflow(db: WorkflowDb, input: S
       wouldWorkAgain: input.wouldWorkAgain,
       privateNote: input.privateNote,
       moderationStatus: input.moderationStatus,
+    },
+  });
+}
+
+type CompanyPostInterviewOutcomeInput = {
+  jobApplicationId: string;
+  jobPostId: string;
+  status: PostInterviewOutcomeStatus;
+  proposedStartDate: string | null;
+  agreedStartDate: string | null;
+  agreedRate: string | null;
+  agreedWorkload: string | null;
+  contractPaymentNotes: string | null;
+  externalConfirmationNeeded: string | null;
+  responseDeadline: string | null;
+  declineReason: PostInterviewDeclineReason | null;
+  privateOutcomeNote: string | null;
+  jobPostAction: "keep_open" | "pause_applications" | "close_job";
+  updatedAt?: Date;
+};
+
+export async function recordCompanyPostInterviewOutcomeWorkflow(
+  db: WorkflowDb,
+  input: CompanyPostInterviewOutcomeInput,
+) {
+  if (
+    input.status === PostInterviewOutcomeStatus.accepted ||
+    input.status === PostInterviewOutcomeStatus.contract_agreed ||
+    input.status === PostInterviewOutcomeStatus.work_started
+  ) {
+    if (!input.agreedStartDate && !input.proposedStartDate) {
+      throw new Error("承諾以降のステータスでは開始日または開始予定を入力してください。");
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.postInterviewOutcome.upsert({
+      where: { jobApplicationId: input.jobApplicationId },
+      create: {
+        jobApplicationId: input.jobApplicationId,
+        status: input.status,
+        proposedStartDate: input.proposedStartDate,
+        agreedStartDate: input.agreedStartDate,
+        agreedRate: input.agreedRate,
+        agreedWorkload: input.agreedWorkload,
+        contractPaymentNotes: input.contractPaymentNotes,
+        externalConfirmationNeeded: input.externalConfirmationNeeded,
+        responseDeadline: input.responseDeadline,
+        declineReason: input.declineReason,
+        privateOutcomeNote: input.privateOutcomeNote,
+        jobShouldStayOpen: input.jobPostAction === "keep_open",
+        companyUpdatedAt: input.updatedAt ?? new Date(),
+      },
+      update: {
+        status: input.status,
+        proposedStartDate: input.proposedStartDate,
+        agreedStartDate: input.agreedStartDate,
+        agreedRate: input.agreedRate,
+        agreedWorkload: input.agreedWorkload,
+        contractPaymentNotes: input.contractPaymentNotes,
+        externalConfirmationNeeded: input.externalConfirmationNeeded,
+        responseDeadline: input.responseDeadline,
+        declineReason: input.declineReason,
+        privateOutcomeNote: input.privateOutcomeNote,
+        jobShouldStayOpen: input.jobPostAction === "keep_open",
+        companyUpdatedAt: input.updatedAt ?? new Date(),
+      },
+    });
+
+    if (input.jobPostAction === "pause_applications") {
+      await tx.jobPost.update({
+        where: { id: input.jobPostId },
+        data: { applicationStatus: ApplicationStatus.paused },
+      });
+    }
+    if (input.jobPostAction === "close_job") {
+      await tx.jobPost.update({
+        where: { id: input.jobPostId },
+        data: { status: JobPostStatus.closed, applicationStatus: ApplicationStatus.paused },
+      });
+    }
+  });
+}
+
+type FreelancerPostInterviewOutcomeInput = {
+  jobApplicationId: string;
+  status: PostInterviewOutcomeStatus;
+  declineReason: PostInterviewDeclineReason | null;
+  agreedStartDate: string | null;
+  agreedRate: string | null;
+  agreedWorkload: string | null;
+  externalConfirmationNeeded: string | null;
+  privateOutcomeNote: string | null;
+  updatedAt?: Date;
+};
+
+export async function recordFreelancerPostInterviewOutcomeWorkflow(
+  db: WorkflowDb,
+  input: FreelancerPostInterviewOutcomeInput,
+) {
+  if (input.status === PostInterviewOutcomeStatus.declined_by_freelancer && !input.declineReason) {
+    throw new Error("辞退理由を選択してください。");
+  }
+
+  await db.postInterviewOutcome.upsert({
+    where: { jobApplicationId: input.jobApplicationId },
+    create: {
+      jobApplicationId: input.jobApplicationId,
+      status: input.status,
+      declineReason: input.declineReason,
+      agreedStartDate: input.agreedStartDate,
+      agreedRate: input.agreedRate,
+      agreedWorkload: input.agreedWorkload,
+      externalConfirmationNeeded: input.externalConfirmationNeeded,
+      privateOutcomeNote: input.privateOutcomeNote,
+      freelancerUpdatedAt: input.updatedAt ?? new Date(),
+    },
+    update: {
+      status: input.status,
+      declineReason: input.declineReason,
+      agreedStartDate: input.agreedStartDate,
+      agreedRate: input.agreedRate,
+      agreedWorkload: input.agreedWorkload,
+      externalConfirmationNeeded: input.externalConfirmationNeeded,
+      privateOutcomeNote: input.privateOutcomeNote,
+      freelancerUpdatedAt: input.updatedAt ?? new Date(),
     },
   });
 }

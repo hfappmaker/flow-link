@@ -4,6 +4,8 @@ import {
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
+  PostInterviewDeclineReason,
+  PostInterviewOutcomeStatus,
   RecommendationFeedbackReason,
   ResumeDocumentType,
   UserRole,
@@ -46,6 +48,8 @@ export const applicationStatusValues = enumValues(ApplicationStatus);
 export const companyVerificationKindValues = enumValues(CompanyVerificationKind);
 export const jobApplicationStatusValues = enumValues(JobApplicationStatus);
 export const interviewMessageTypeValues = enumValues(InterviewMessageType);
+export const postInterviewOutcomeStatusValues = enumValues(PostInterviewOutcomeStatus);
+export const postInterviewDeclineReasonValues = enumValues(PostInterviewDeclineReason);
 export const workPreferenceStatusValues = enumValues(WorkPreferenceStatus);
 export const workLocationModeValues = enumValues(WorkLocationMode);
 export const recommendationFeedbackReasonValues = enumValues(RecommendationFeedbackReason);
@@ -82,6 +86,17 @@ export function parseScreeningResultStatus(value: FormDataEntryValue | null) {
 
 export function parseInterviewMessageType(value: FormDataEntryValue | null) {
   return parseRequiredEnum(value, interviewMessageTypeValues, "メッセージ種別が不正です。");
+}
+
+export function parsePostInterviewOutcomeStatus(
+  value: FormDataEntryValue | null,
+  allowedValues: readonly PostInterviewOutcomeStatus[] = postInterviewOutcomeStatusValues,
+) {
+  return parseRequiredEnum(value, allowedValues, "面談後ステータスを確認してください。");
+}
+
+export function parseOptionalPostInterviewDeclineReason(value: FormDataEntryValue | null) {
+  return parseEnumValue(value, postInterviewDeclineReasonValues);
 }
 
 export function parseWorkPreferenceStatus(value: FormDataEntryValue | null) {

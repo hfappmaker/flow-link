@@ -3,6 +3,7 @@ import type { LinkProps } from "next/link";
 import { JobApplicationStatus } from "@prisma/client";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { requireFreelancerProfile } from "@/lib/page-guards";
+import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   applicationStatusLabel,
@@ -44,7 +45,7 @@ export default async function FreelancerApplicationsPage({
       documents: true,
       careerHistory: true,
       applications: {
-        include: { jobPost: { include: { companyProfile: true } }, interviewThread: true },
+        include: { jobPost: { include: { companyProfile: true } }, interviewThread: true, postInterviewOutcome: true },
         orderBy: { appliedAt: "desc" },
       },
     },
@@ -62,6 +63,8 @@ export default async function FreelancerApplicationsPage({
         hasInterviewThread: Boolean(application.interviewThread),
         interviewStatus: application.interviewThread?.status,
         interviewHref: application.interviewThread ? `/interviews/${application.interviewThread.id}` : undefined,
+        outcomeStatus: application.postInterviewOutcome?.status,
+        outcomeNextActionText: outcomeNextAction({ isCompany: false, outcome: application.postInterviewOutcome }),
         hasMeetingUrl: Boolean(application.interviewThread?.meetingUrl),
         readinessComplete: readiness.isReady,
         contractReady: contractReadiness.isReady,
@@ -230,6 +233,11 @@ export default async function FreelancerApplicationsPage({
                       <StatusBadge tone={application.status === "screening_passed" ? "good" : application.status === "screening_rejected" ? "bad" : "neutral"}>
                         {applicationStatusLabel(application.status)}
                       </StatusBadge>
+                      {application.status === "screening_passed" && (
+                        <StatusBadge tone={outcomeTone(application.postInterviewOutcome?.status)}>
+                          {postInterviewOutcomeLabels[application.postInterviewOutcome?.status ?? "waiting_company_decision"]}
+                        </StatusBadge>
+                      )}
                       <StatusBadge>応募日時: {formatDateTime(application.appliedAt)}</StatusBadge>
                       {application.interviewThread?.scheduledAt && (
                         <StatusBadge tone="good">面談日時: {formatDateTime(application.interviewThread.scheduledAt)}</StatusBadge>
@@ -306,6 +314,8 @@ function getApplicationNextAction({
   hasInterviewThread,
   interviewStatus,
   interviewHref,
+  outcomeStatus,
+  outcomeNextActionText,
   hasMeetingUrl,
   readinessComplete,
   contractReady,
@@ -316,6 +326,8 @@ function getApplicationNextAction({
   hasInterviewThread: boolean;
   interviewStatus?: string;
   interviewHref?: string;
+  outcomeStatus?: string;
+  outcomeNextActionText?: string;
   hasMeetingUrl: boolean;
   readinessComplete: boolean;
   contractReady: boolean;
@@ -329,6 +341,16 @@ function getApplicationNextAction({
       href: "/jobs",
       label: "案件を探す",
       primary: false,
+    };
+  }
+
+  if (outcomeStatus) {
+    return {
+      title: postInterviewOutcomeLabels[outcomeStatus as keyof typeof postInterviewOutcomeLabels] ?? "面談後ステータス",
+      description: outcomeNextActionText ?? "面談後の進捗を確認してください。",
+      href: interviewHref ?? "/freelancer/applications",
+      label: "面談後ステータスを確認",
+      primary: outcomeStatus === "offer_sent" || outcomeStatus === "clarification_requested",
     };
   }
 
