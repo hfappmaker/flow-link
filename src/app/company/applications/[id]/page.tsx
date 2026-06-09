@@ -84,6 +84,17 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     selectionFlow: application.jobPost.selectionFlow,
     contractTerms: application.jobPost.contractTerms,
   });
+  const handoffChecks = buildHandoffChecks({
+    matchedSkillCount: requiredSkillMatches.length,
+    requiredSkillCount: requiredSkills.length,
+    hasProposal: Boolean(application.proposalMessage),
+    hasStartSignal,
+    hasContactSignal: Boolean(application.contactPreference),
+    hasSelectionFlow: Boolean(application.jobPost.selectionFlow),
+    hasContractTerms: Boolean(application.jobPost.contractTerms),
+  });
+  const handoffReadyCount = handoffChecks.filter((check) => check.done).length;
+  const handoffReadyPercent = Math.round((handoffReadyCount / handoffChecks.length) * 100);
 
   return (
     <Shell>
@@ -251,6 +262,24 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               <p className="mt-2 text-sm leading-6 text-stone-600">
                 書類選考OKにすると、面談チャットを作成し、下の初回連絡を企業名義で送信します。
               </p>
+              <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">初回連絡の確認</p>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      応募者が次に動けるように、面談候補日時、確認したい条件、判断材料を送信前に揃えます。
+                    </p>
+                  </div>
+                  <StatusBadge tone={handoffReadyPercent >= 80 ? "good" : handoffReadyPercent >= 60 ? "neutral" : "warn"}>
+                    {handoffReadyPercent}%
+                  </StatusBadge>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {handoffChecks.map((check) => (
+                    <HandoffCheckItem check={check} key={check.label} />
+                  ))}
+                </div>
+              </div>
               <form action={screenApplication} className="mt-4 grid gap-3">
                 <input type="hidden" name="applicationId" value={application.id} />
                 <input type="hidden" name="status" value="screening_passed" />
@@ -260,6 +289,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   defaultValue={handoffMessageDraft}
                   maxLength={1600}
                 />
+                <label className="flex gap-2 rounded border border-emerald-100 bg-emerald-50/70 p-3 text-sm leading-6 text-stone-700">
+                  <input className="mt-1 size-4 accent-emerald-700" name="handoffConfirmed" required type="checkbox" />
+                  <span>
+                    初回連絡文に、面談調整で必要な候補日時の依頼、契約・支払い条件、確認したい点が入っていることを確認しました。
+                  </span>
+                </label>
                 <button className="btn btn-primary w-full" type="submit">書類選考OK・初回連絡を送る</button>
               </form>
             </Card>
@@ -325,6 +360,28 @@ function SkillReview({
       ) : (
         <p className="mt-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">{empty}</p>
       )}
+    </div>
+  );
+}
+
+type HandoffCheck = {
+  label: string;
+  detail: string;
+  done: boolean;
+};
+
+function HandoffCheckItem({ check }: { check: HandoffCheck }) {
+  return (
+    <div
+      className={`rounded border px-3 py-2 text-sm ${
+        check.done ? "border-emerald-200 bg-white text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{check.label}</span>
+        <span className="text-xs font-semibold">{check.done ? "確認済み" : "要確認"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{check.detail}</p>
     </div>
   );
 }
@@ -400,4 +457,58 @@ function buildInterviewPrepSheet({
     `- 選考フロー: ${selectionFlow || "面談で説明"}`,
     "- 面談後の判断期限:",
   ].join("\n");
+}
+
+function buildHandoffChecks({
+  matchedSkillCount,
+  requiredSkillCount,
+  hasProposal,
+  hasStartSignal,
+  hasContactSignal,
+  hasSelectionFlow,
+  hasContractTerms,
+}: {
+  matchedSkillCount: number;
+  requiredSkillCount: number;
+  hasProposal: boolean;
+  hasStartSignal: boolean;
+  hasContactSignal: boolean;
+  hasSelectionFlow: boolean;
+  hasContractTerms: boolean;
+}): HandoffCheck[] {
+  return [
+    {
+      label: "判断材料",
+      detail:
+        requiredSkillCount === 0
+          ? "必須スキルが未設定のため、職務経歴と応募時の提案をもとに確認します。"
+          : `必須スキル ${matchedSkillCount}/${requiredSkillCount} 件を確認しています。`,
+      done: requiredSkillCount === 0 || matchedSkillCount > 0,
+    },
+    {
+      label: "応募時の提案",
+      detail: "初回連絡前に、応募者がこの案件で伝えた貢献内容を確認します。",
+      done: hasProposal,
+    },
+    {
+      label: "開始条件",
+      detail: "稼働開始目安や稼働条件を、面談で確認する前提として整理します。",
+      done: hasStartSignal,
+    },
+    {
+      label: "企業とのやりとり",
+      detail: "連絡希望が未設定の場合は、初回連絡文で候補日時を複数依頼します。",
+      done: hasContactSignal,
+    },
+    {
+      label: "選考フロー",
+      detail: "面談回数や次の判断タイミングを応募者へ案内できる状態にします。",
+      done: hasSelectionFlow,
+    },
+    {
+      label: "契約・支払い条件",
+      detail: "単価、契約期間、支払い条件の確認漏れを面談前に減らします。",
+      done: hasContractTerms,
+    },
+  ];
 }

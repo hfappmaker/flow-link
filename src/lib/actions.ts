@@ -414,6 +414,9 @@ export async function screenApplication(formData: FormData) {
   if (!["screening_passed", "screening_rejected"].includes(status)) {
     throw new Error("選考結果が不正です。");
   }
+  if (status === "screening_passed" && formData.get("handoffConfirmed") !== "on") {
+    throw new Error("初回連絡文の確認にチェックを入れてください。");
+  }
   if ((handoffMessage?.length ?? 0) > 1600) {
     throw new Error("初回連絡文は1600文字以内で入力してください。");
   }
