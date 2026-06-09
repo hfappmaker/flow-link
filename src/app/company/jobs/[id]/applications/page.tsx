@@ -89,6 +89,9 @@ export default async function JobApplicationsPage({
   const interviewReadyCount = appliedReviews.filter((review) => review.isInterviewReady).length;
   const needsCheckCount = appliedReviews.filter((review) => review.nextChecks.length > 0).length;
   const hasReviewQuestionsCount = appliedReviews.filter((review) => review.reviewQuestions.length > 0).length;
+  const highlightedApplications = reviewedApplications
+    .filter(({ application, review }) => application.status === "applied" && review.isInterviewReady)
+    .slice(0, 3);
 
   return (
     <Shell>
@@ -160,6 +163,26 @@ export default async function JobApplicationsPage({
             </div>
           </Card>
         )}
+        {job && highlightedApplications.length > 0 && (
+          <Card className="mt-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="font-semibold">面談候補ハイライト</h2>
+                <p className="mt-1 text-sm leading-6 text-stone-600">
+                  未選考の中で、応募内容・開始条件・書類が揃っている候補者です。先に確認すると面談調整へ進めやすくなります。
+                </p>
+              </div>
+              <Link className="btn btn-secondary" href={`/company/jobs/${job.id}/applications?status=applied&ready=interview`}>
+                面談候補だけ見る
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {highlightedApplications.map(({ application, review }) => (
+                <HighlightedApplicationRow application={application} key={application.id} review={review} />
+              ))}
+            </div>
+          </Card>
+        )}
         <div className="mt-6 grid gap-4">
           {reviewedApplications.map(({ application, review }) => (
             <ApplicationCard application={application} key={application.id} review={review} />
@@ -202,6 +225,46 @@ type ApplicationReview = {
   nextChecks: string[];
   reviewQuestions: string[];
 };
+
+function HighlightedApplicationRow({
+  application,
+  review,
+}: {
+  application: ApplicationWithProfile;
+  review: ApplicationReview;
+}) {
+  const startSignal =
+    application.proposedStart ||
+    application.freelancerProfile.availableFrom ||
+    application.freelancerProfile.availability ||
+    "未設定";
+  const skillSignal =
+    review.requiredSkillMatches.length > 0
+      ? review.requiredSkillMatches.slice(0, 3).join("、")
+      : "職務経歴で確認";
+
+  return (
+    <div className="grid gap-3 rounded border border-stone-200 bg-stone-50 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div>
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge tone="good">面談判断 {review.interviewReadinessPercent}%</StatusBadge>
+          <StatusBadge tone={review.matchPercent === null ? "neutral" : review.matchPercent >= 50 ? "good" : "neutral"}>
+            必須一致 {review.matchPercent === null ? "要確認" : `${review.matchPercent}%`}
+          </StatusBadge>
+          <StatusBadge tone="good">PDF {application.freelancerProfile.documents.length}/2</StatusBadge>
+        </div>
+        <h3 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h3>
+        <p className="mt-1 text-sm text-stone-600">
+          {application.freelancerProfile.desiredOccupation ?? "希望職種未設定"} / 開始目安: {startSignal}
+        </p>
+        <p className="mt-1 text-sm leading-6 text-stone-700">強みとして確認すること: {skillSignal}</p>
+      </div>
+      <Link className="btn btn-primary" href={`/company/applications/${application.id}`}>
+        初回連絡を確認
+      </Link>
+    </div>
+  );
+}
 
 function ApplicationCard({
   application,
