@@ -1,20 +1,15 @@
-import { auth } from "@/lib/auth";
 import { saveCompanyProfile } from "@/lib/actions";
-import { prisma } from "@/lib/prisma";
+import { requireCompanyUser } from "@/lib/page-guards";
 import { Shell, TopNav, PageHeader, Card, TextField, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function CompanyProfilePage() {
-  const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({
-    where: { userId: session!.user.id },
-    include: { companyProfile: true },
-  });
-  const company = companyUser!.companyProfile;
+  const { user, companyUser } = await requireCompanyUser({ include: { companyProfile: true } });
+  const company = companyUser.companyProfile;
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-4xl px-5 py-8">
         <PageHeader title="企業プロフィール" />
         <Card className="mt-6">

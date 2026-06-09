@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
+import { requireFreelancerProfile } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
@@ -10,9 +10,8 @@ import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, ico
 export const dynamic = "force-dynamic";
 
 export default async function FreelancerDashboard() {
-  const session = await auth();
-  const profile = await prisma.freelancerProfile.findUnique({
-    where: { userId: session!.user.id },
+  const { user, profile } = await requireFreelancerProfile({
+    currentPath: "/freelancer",
     include: {
       applications: true,
       documents: true,
@@ -25,11 +24,11 @@ export default async function FreelancerDashboard() {
       _count: { select: { savedJobs: true } },
     },
   });
-  const unread = await prisma.notification.count({ where: { userId: session!.user.id, readAt: null } });
+  const unread = await prisma.notification.count({ where: { userId: user.id, readAt: null } });
   const interviewQueue = await prisma.jobApplication.findMany({
     where: {
       status: "screening_passed",
-      freelancerProfile: { userId: session!.user.id },
+      freelancerProfile: { userId: user.id },
       OR: [
         { interviewThread: { is: null } },
         { interviewThread: { is: { status: "open" } } },
@@ -52,28 +51,26 @@ export default async function FreelancerDashboard() {
     take: 5,
   });
   const readiness = getFreelancerReadiness(profile);
-  const appliedJobIds = new Set(profile?.applications.map((application) => application.jobPostId) ?? []);
-  const recommendationCandidates = profile
-    ? await prisma.jobPost.findMany({
-        where: {
-          status: "published",
-          applicationStatus: "open",
-          id: { notIn: Array.from(appliedJobIds) },
-        },
-        include: { companyProfile: true },
-        orderBy: { createdAt: "desc" },
-        take: 24,
-      })
-    : [];
+  const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
+  const recommendationCandidates = await prisma.jobPost.findMany({
+    where: {
+      status: "published",
+      applicationStatus: "open",
+      id: { notIn: Array.from(appliedJobIds) },
+    },
+    include: { companyProfile: true },
+    orderBy: { createdAt: "desc" },
+    take: 24,
+  });
   const recommendedJobs = recommendationCandidates
     .map((job) => {
       const contractReadiness = directContractChecklist(job);
-      const matchPercent = skillMatchPercent(job.requiredSkills, profile?.skills);
-      const matched = matchedSkills(job.requiredSkills, profile?.skills);
+      const matchPercent = skillMatchPercent(job.requiredSkills, profile.skills);
+      const matched = matchedSkills(job.requiredSkills, profile.skills);
       const score = directMatchScore({
         ...job,
         freelancerReadinessPercent: readiness.percent,
-        freelancerSkills: profile?.skills,
+        freelancerSkills: profile.skills,
       });
 
       return { job, contractReadiness, matchPercent, matched, score };
@@ -83,7 +80,7 @@ export default async function FreelancerDashboard() {
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader
           title="フリーランス ダッシュボード"
@@ -91,11 +88,11 @@ export default async function FreelancerDashboard() {
           action={<form action={logoutUser}><button className="btn btn-secondary">ログアウト</button></form>}
         />
         <div className="mt-6 grid gap-4 md:grid-cols-5">
-          <StatCard label="応募数" value={profile?.applications.length ?? 0} icon={icons.jobs} />
-          <StatCard label="登録書類" value={profile?.documents.length ?? 0} icon={icons.files} />
+          <StatCard label="応募数" value={profile.applications.length} icon={icons.jobs} />
+          <StatCard label="登録書類" value={profile.documents.length} icon={icons.files} />
           <StatCard label="未読通知" value={unread} icon={icons.ok} />
           <StatCard label="面談調整" value={interviewQueue.length} icon={icons.chat} />
-          <StatCard label="検討リスト" value={profile?._count.savedJobs ?? 0} icon={icons.ok} />
+          <StatCard label="検討リスト" value={profile._count.savedJobs} icon={icons.ok} />
         </div>
         <Card className="mt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -192,7 +189,7 @@ export default async function FreelancerDashboard() {
             </div>
             <Link className="btn btn-secondary" href="/freelancer/saved-jobs">検討リストを見る</Link>
           </div>
-          {profile && profile.savedJobs.length > 0 ? (
+          {profile.savedJobs.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-3">
               {profile.savedJobs.map((savedJob) => (
                 <SavedJobCard

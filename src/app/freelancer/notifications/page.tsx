@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
 import { markNotificationRead } from "@/lib/actions";
+import { requireFreelancerPage } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
@@ -7,14 +7,14 @@ import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/comp
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
-  const session = await auth();
+  const user = await requireFreelancerPage();
   const notifications = await prisma.notification.findMany({
-    where: { userId: session!.user.id },
+    where: { userId: user.id },
     orderBy: { createdAt: "desc" },
   });
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-4xl px-5 py-8">
         <PageHeader title="通知" />
         <div className="mt-6 grid gap-4">

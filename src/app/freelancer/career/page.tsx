@@ -1,19 +1,17 @@
-import { auth } from "@/lib/auth";
 import { saveCareerHistory } from "@/lib/actions";
-import { prisma } from "@/lib/prisma";
+import { requireFreelancerProfile } from "@/lib/page-guards";
 import { Shell, TopNav, PageHeader, Card, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function CareerPage() {
-  const session = await auth();
-  const profile = await prisma.freelancerProfile.findUnique({
-    where: { userId: session!.user.id },
+  const { user, profile } = await requireFreelancerProfile({
+    currentPath: "/freelancer/career",
     include: { careerHistory: true },
   });
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-4xl px-5 py-8">
         <PageHeader title="職務経歴フォーム" />
         <Card className="mt-6">

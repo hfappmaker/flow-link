@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { saveScreeningNote, screenApplication } from "@/lib/actions";
+import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { applicationStatusLabel, buildScreeningPassedHandoffMessage, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
@@ -10,13 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({
-    where: { userId: session!.user.id },
-    include: { companyProfile: true },
-  });
+  const { user, companyUser } = await requireCompanyUser({ include: { companyProfile: true } });
   const application = await prisma.jobApplication.findFirst({
-    where: { id, jobPost: { companyProfileId: companyUser!.companyProfileId } },
+    where: { id, jobPost: { companyProfileId: companyUser.companyProfileId } },
     include: {
       jobPost: true,
       freelancerProfile: { include: { careerHistory: true, documents: true } },
@@ -25,7 +21,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     },
   });
   if (!application) {
-    return <Shell><TopNav sessionRole={session?.user?.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>応募情報が見つかりません。</Card></div></Shell>;
+    return <Shell><TopNav sessionRole={user.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>応募情報が見つかりません。</Card></div></Shell>;
   }
   const readiness = getFreelancerReadiness(application.freelancerProfile);
   const requiredSkills = parseSkills(application.jobPost.requiredSkills);
@@ -94,7 +90,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     contractTerms: application.jobPost.contractTerms,
   });
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({
-    companyName: companyUser!.companyProfile.name,
+    companyName: companyUser.companyProfile.name,
     freelancerName: application.freelancerProfile.fullName,
     jobTitle: application.jobPost.title,
     proposedStart: application.proposedStart,
@@ -116,7 +112,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title={application.freelancerProfile.fullName} description={application.jobPost.title} />
         <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_320px]">

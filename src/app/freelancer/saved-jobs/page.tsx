@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
 import { removeSavedJob, saveJobForReview } from "@/lib/actions";
-import { prisma } from "@/lib/prisma";
+import { requireFreelancerProfile } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } from "@/components/ui";
@@ -10,9 +9,8 @@ import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } fr
 export const dynamic = "force-dynamic";
 
 export default async function SavedJobsPage() {
-  const session = await auth();
-  const profile = await prisma.freelancerProfile.findUnique({
-    where: { userId: session!.user.id },
+  const { user, profile } = await requireFreelancerProfile({
+    currentPath: "/freelancer/saved-jobs",
     include: {
       documents: true,
       careerHistory: true,
@@ -24,9 +22,9 @@ export default async function SavedJobsPage() {
     },
   });
   const readiness = getFreelancerReadiness(profile);
-  const appliedByJobId = new Map(profile?.applications.map((application) => [application.jobPostId, application.status]) ?? []);
+  const appliedByJobId = new Map(profile.applications.map((application) => [application.jobPostId, application.status]));
   const savedJobs =
-    profile?.savedJobs
+    profile.savedJobs
       .map((savedJob) => {
         const job = savedJob.jobPost;
         const contractReadiness = directContractChecklist(job);
@@ -69,7 +67,7 @@ export default async function SavedJobsPage() {
           }),
         };
       })
-      .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime()) ?? [];
+      .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime());
   const openSavedCount = savedJobs.filter(({ savedJob, appliedStatus }) => !appliedStatus && savedJob.jobPost.applicationStatus === "open").length;
   const notedSavedCount = savedJobs.filter(({ savedJob }) => Boolean(savedJob.note)).length;
   const readySavedCount = savedJobs.filter(
@@ -79,7 +77,7 @@ export default async function SavedJobsPage() {
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader
           title="検討リスト"

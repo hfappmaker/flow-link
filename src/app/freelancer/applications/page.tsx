@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { LinkProps } from "next/link";
 import type { JobApplicationStatus } from "@prisma/client";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { requireFreelancerProfile } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   applicationStatusLabel,
@@ -32,9 +31,8 @@ export default async function FreelancerApplicationsPage({
   const selectedStatus = statusTabs.some((tab) => tab.value === filters.status) ? filters.status! : "all";
   const selectedAction = ["interview", "waiting", "final"].includes(filters.action ?? "") ? filters.action! : "";
   const selectedSort = filters.sort === "new" ? "new" : "priority";
-  const session = await auth();
-  const profile = await prisma.freelancerProfile.findUnique({
-    where: { userId: session!.user.id },
+  const { user, profile } = await requireFreelancerProfile({
+    currentPath: "/freelancer/applications",
     include: {
       documents: true,
       careerHistory: true,
@@ -46,7 +44,7 @@ export default async function FreelancerApplicationsPage({
   });
   const readiness = getFreelancerReadiness(profile);
   const applications =
-    profile?.applications.map((application) => {
+    profile.applications.map((application) => {
       const contractReadiness = directContractChecklist(application.jobPost);
       const skillPercent = skillMatchPercent(application.jobPost.requiredSkills, profile.skills);
       const requiredSkills = parseSkills(application.jobPost.requiredSkills);
@@ -79,7 +77,7 @@ export default async function FreelancerApplicationsPage({
         requiredSkills,
         skillPercent,
       };
-    }) ?? [];
+    });
   const countByStatus = new Map<JobApplicationStatus, number>();
   for (const item of applications) {
     countByStatus.set(item.application.status, (countByStatus.get(item.application.status) ?? 0) + 1);
@@ -106,14 +104,14 @@ export default async function FreelancerApplicationsPage({
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-5xl px-5 py-8">
         <PageHeader
           title="応募済み案件"
           description="応募後の状況、面談調整、条件確認をここで整理できます。"
           action={<Link className="btn btn-secondary" href="/jobs">案件を探す</Link>}
         />
-        {profile && profile.applications.length > 0 && (
+        {profile.applications.length > 0 && (
           <Card className="mt-6">
             <div className="grid gap-4 md:grid-cols-[1fr_220px] md:items-center">
               <div>
@@ -132,7 +130,7 @@ export default async function FreelancerApplicationsPage({
             </div>
           </Card>
         )}
-        {profile && profile.applications.length > 0 && (
+        {profile.applications.length > 0 && (
           <Card className="mt-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <form className="grid gap-3 md:grid-cols-[160px_170px_150px_auto_auto]" action="/freelancer/applications">
@@ -276,14 +274,14 @@ export default async function FreelancerApplicationsPage({
               </Card>
             );
           })}
-          {profile?.applications.length === 0 && (
+          {profile.applications.length === 0 && (
             <EmptyState
               title="応募はまだありません。"
               description="気になる案件を見つけたら、詳細ページから応募できます。"
               action={<Link className="btn btn-primary" href="/jobs">案件を見る</Link>}
             />
           )}
-          {profile && profile.applications.length > 0 && filteredApplications.length === 0 && (
+          {profile.applications.length > 0 && filteredApplications.length === 0 && (
             <EmptyState
               title="この条件で表示できる応募はありません。"
               description="選考状況や次のアクションの条件を外して確認してください。"

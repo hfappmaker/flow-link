@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { LinkProps } from "next/link";
 import type { JobApplicationStatus, Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
+import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
@@ -28,8 +28,7 @@ export default async function JobApplicationsPage({
   const keyword = filters.q?.trim() ?? "";
   const readyOnly = filters.ready === "interview";
   const selectedSort = filters.sort === "new" ? "new" : "review";
-  const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
+  const { user, companyUser } = await requireCompanyUser();
   const applicationWhere: Prisma.JobApplicationWhereInput = {
     ...(selectedStatus !== "all" ? { status: selectedStatus as JobApplicationStatus } : {}),
     ...(keyword
@@ -46,7 +45,7 @@ export default async function JobApplicationsPage({
       : {}),
   };
   const job = await prisma.jobPost.findFirst({
-    where: { id, companyProfileId: companyUser!.companyProfileId },
+    where: { id, companyProfileId: companyUser.companyProfileId },
     include: {
       applications: {
         where: applicationWhere,
@@ -104,7 +103,7 @@ export default async function JobApplicationsPage({
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="応募者一覧" description={job?.title} />
         {job && (

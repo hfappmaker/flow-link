@@ -1,16 +1,14 @@
-import { auth } from "@/lib/auth";
 import { saveFreelancerProfile } from "@/lib/actions";
-import { prisma } from "@/lib/prisma";
+import { optionalFreelancerProfile } from "@/lib/page-guards";
 import { Shell, TopNav, PageHeader, Card, TextField, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function FreelancerProfilePage() {
-  const session = await auth();
-  const profile = await prisma.freelancerProfile.findUnique({ where: { userId: session!.user.id } });
+  const { user, profile } = await optionalFreelancerProfile();
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-4xl px-5 py-8">
         <PageHeader title="プロフィール編集" />
         <Card className="mt-6">

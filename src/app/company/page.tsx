@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
 import { logoutUser } from "@/lib/actions";
+import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { buildApplicationResponseState, buildApplicationReview, directMatchScore, formatDateTime, skillMatchPercent } from "@/lib/utils";
@@ -10,22 +10,21 @@ import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, ico
 export const dynamic = "force-dynamic";
 
 export default async function CompanyDashboard() {
-  const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
+  const { user, companyUser } = await requireCompanyUser();
   const [jobs, applications, openApplications, contactQueueCandidates, interviewQueue] = await Promise.all([
-    prisma.jobPost.count({ where: { companyProfileId: companyUser!.companyProfileId } }),
-    prisma.jobApplication.count({ where: { jobPost: { companyProfileId: companyUser!.companyProfileId } } }),
+    prisma.jobPost.count({ where: { companyProfileId: companyUser.companyProfileId } }),
+    prisma.jobApplication.count({ where: { jobPost: { companyProfileId: companyUser.companyProfileId } } }),
     prisma.jobApplication.count({
       where: {
         status: "applied",
-        jobPost: { companyProfileId: companyUser!.companyProfileId },
+        jobPost: { companyProfileId: companyUser.companyProfileId },
       },
     }),
     prisma.jobApplication.findMany({
       where: {
         status: "applied",
         jobPost: {
-          companyProfileId: companyUser!.companyProfileId,
+          companyProfileId: companyUser.companyProfileId,
           status: "published",
           applicationStatus: "open",
         },
@@ -45,7 +44,7 @@ export default async function CompanyDashboard() {
     prisma.jobApplication.findMany({
       where: {
         status: "screening_passed",
-        jobPost: { companyProfileId: companyUser!.companyProfileId },
+        jobPost: { companyProfileId: companyUser.companyProfileId },
         OR: [
           { interviewThread: { is: null } },
           { interviewThread: { is: { status: "open" } } },
@@ -87,7 +86,7 @@ export default async function CompanyDashboard() {
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-7xl px-5 py-8">
         <PageHeader
           title="企業 ダッシュボード"

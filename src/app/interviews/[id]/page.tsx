@@ -1,6 +1,5 @@
-import { auth } from "@/lib/auth";
 import { sendInterviewMessage, sendInterviewTimeOptions } from "@/lib/actions";
-import { prisma } from "@/lib/prisma";
+import { getInterviewThreadForPage } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
@@ -9,26 +8,10 @@ export const dynamic = "force-dynamic";
 
 export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = await auth();
-  const thread = await prisma.interviewThread.findUnique({
-    where: { id },
-    include: {
-      messages: { orderBy: { createdAt: "asc" }, include: { sender: true } },
-      jobApplication: {
-        include: {
-          freelancerProfile: { include: { careerHistory: true, documents: true } },
-          jobPost: { include: { companyProfile: { include: { users: true } } } },
-        },
-      },
-    },
-  });
-  const canView =
-    thread &&
-    (thread.jobApplication.freelancerProfile.userId === session!.user.id ||
-      thread.jobApplication.jobPost.companyProfile.users.some((user) => user.userId === session!.user.id));
+  const { user, thread } = await getInterviewThreadForPage(id);
 
-  if (!thread || !canView) {
-    return <Shell><TopNav sessionRole={session?.user?.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>このチャットは閲覧できません。</Card></div></Shell>;
+  if (!thread) {
+    return <Shell><TopNav sessionRole={user.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>このチャットは閲覧できません。</Card></div></Shell>;
   }
   const proposedMessages = thread.messages.filter((message) => message.messageType === "proposed_time" && message.proposedAt);
   const latestProposed = proposedMessages.at(-1);
@@ -40,7 +23,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
   const company = jobPost.companyProfile;
   const readiness = getFreelancerReadiness(freelancer);
   const requiredSkillMatches = matchedSkills(jobPost.requiredSkills, freelancer.skills);
-  const isCompanySender = thread.jobApplication.jobPost.companyProfile.users.some((user) => user.userId === session!.user.id);
+  const isCompanySender = thread.jobApplication.jobPost.companyProfile.users.some((companyUser) => companyUser.userId === user.id);
   const directDealChecks = [
     {
       label: "双方の基本情報",
@@ -172,7 +155,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="面談日程調整チャット" description={`${thread.jobApplication.jobPost.title} / ${thread.jobApplication.freelancerProfile.fullName}`} />
         <Card className="mt-6">
@@ -214,7 +197,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
               {thread.messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`rounded border p-3 text-sm ${message.senderUserId === session!.user.id ? "border-emerald-200 bg-emerald-50" : "border-stone-200 bg-white"}`}
+                  className={`rounded border p-3 text-sm ${message.senderUserId === user.id ? "border-emerald-200 bg-emerald-50" : "border-stone-200 bg-white"}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-semibold">{message.sender.email}</span>
@@ -476,8 +459,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                           <p className="text-sm font-semibold">{formatDateTime(message.proposedAt)}</p>
                           <p className="mt-1 text-xs text-stone-500">提案者: {message.sender.email}</p>
                         </div>
-                        <StatusBadge tone={message.senderUserId === session!.user.id ? "neutral" : "good"}>
-                          {message.senderUserId === session!.user.id ? "送信済み" : "返信する候補"}
+                        <StatusBadge tone={message.senderUserId === user.id ? "neutral" : "good"}>
+                          {message.senderUserId === user.id ? "送信済み" : "返信する候補"}
                         </StatusBadge>
                       </div>
                       <button className="btn btn-secondary mt-3 w-full" type="submit">この日時で確定</button>

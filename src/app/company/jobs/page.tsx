@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { auth } from "@/lib/auth";
+import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { buildApplicationResponseState, directContractChecklist, jobStatusLabel } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
@@ -15,11 +15,10 @@ export default async function CompanyJobsPage({
   const selectedStatus = ["published", "draft", "private", "closed"].includes(filters.status ?? "") ? filters.status! : "";
   const selectedAction = ["pending", "overdue", "conditions", "paused", "interviews"].includes(filters.action ?? "") ? filters.action! : "";
   const selectedSort = filters.sort === "new" || filters.sort === "conditions" ? filters.sort : "attention";
-  const session = await auth();
-  const companyUser = await prisma.companyUser.findUnique({ where: { userId: session!.user.id } });
+  const { user, companyUser } = await requireCompanyUser();
   const jobs = await prisma.jobPost.findMany({
     where: {
-      companyProfileId: companyUser!.companyProfileId,
+      companyProfileId: companyUser.companyProfileId,
       ...(selectedStatus ? { status: selectedStatus as "published" | "draft" | "private" | "closed" } : {}),
     },
     include: { applications: true },
@@ -81,7 +80,7 @@ export default async function CompanyJobsPage({
 
   return (
     <Shell>
-      <TopNav sessionRole={session?.user?.role} />
+      <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="案件一覧" action={<Link className="btn btn-primary" href="/company/jobs/create">案件作成</Link>} />
         {filters.publish === "needs-conditions" && (
