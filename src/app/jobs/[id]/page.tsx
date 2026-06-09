@@ -5,8 +5,10 @@ import { applyToJob, removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
+import { getCompanyReputationSummary } from "@/lib/reputation";
 import { applicationStatusLabel, directContractChecklist, formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
+import { ReputationSummaryCard } from "@/components/reputation";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   if (!job) {
     notFound();
   }
+  const companyReputation = await publicDbRead(
+    () => getCompanyReputationSummary(job.companyProfileId),
+    {
+      feedbackCount: 0,
+      completedInteractionCount: 0,
+      averageFollowThrough: null,
+      averageCollaboration: null,
+      hasEnoughHistory: false,
+    },
+  );
   const requiredSkills = parseSkills(job.requiredSkills);
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
   const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
@@ -137,6 +149,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 ))}
               </div>
             </Card>
+
+            <ReputationSummaryCard
+              title="Flow Linkでの企業履歴"
+              summary={companyReputation}
+              subjectLabel="company"
+            />
 
             <Card>
               <div className="flex items-start justify-between gap-4">

@@ -3,8 +3,10 @@ import { saveScreeningNote, screenApplication } from "@/lib/actions";
 import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
+import { getFreelancerReputationSummary } from "@/lib/reputation";
 import { applicationStatusLabel, buildScreeningPassedHandoffMessage, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
+import { ReputationSummaryCard } from "@/components/reputation";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +127,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   });
   const handoffReadyCount = handoffChecks.filter((check) => check.done).length;
   const handoffReadyPercent = Math.round((handoffReadyCount / handoffChecks.length) * 100);
+  const freelancerReputation = await getFreelancerReputationSummary(application.freelancerProfileId);
 
   return (
     <Shell>
@@ -245,6 +248,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 ))}
               </div>
             </Card>
+
+            <ReputationSummaryCard
+              title="Flow Linkでの応募者履歴"
+              summary={freelancerReputation}
+              subjectLabel="freelancer"
+            />
 
             <Card>
               <div className="flex items-start justify-between gap-4">

@@ -3,6 +3,8 @@
 import { put } from "@vercel/blob";
 import {
   ApplicationStatus,
+  InteractionFeedbackDirection,
+  InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
   Prisma,
@@ -23,7 +25,7 @@ import {
 } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { buildScreeningPassedHandoffMessage, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
+import { buildScreeningPassedHandoffMessage, daysSince, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 
 async function currentUser() {
   const session = await auth();
@@ -592,6 +594,79 @@ export async function sendInterviewTimeOptions(formData: FormData) {
   revalidatePath(`/interviews/${threadId}`);
 }
 
+export async function submitInteractionFeedback(formData: FormData) {
+  const user = await currentUser();
+  const threadId = toText(formData.get("threadId"));
+  const thread = await assertCanUseThread(user.id, threadId);
+  const isCompanyAuthor = thread.jobApplication.jobPost.companyProfile.users.some((companyUser) => companyUser.userId === user.id);
+  const isFreelancerAuthor = thread.jobApplication.freelancerProfile.userId === user.id;
+  if (!isCompanyAuthor && !isFreelancerAuthor) throw new Error("このフィードバックは送信できません。");
+  if (!thread.scheduledAt) {
+    throw new Error("面談日時が確定したやりとりだけフィードバックを送信できます。");
+  }
+
+  const direction = isCompanyAuthor
+    ? InteractionFeedbackDirection.company_to_freelancer
+    : InteractionFeedbackDirection.freelancer_to_company;
+  const followThroughRating = parseRating(formData.get("followThroughRating"), "返信・フォローの評価を選択してください。");
+  const collaborationRating = parseRating(formData.get("collaborationRating"), "協働しやすさの評価を選択してください。");
+  const privateNote = toOptionalText(formData.get("privateNote"));
+  if ((privateNote?.length ?? 0) > 800) {
+    throw new Error("非公開メモは800文字以内で入力してください。");
+  }
+  const moderationStatus = formData.get("needsModeration") === "on"
+    ? InteractionFeedbackModerationStatus.reported
+    : InteractionFeedbackModerationStatus.visible;
+  const existingFeedback = await prisma.interactionFeedback.findUnique({
+    where: {
+      jobApplicationId_direction_authorUserId: {
+        jobApplicationId: thread.jobApplicationId,
+        direction,
+        authorUserId: user.id,
+      },
+    },
+  });
+  if (existingFeedback && daysSince(existingFeedback.createdAt) > 14) {
+    throw new Error("フィードバックの編集期限を過ぎています。");
+  }
+
+  await prisma.interactionFeedback.upsert({
+    where: {
+      jobApplicationId_direction_authorUserId: {
+        jobApplicationId: thread.jobApplicationId,
+        direction,
+        authorUserId: user.id,
+      },
+    },
+    create: {
+      jobApplicationId: thread.jobApplicationId,
+      authorUserId: user.id,
+      direction,
+      targetCompanyProfileId: isFreelancerAuthor ? thread.jobApplication.jobPost.companyProfileId : null,
+      targetFreelancerProfileId: isCompanyAuthor ? thread.jobApplication.freelancerProfileId : null,
+      followThroughRating,
+      collaborationRating,
+      interactionCompleted: formData.get("interactionCompleted") === "on",
+      wouldWorkAgain: parseOptionalBoolean(formData.get("wouldWorkAgain")),
+      privateNote,
+      moderationStatus,
+    },
+    update: {
+      followThroughRating,
+      collaborationRating,
+      interactionCompleted: formData.get("interactionCompleted") === "on",
+      wouldWorkAgain: parseOptionalBoolean(formData.get("wouldWorkAgain")),
+      privateNote,
+      moderationStatus,
+    },
+  });
+
+  revalidatePath(`/interviews/${threadId}`);
+  revalidatePath(`/jobs/${thread.jobApplication.jobPostId}`);
+  revalidatePath(`/company/applications/${thread.jobApplicationId}`);
+  revalidatePath(`/company/jobs/${thread.jobApplication.jobPostId}/applications`);
+}
+
 function formatDateForMessage(value: Date) {
   return new Intl.DateTimeFormat("ja-JP", {
     dateStyle: "medium",
@@ -601,6 +676,19 @@ function formatDateForMessage(value: Date) {
 
 function safeReturnPath(value: string) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
+function parseRating(value: FormDataEntryValue | null, errorMessage: string) {
+  const rating = Number(toText(value));
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error(errorMessage);
+  return rating;
+}
+
+function parseOptionalBoolean(value: FormDataEntryValue | null) {
+  const text = toText(value);
+  if (text === "yes") return true;
+  if (text === "no") return false;
+  return null;
 }
 
 function registrationRedirectForRole(role: UserRole, callbackUrl: string) {

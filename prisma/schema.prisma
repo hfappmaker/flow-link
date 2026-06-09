@@ -59,40 +59,53 @@ enum InterviewMessageType {
   meeting_url
 }
 
+enum InteractionFeedbackDirection {
+  company_to_freelancer
+  freelancer_to_company
+}
+
+enum InteractionFeedbackModerationStatus {
+  visible
+  reported
+  hidden
+}
+
 model User {
-  id            String             @id @default(cuid())
-  email         String             @unique
-  passwordHash  String             @map("password_hash")
-  role          UserRole
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  freelancer    FreelancerProfile?
-  companyUser   CompanyUser?
-  notifications Notification[]
-  messages      InterviewMessage[]
+  id                  String                @id @default(cuid())
+  email               String                @unique
+  passwordHash        String                @map("password_hash")
+  role                UserRole
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  freelancer          FreelancerProfile?
+  companyUser         CompanyUser?
+  notifications       Notification[]
+  messages            InterviewMessage[]
+  interactionFeedback InteractionFeedback[]
 
   @@map("users")
 }
 
 model FreelancerProfile {
-  id                  String           @id @default(cuid())
-  userId              String           @unique @map("user_id")
-  fullName            String           @map("full_name")
-  desiredOccupation   String?          @map("desired_occupation")
-  skills              String?
-  yearsOfExperience   Int?             @map("years_of_experience")
-  desiredRate         String?          @map("desired_rate")
-  availability        String?
-  availableFrom       String?          @map("available_from")
-  preferredLocation   String?          @map("preferred_location")
-  remotePreference    String?          @map("remote_preference")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  documents           ResumeDocument[]
-  careerHistory       CareerHistory?
-  applications        JobApplication[]
-  savedJobs           SavedJob[]
+  id                String                @id @default(cuid())
+  userId            String                @unique @map("user_id")
+  fullName          String                @map("full_name")
+  desiredOccupation String?               @map("desired_occupation")
+  skills            String?
+  yearsOfExperience Int?                  @map("years_of_experience")
+  desiredRate       String?               @map("desired_rate")
+  availability      String?
+  availableFrom     String?               @map("available_from")
+  preferredLocation String?               @map("preferred_location")
+  remotePreference  String?               @map("remote_preference")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents         ResumeDocument[]
+  careerHistory     CareerHistory?
+  applications      JobApplication[]
+  savedJobs         SavedJob[]
+  receivedFeedback  InteractionFeedback[] @relation("FeedbackForFreelancer")
 
   @@map("freelancer_profiles")
 }
@@ -125,21 +138,22 @@ model CareerHistory {
 }
 
 model CompanyProfile {
-  id                            String        @id @default(cuid())
-  name                          String
-  description                   String?
-  websiteUrl                    String?       @map("website_url")
-  contactTeam                   String?       @map("contact_team")
-  operatingArea                 String?       @map("operating_area")
-  paymentPolicy                 String?       @map("payment_policy")
-  flowLinkReviewedCompanyAt     DateTime?     @map("flow_link_reviewed_company_at")
-  flowLinkReviewedCompanyScope  String?       @map("flow_link_reviewed_company_scope")
-  flowLinkReviewedPaymentAt     DateTime?     @map("flow_link_reviewed_payment_at")
-  flowLinkReviewedPaymentScope  String?       @map("flow_link_reviewed_payment_scope")
-  createdAt                     DateTime      @default(now()) @map("created_at")
-  updatedAt                     DateTime      @updatedAt @map("updated_at")
-  users                         CompanyUser[]
-  jobPosts                      JobPost[]
+  id                           String                @id @default(cuid())
+  name                         String
+  description                  String?
+  websiteUrl                   String?               @map("website_url")
+  contactTeam                  String?               @map("contact_team")
+  operatingArea                String?               @map("operating_area")
+  paymentPolicy                String?               @map("payment_policy")
+  flowLinkReviewedCompanyAt    DateTime?             @map("flow_link_reviewed_company_at")
+  flowLinkReviewedCompanyScope String?               @map("flow_link_reviewed_company_scope")
+  flowLinkReviewedPaymentAt    DateTime?             @map("flow_link_reviewed_payment_at")
+  flowLinkReviewedPaymentScope String?               @map("flow_link_reviewed_payment_scope")
+  createdAt                    DateTime              @default(now()) @map("created_at")
+  updatedAt                    DateTime              @updatedAt @map("updated_at")
+  users                        CompanyUser[]
+  jobPosts                     JobPost[]
+  receivedFeedback             InteractionFeedback[] @relation("FeedbackForCompany")
 
   @@map("company_profiles")
 }
@@ -159,25 +173,25 @@ model CompanyUser {
 }
 
 model JobPost {
-  id                String               @id @default(cuid())
-  companyProfileId  String               @map("company_profile_id")
+  id                String            @id @default(cuid())
+  companyProfileId  String            @map("company_profile_id")
   title             String
   description       String
-  requiredSkills    String?              @map("required_skills")
-  preferredSkills   String?              @map("preferred_skills")
+  requiredSkills    String?           @map("required_skills")
+  preferredSkills   String?           @map("preferred_skills")
   rate              String?
   workload          String?
-  contractPeriod    String?              @map("contract_period")
-  selectionFlow     String?              @map("selection_flow")
-  contractTerms     String?              @map("contract_terms")
+  contractPeriod    String?           @map("contract_period")
+  selectionFlow     String?           @map("selection_flow")
+  contractTerms     String?           @map("contract_terms")
   location          String?
-  remotePolicy      String?              @map("remote_policy")
+  remotePolicy      String?           @map("remote_policy")
   openings          Int?
-  status            JobPostStatus        @default(draft)
-  applicationStatus ApplicationStatus    @default(open) @map("application_status")
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
-  companyProfile    CompanyProfile       @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
+  status            JobPostStatus     @default(draft)
+  applicationStatus ApplicationStatus @default(open) @map("application_status")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  companyProfile    CompanyProfile    @relation(fields: [companyProfileId], references: [id], onDelete: Cascade)
   applications      JobApplication[]
   savedJobs         SavedJob[]
 
@@ -199,23 +213,24 @@ model SavedJob {
 }
 
 model JobApplication {
-  id                      String               @id @default(cuid())
-  jobPostId               String               @map("job_post_id")
-  freelancerProfileId     String               @map("freelancer_profile_id")
-  status                  JobApplicationStatus @default(applied)
-  proposalMessage         String?              @map("proposal_message")
-  proposedStart           String?              @map("proposed_start")
-  contactPreference       String?              @map("contact_preference")
-  appliedAt               DateTime             @default(now()) @map("applied_at")
-  screenedAt              DateTime?            @map("screened_at")
-  screenedByCompanyUserId String?              @map("screened_by_company_user_id")
-  createdAt               DateTime             @default(now()) @map("created_at")
-  updatedAt               DateTime             @updatedAt @map("updated_at")
-  jobPost                 JobPost              @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
-  freelancerProfile       FreelancerProfile    @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
-  screenedBy              CompanyUser?         @relation("ScreenedBy", fields: [screenedByCompanyUserId], references: [id])
+  id                      String                @id @default(cuid())
+  jobPostId               String                @map("job_post_id")
+  freelancerProfileId     String                @map("freelancer_profile_id")
+  status                  JobApplicationStatus  @default(applied)
+  proposalMessage         String?               @map("proposal_message")
+  proposedStart           String?               @map("proposed_start")
+  contactPreference       String?               @map("contact_preference")
+  appliedAt               DateTime              @default(now()) @map("applied_at")
+  screenedAt              DateTime?             @map("screened_at")
+  screenedByCompanyUserId String?               @map("screened_by_company_user_id")
+  createdAt               DateTime              @default(now()) @map("created_at")
+  updatedAt               DateTime              @updatedAt @map("updated_at")
+  jobPost                 JobPost               @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  freelancerProfile       FreelancerProfile     @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  screenedBy              CompanyUser?          @relation("ScreenedBy", fields: [screenedByCompanyUserId], references: [id])
   notes                   ScreeningNote[]
   interviewThread         InterviewThread?
+  interactionFeedback     InteractionFeedback[]
 
   @@unique([jobPostId, freelancerProfileId])
   @@map("job_applications")
@@ -273,4 +288,30 @@ model InterviewMessage {
   sender            User                 @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
 
   @@map("interview_messages")
+}
+
+model InteractionFeedback {
+  id                        String                              @id @default(cuid())
+  jobApplicationId          String                              @map("job_application_id")
+  authorUserId              String                              @map("author_user_id")
+  direction                 InteractionFeedbackDirection
+  targetCompanyProfileId    String?                             @map("target_company_profile_id")
+  targetFreelancerProfileId String?                             @map("target_freelancer_profile_id")
+  followThroughRating       Int                                 @map("follow_through_rating")
+  collaborationRating       Int                                 @map("collaboration_rating")
+  interactionCompleted      Boolean                             @default(false) @map("interaction_completed")
+  wouldWorkAgain            Boolean?                            @map("would_work_again")
+  privateNote               String?                             @map("private_note")
+  moderationStatus          InteractionFeedbackModerationStatus @default(visible) @map("moderation_status")
+  createdAt                 DateTime                            @default(now()) @map("created_at")
+  updatedAt                 DateTime                            @updatedAt @map("updated_at")
+  jobApplication            JobApplication                      @relation(fields: [jobApplicationId], references: [id], onDelete: Cascade)
+  author                    User                                @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  targetCompanyProfile      CompanyProfile?                     @relation("FeedbackForCompany", fields: [targetCompanyProfileId], references: [id], onDelete: Cascade)
+  targetFreelancerProfile   FreelancerProfile?                  @relation("FeedbackForFreelancer", fields: [targetFreelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([jobApplicationId, direction, authorUserId])
+  @@index([targetCompanyProfileId, moderationStatus])
+  @@index([targetFreelancerProfileId, moderationStatus])
+  @@map("interaction_feedback")
 }

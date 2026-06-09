@@ -1,4 +1,4 @@
-import { sendInterviewMessage, sendInterviewTimeOptions } from "@/lib/actions";
+import { sendInterviewMessage, sendInterviewTimeOptions, submitInteractionFeedback } from "@/lib/actions";
 import { getInterviewThreadForPage } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
@@ -152,6 +152,9 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     contactPreference: thread.jobApplication.contactPreference,
     openQuestions: meetingBrief.openQuestions,
   });
+  const existingFeedback = thread.jobApplication.interactionFeedback[0] ?? null;
+  const feedbackTarget = isCompanySender ? freelancer.fullName : company.name;
+  const feedbackEligible = Boolean(thread.scheduledAt);
 
   return (
     <Shell>
@@ -434,6 +437,79 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
                 />
                 <button className="btn btn-secondary" type="submit">確認文を送る</button>
               </form>
+            </Card>
+
+            <Card>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">やりとり後のフィードバック</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    {feedbackTarget}とのFlow Link上の面談・調整について、公開集計用の評価と非公開メモを分けて残します。
+                  </p>
+                </div>
+                <StatusBadge tone={feedbackEligible ? "good" : "neutral"}>
+                  {existingFeedback ? "送信済み" : feedbackEligible ? "入力可" : "面談後"}
+                </StatusBadge>
+              </div>
+              {feedbackEligible ? (
+                <form action={submitInteractionFeedback} className="mt-4 grid gap-4">
+                  <input type="hidden" name="threadId" value={thread.id} />
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <SelectField name="followThroughRating" label="返信・フォロー" defaultValue={existingFeedback?.followThroughRating?.toString() ?? "4"}>
+                      <option value="5">5 とても安定していた</option>
+                      <option value="4">4 概ね安定していた</option>
+                      <option value="3">3 ふつう</option>
+                      <option value="2">2 不安があった</option>
+                      <option value="1">1 大きな不安があった</option>
+                    </SelectField>
+                    <SelectField name="collaborationRating" label="協働しやすさ" defaultValue={existingFeedback?.collaborationRating?.toString() ?? "4"}>
+                      <option value="5">5 とても進めやすい</option>
+                      <option value="4">4 進めやすい</option>
+                      <option value="3">3 ふつう</option>
+                      <option value="2">2 進めにくい点がある</option>
+                      <option value="1">1 大きく進めにくい</option>
+                    </SelectField>
+                  </div>
+                  <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                    <input
+                      className="mt-1 size-4 accent-emerald-700"
+                      name="interactionCompleted"
+                      type="checkbox"
+                      defaultChecked={existingFeedback?.interactionCompleted ?? true}
+                    />
+                    <span>面談または同等のやりとりが実際に完了しました。</span>
+                  </label>
+                  <SelectField name="wouldWorkAgain" label="今後またやりとりしたいか" defaultValue={existingFeedback?.wouldWorkAgain === true ? "yes" : existingFeedback?.wouldWorkAgain === false ? "no" : ""}>
+                    <option value="">未選択</option>
+                    <option value="yes">はい</option>
+                    <option value="no">いいえ</option>
+                  </SelectField>
+                  <TextArea
+                    name="privateNote"
+                    label="非公開メモ"
+                    defaultValue={existingFeedback?.privateNote}
+                    maxLength={800}
+                    placeholder="公開集計には出さない補足。個別の選考理由や個人情報は書かないでください。"
+                  />
+                  <label className="flex gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
+                    <input
+                      className="mt-1 size-4 accent-amber-700"
+                      name="needsModeration"
+                      type="checkbox"
+                      defaultChecked={existingFeedback?.moderationStatus === "reported"}
+                    />
+                    <span>公開集計から除外し、Flow Link確認が必要なフィードバックとして扱う。</span>
+                  </label>
+                  <p className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                    フィードバックは参加者だけが送信できます。送信後14日間は編集できます。面談なしの見送りや応募前の印象は公開評価に使いません。非公開メモ、報告済み、非表示の内容は集計に含まれません。
+                  </p>
+                  <button className="btn btn-secondary" type="submit">{existingFeedback ? "フィードバックを更新" : "フィードバックを送信"}</button>
+                </form>
+              ) : (
+                <p className="mt-4 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                  面談日時が確定したやりとりだけフィードバックできます。見送りのみ、または実際の相互作用がない応募は公開評価に使いません。
+                </p>
+              )}
             </Card>
 
             {proposedMessages.length > 0 && thread.status !== "scheduled" && (
