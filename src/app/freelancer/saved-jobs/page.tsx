@@ -15,6 +15,7 @@ import {
   workPreferenceCompleteness,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } from "@/components/ui";
+import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,26 @@ export default async function SavedJobsPage() {
       careerHistory: true,
       workPreference: true,
       applications: { select: { jobPostId: true, status: true } },
+      recommendationFeedback: {
+        include: {
+          jobPost: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              requiredSkills: true,
+              preferredSkills: true,
+              rate: true,
+              workload: true,
+              location: true,
+              remotePolicy: true,
+              companyProfileId: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+      },
       savedJobs: {
         include: { jobPost: { include: { companyProfile: { include: { verificationRequests: true } } } } },
         orderBy: { createdAt: "desc" },
@@ -37,6 +58,7 @@ export default async function SavedJobsPage() {
   const appliedByJobId = new Map(profile.applications.map((application) => [application.jobPostId, application.status]));
   const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
   const savedJobIds = new Set(profile.savedJobs.map((savedJob) => savedJob.jobPostId));
+  const feedbackByJobId = new Map(profile.recommendationFeedback.map((feedback) => [feedback.jobPostId, feedback]));
   const savedJobs =
     sortJobRecommendations(
       profile.savedJobs.map((savedJob) =>
@@ -44,6 +66,7 @@ export default async function SavedJobsPage() {
           appliedJobIds,
           freelancerReadinessPercent: readiness.percent,
           freelancerSkills: profile.skills,
+          recommendationFeedback: profile.recommendationFeedback,
           savedJobIds,
           workPreference: profile.workPreference,
         }, { preferenceReasonLimit: 5 }),
@@ -91,6 +114,7 @@ export default async function SavedJobsPage() {
       appliedJobIds,
       freelancerReadinessPercent: readiness.percent,
       freelancerSkills: profile.skills,
+      recommendationFeedback: profile.recommendationFeedback,
       savedJobIds,
       workPreference: profile.workPreference,
     })),
@@ -143,6 +167,7 @@ export default async function SavedJobsPage() {
               note={savedJob.note}
               prepSheet={prepSheet}
               preferenceReasons={preferenceReasons}
+              recommendationFeedbackReason={feedbackByJobId.get(savedJob.jobPost.id)?.reason}
               savedAt={savedJob.createdAt}
               score={score}
             />
@@ -184,6 +209,7 @@ function SavedJobRow({
   note,
   prepSheet,
   preferenceReasons,
+  recommendationFeedbackReason,
   savedAt,
   score,
 }: {
@@ -197,6 +223,7 @@ function SavedJobRow({
   note?: string | null;
   prepSheet: SavedJobPrepSheet;
   preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
+  recommendationFeedbackReason?: string | null;
   savedAt: Date;
   score: number;
 }) {
@@ -261,6 +288,14 @@ function SavedJobRow({
                 />
                 <button className="btn btn-secondary mt-3 w-full" type="submit">メモを保存</button>
               </form>
+              <RecommendationFeedbackForm
+                currentReason={recommendationFeedbackReason}
+                jobPostId={job.id}
+                returnTo="/freelancer/saved-jobs"
+                source="saved_jobs"
+                sourceContext="/freelancer/saved-jobs"
+                visibleReasons={preferenceReasons}
+              />
               {contractMissingItems.length > 0 && (
                 <div className="rounded border border-amber-200 bg-amber-50 p-3">
                   <p className="text-xs font-medium text-amber-900">面談前に確認したい条件</p>

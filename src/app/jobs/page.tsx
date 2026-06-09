@@ -24,6 +24,7 @@ import {
   type TrustConfidenceStatus,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
+import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +145,32 @@ export default async function JobsPage({
           () =>
             prisma.freelancerProfile.findUnique({
               where: { userId: session.user.id },
-              include: { documents: true, careerHistory: true, workPreference: true, savedJobSearches: { orderBy: { createdAt: "desc" }, take: 4 } },
+              include: {
+                documents: true,
+                careerHistory: true,
+                workPreference: true,
+                savedJobSearches: { orderBy: { createdAt: "desc" }, take: 4 },
+                recommendationFeedback: {
+                  include: {
+                    jobPost: {
+                      select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        requiredSkills: true,
+                        preferredSkills: true,
+                        rate: true,
+                        workload: true,
+                        location: true,
+                        remotePolicy: true,
+                        companyProfileId: true,
+                      },
+                    },
+                  },
+                  orderBy: { updatedAt: "desc" },
+                  take: 50,
+                },
+              },
             }),
           null,
         )
@@ -197,6 +223,7 @@ export default async function JobsPage({
           ).map((savedJob) => savedJob.jobPostId),
         )
       : new Set<string>();
+  const feedbackByJobId = new Map((freelancerProfile?.recommendationFeedback ?? []).map((feedback) => [feedback.jobPostId, feedback]));
   const currentJobsPath = jobsPath({
     q: keyword,
     remote,
@@ -212,6 +239,7 @@ export default async function JobsPage({
     appliedJobIds,
     freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
     freelancerSkills: freelancerProfile?.skills,
+    recommendationFeedback: freelancerProfile?.recommendationFeedback,
     savedJobIds,
     workPreference: freelancerProfile?.workPreference,
   }, {
@@ -221,6 +249,7 @@ export default async function JobsPage({
     appliedJobIds,
     freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
     freelancerSkills: freelancerProfile?.skills,
+    recommendationFeedback: freelancerProfile?.recommendationFeedback,
     savedJobIds,
     workPreference: freelancerProfile?.workPreference,
   }, {
@@ -456,6 +485,7 @@ export default async function JobsPage({
               key={job.id}
               preferenceReasons={preferenceReasons}
               readiness={readiness}
+              recommendationFeedbackReason={feedbackByJobId.get(job.id)?.reason}
               saved={savedJobIds.has(job.id)}
               trustConfidence={trustConfidence ?? buildTrustConfidence({ company: job.companyProfile, job })}
               returnTo={currentJobsPath}
@@ -899,6 +929,7 @@ function JobCard({
   job,
   preferenceReasons,
   readiness,
+  recommendationFeedbackReason,
   returnTo,
   saved,
   trustConfidence,
@@ -910,6 +941,7 @@ function JobCard({
   job: JobWithCompany;
   preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
   readiness: ReturnType<typeof getFreelancerReadiness>;
+  recommendationFeedbackReason?: string | null;
   returnTo: string;
   saved: boolean;
   trustConfidence: ReturnType<typeof buildTrustConfidence>;
@@ -1022,13 +1054,23 @@ function JobCard({
         </div>
         <div className="grid shrink-0 gap-2 sm:grid-cols-2 md:grid-cols-1">
           {freelancerProfile && !applied && (
-            <form action={saved ? removeSavedJob : saveJobForReview}>
-              <input type="hidden" name="jobPostId" value={job.id} />
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <button className="btn btn-secondary w-full" type="submit">
-                {saved ? "検討リストから外す" : "検討リストに保存"}
-              </button>
-            </form>
+            <>
+              <form action={saved ? removeSavedJob : saveJobForReview}>
+                <input type="hidden" name="jobPostId" value={job.id} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <button className="btn btn-secondary w-full" type="submit">
+                  {saved ? "検討リストから外す" : "検討リストに保存"}
+                </button>
+              </form>
+              <RecommendationFeedbackForm
+                currentReason={recommendationFeedbackReason}
+                jobPostId={job.id}
+                returnTo={returnTo}
+                source="jobs"
+                sourceContext={returnTo}
+                visibleReasons={preferenceReasons}
+              />
+            </>
           )}
           <Link className="btn btn-secondary" href={`/jobs/${job.id}`}>
             詳細 {icons.arrow}

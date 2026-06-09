@@ -107,6 +107,24 @@ enum CompanySafetyReportStatus {
   resolved
 }
 
+enum RecommendationFeedbackReason {
+  good_fit
+  not_relevant
+  wrong_role_skill
+  rate_mismatch
+  workload_mismatch
+  location_mismatch
+  company_trust_concern
+  already_handled
+  hide_similar
+}
+
+enum RecommendationFeedbackSentiment {
+  positive
+  negative
+  neutral
+}
+
 model User {
   id                  String                @id @default(cuid())
   email               String                @unique
@@ -145,6 +163,7 @@ model FreelancerProfile {
   savedJobs         SavedJob[]
   workPreference    WorkPreference?
   savedJobSearches  SavedJobSearch[]
+  recommendationFeedback RecommendationFeedback[]
   receivedFeedback  InteractionFeedback[] @relation("FeedbackForFreelancer")
 
   @@map("freelancer_profiles")
@@ -330,6 +349,7 @@ model JobPost {
   applications      JobApplication[]
   savedJobs         SavedJob[]
   safetyReports     CompanySafetyReport[]
+  recommendationFeedback RecommendationFeedback[]
 
   @@map("job_posts")
 }
@@ -346,6 +366,28 @@ model SavedJob {
 
   @@unique([freelancerProfileId, jobPostId])
   @@map("saved_jobs")
+}
+
+model RecommendationFeedback {
+  id                  String                          @id @default(cuid())
+  freelancerProfileId String                          @map("freelancer_profile_id")
+  jobPostId           String                          @map("job_post_id")
+  reason              RecommendationFeedbackReason
+  sentiment           RecommendationFeedbackSentiment
+  hideSimilar         Boolean                         @default(false) @map("hide_similar")
+  visibleReasons      String?                         @map("visible_reasons")
+  source              String
+  sourceContext       String?                         @map("source_context")
+  note                String?
+  createdAt           DateTime                        @default(now()) @map("created_at")
+  updatedAt           DateTime                        @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile               @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  jobPost             JobPost                         @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@unique([freelancerProfileId, jobPostId])
+  @@index([jobPostId, reason])
+  @@index([freelancerProfileId, reason, hideSimilar])
+  @@map("recommendation_feedback")
 }
 
 model JobApplication {

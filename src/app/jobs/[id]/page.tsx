@@ -14,10 +14,12 @@ import {
   formatOpenings,
   matchedSkills,
   parseSkills,
+  visiblePreferenceReasons,
   type TrustConfidenceStatus,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
+import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +49,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           () =>
             prisma.freelancerProfile.findUnique({
               where: { userId: session.user.id },
-              include: { documents: true, careerHistory: true },
+              include: {
+                documents: true,
+                careerHistory: true,
+                workPreference: true,
+                recommendationFeedback: {
+                  where: { jobPostId: id },
+                  take: 1,
+                },
+              },
             }),
           null,
         )
@@ -103,6 +113,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = directContractChecklist(job);
   const companyConfidence = buildTrustConfidence({ company: job.companyProfile, job });
+  const preferenceReasons = freelancerProfile
+    ? visiblePreferenceReasons({
+        ...job,
+        freelancerReadinessPercent: readiness.percent,
+        freelancerSkills: freelancerProfile.skills,
+        workPreference: freelancerProfile.workPreference,
+      })
+    : [];
   const proposalDraft = freelancerProfile
     ? buildProposalDraft({
         companyName: job.companyProfile.name,
@@ -274,6 +292,18 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                       </button>
                     </form>
                   </div>
+                </div>
+              )}
+              {session?.user?.role === "freelancer" && !existingApplication && (
+                <div className="mb-4">
+                  <RecommendationFeedbackForm
+                    currentReason={freelancerProfile?.recommendationFeedback[0]?.reason}
+                    jobPostId={job.id}
+                    returnTo={`/jobs/${job.id}`}
+                    source="job_detail"
+                    sourceContext={`/jobs/${job.id}`}
+                    visibleReasons={preferenceReasons}
+                  />
                 </div>
               )}
               {existingApplication ? (

@@ -6,6 +6,7 @@ import {
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
+  RecommendationFeedbackReason,
   ResumeDocumentType,
   UserRole,
 } from "@prisma/client";
@@ -23,7 +24,9 @@ const {
   parseInterviewMessageType,
   parseJobApplicationStatusFilter,
   parseJobPostStatus,
+  parseRecommendationFeedbackReason,
   parseResumeDocumentType,
+  recommendationFeedbackReasonValues,
   parseScreeningResultStatus,
   parseUserRole,
   resumeDocumentTypeValues,
@@ -42,6 +45,7 @@ test("form enum value lists stay aligned with Prisma enums", () => {
   assert.deepEqual(sorted(companyVerificationKindValues), sorted(Object.values(CompanyVerificationKind)));
   assert.deepEqual(sorted(jobApplicationStatusValues), sorted(Object.values(JobApplicationStatus)));
   assert.deepEqual(sorted(interviewMessageTypeValues), sorted(Object.values(InterviewMessageType)));
+  assert.deepEqual(sorted(recommendationFeedbackReasonValues), sorted(Object.values(RecommendationFeedbackReason)));
 });
 
 test("job post form statuses parse only valid Prisma enum values", () => {
@@ -72,6 +76,9 @@ test("existing action enum parsers keep rejecting unsupported values", () => {
 
   assert.equal(parseInterviewMessageType("meeting_url"), InterviewMessageType.meeting_url);
   assert.throws(() => parseInterviewMessageType("file"), /メッセージ種別が不正です。/);
+
+  assert.equal(parseRecommendationFeedbackReason("good_fit"), RecommendationFeedbackReason.good_fit);
+  assert.throws(() => parseRecommendationFeedbackReason("auto_reject"), /推薦フィードバックの理由を確認してください。/);
 });
 
 test("application status filters return typed values or all", () => {

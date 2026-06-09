@@ -4,6 +4,7 @@ import {
   InterviewMessageType,
   JobApplicationStatus,
   JobPostStatus,
+  RecommendationFeedbackReason,
   ResumeDocumentType,
   UserRole,
   WorkLocationMode,
@@ -47,6 +48,7 @@ export const jobApplicationStatusValues = enumValues(JobApplicationStatus);
 export const interviewMessageTypeValues = enumValues(InterviewMessageType);
 export const workPreferenceStatusValues = enumValues(WorkPreferenceStatus);
 export const workLocationModeValues = enumValues(WorkLocationMode);
+export const recommendationFeedbackReasonValues = enumValues(RecommendationFeedbackReason);
 
 // Screening actions intentionally accept only terminal screening outcomes.
 export const screeningResultStatusValues = [
@@ -88,6 +90,10 @@ export function parseWorkPreferenceStatus(value: FormDataEntryValue | null) {
 
 export function parseWorkLocationMode(value: FormDataEntryValue | null) {
   return parseRequiredEnum(value, workLocationModeValues, "希望する働き方を確認してください。");
+}
+
+export function parseRecommendationFeedbackReason(value: FormDataEntryValue | null) {
+  return parseRequiredEnum(value, recommendationFeedbackReasonValues, "推薦フィードバックの理由を確認してください。");
 }
 
 export function parseJobApplicationStatusFilter(

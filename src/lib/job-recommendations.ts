@@ -1,4 +1,8 @@
 import {
+  recommendationFeedbackAdjustment,
+  type RecommendationFeedbackSignal,
+} from "./recommendation-feedback.ts";
+import {
   buildTrustConfidence,
   directContractChecklist,
   matchedSkills,
@@ -30,6 +34,7 @@ export type JobRecommendationContext = {
   appliedJobIds?: Iterable<string>;
   freelancerReadinessPercent?: number | null;
   freelancerSkills?: string | null;
+  recommendationFeedback?: RecommendationFeedbackSignal[];
   savedJobIds?: Iterable<string>;
   workPreference?: WorkPreferenceInput;
 };
@@ -75,9 +80,24 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     workPreference: context.workPreference,
   });
   const trustAdjustment = options.trustAdjusted === false || !trustConfidence ? 0 : trustRecommendationAdjustment(trustConfidence);
-  const directScore = Math.max(0, Math.min(100, baseDirectScore + trustAdjustment));
   const isOpen = job.applicationStatus === "open";
   const isFreshCandidate = !appliedJobIds.has(job.id) && !savedJobIds.has(job.id);
+  const feedbackAdjustment = recommendationFeedbackAdjustment({
+    applied: appliedJobIds.has(job.id),
+    feedback: context.recommendationFeedback,
+    job: {
+      ...job,
+      companyProfileId:
+        "companyProfileId" in job && job.companyProfileId
+          ? String(job.companyProfileId)
+          : job.companyProfile && "id" in job.companyProfile
+            ? String(job.companyProfile.id)
+            : null,
+    },
+    saved: savedJobIds.has(job.id),
+    workPreference: context.workPreference,
+  });
+  const directScore = Math.max(0, Math.min(100, baseDirectScore + trustAdjustment + feedbackAdjustment.adjustment));
 
   return {
     job,
@@ -90,15 +110,18 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     isSkillMatched: isOpen && (matchPercent ?? 0) > 0,
     matchPercent,
     matched,
-    preferenceReasons: visiblePreferenceReasons(
-      {
-        ...job,
-        freelancerReadinessPercent: context.freelancerReadinessPercent,
-        freelancerSkills: context.freelancerSkills,
-        workPreference: context.workPreference,
-      },
-      options.preferenceReasonLimit ?? 4,
-    ),
+    preferenceReasons: [
+      ...feedbackAdjustment.reasons,
+      ...visiblePreferenceReasons(
+        {
+          ...job,
+          freelancerReadinessPercent: context.freelancerReadinessPercent,
+          freelancerSkills: context.freelancerSkills,
+          workPreference: context.workPreference,
+        },
+        options.preferenceReasonLimit ?? 4,
+      ),
+    ].slice(0, options.preferenceReasonLimit ?? 4),
     requiredSkills,
     skillGaps,
     trustConfidence,

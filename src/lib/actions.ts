@@ -20,6 +20,7 @@ import {
   parseCompanyVerificationKind,
   parseInterviewMessageType,
   parseJobPostStatus,
+  parseRecommendationFeedbackReason,
   parseResumeDocumentType,
   parseScreeningResultStatus,
   parseUserRole,
@@ -27,6 +28,9 @@ import {
   parseWorkPreferenceStatus,
 } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
+import {
+  recommendationFeedbackSentiment,
+} from "@/lib/recommendation-feedback";
 import { loginErrorUrl } from "@/lib/registration-intent";
 import { directContractChecklist, toOptionalText, toText } from "@/lib/utils";
 import {
@@ -500,6 +504,74 @@ export async function saveJobForReview(formData: FormData) {
   revalidatePath(`/jobs/${jobPostId}`);
   revalidatePath("/freelancer");
   revalidatePath("/freelancer/saved-jobs");
+  redirect(returnTo);
+}
+
+export async function submitRecommendationFeedback(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const jobPostId = toText(formData.get("jobPostId"));
+  const returnTo = safeReturnPath(toText(formData.get("returnTo")) || "/jobs");
+  const reason = parseRecommendationFeedbackReason(formData.get("reason"));
+  const note = toOptionalText(formData.get("note"));
+  const source = toText(formData.get("source")) || "unknown";
+  const sourceContext = toOptionalText(formData.get("sourceContext"));
+  const visibleReasons = toOptionalText(formData.get("visibleReasons"));
+  if ((note?.length ?? 0) > 400 || (sourceContext?.length ?? 0) > 1200 || (visibleReasons?.length ?? 0) > 1200) {
+    throw new Error("推薦フィードバックの入力内容が長すぎます。");
+  }
+
+  const job = await prisma.jobPost.findFirst({
+    where: { id: jobPostId, status: "published" },
+    select: { id: true },
+  });
+  if (!job) throw new Error("フィードバックできる案件が見つかりません。");
+
+  const existingApplication = await prisma.jobApplication.findUnique({
+    where: {
+      jobPostId_freelancerProfileId: {
+        freelancerProfileId: profile.id,
+        jobPostId,
+      },
+    },
+    select: { id: true },
+  });
+  if (existingApplication) throw new Error("応募済み案件は応募履歴で管理してください。");
+
+  await prisma.recommendationFeedback.upsert({
+    where: {
+      freelancerProfileId_jobPostId: {
+        freelancerProfileId: profile.id,
+        jobPostId,
+      },
+    },
+    create: {
+      freelancerProfileId: profile.id,
+      jobPostId,
+      reason,
+      sentiment: recommendationFeedbackSentiment(reason),
+      hideSimilar: reason === "hide_similar",
+      visibleReasons,
+      source,
+      sourceContext,
+      note,
+    },
+    update: {
+      reason,
+      sentiment: recommendationFeedbackSentiment(reason),
+      hideSimilar: reason === "hide_similar",
+      visibleReasons,
+      source,
+      sourceContext,
+      note,
+    },
+  });
+
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobPostId}`);
+  revalidatePath("/freelancer");
+  revalidatePath("/freelancer/saved-jobs");
+  revalidatePath("/company/jobs");
+  revalidatePath(`/company/jobs/${jobPostId}`);
   redirect(returnTo);
 }
 

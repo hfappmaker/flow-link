@@ -110,3 +110,38 @@ test("dashboard recommendation ordering scores every candidate before limiting",
   assert.equal(ranked[0].job.id, "older-strong");
   assert.equal(buildDiscoveryIntentCounts({ jobs: ranked, readinessComplete: true }).readyToApply, 1);
 });
+
+test("recommendation feedback adjusts ranking without removing manual search results", () => {
+  const jobs = [
+    job({ id: "positive", title: "TypeScript product engineer" }),
+    job({ id: "negative", title: "TypeScript product engineer" }),
+    job({ id: "similar", title: "TypeScript product engineer", createdAt: "2026-05-01T00:00:00.000Z" }),
+  ];
+  const ranked = rankJobRecommendations(jobs, {
+    ...readyContext,
+    recommendationFeedback: [
+      {
+        jobPostId: "positive",
+        reason: "good_fit",
+        sentiment: "positive",
+        hideSimilar: false,
+        visibleReasons: "希望スキル一致",
+        jobPost: jobs[0],
+      },
+      {
+        jobPostId: "negative",
+        reason: "hide_similar",
+        sentiment: "negative",
+        hideSimilar: true,
+        visibleReasons: "単価ミスマッチ",
+        jobPost: jobs[1],
+      },
+    ],
+  });
+
+  assert.deepEqual(ranked.map((recommendation) => recommendation.job.id).sort(), ["negative", "positive", "similar"]);
+  assert.equal(ranked[0].job.id, "positive");
+  assert.equal(ranked.at(-1).job.id, "negative");
+  assert.equal(ranked.find((recommendation) => recommendation.job.id === "similar").directScore < ranked[0].directScore, true);
+  assert.match(ranked[0].preferenceReasons[0].detail, /フィードバック/);
+});

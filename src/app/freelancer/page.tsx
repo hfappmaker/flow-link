@@ -16,6 +16,7 @@ import {
   workPreferenceCompleteness,
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
+import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,26 @@ export default async function FreelancerDashboard() {
       },
       savedJobSearches: { orderBy: { createdAt: "desc" }, take: 3 },
       workPreference: true,
+      recommendationFeedback: {
+        include: {
+          jobPost: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              requiredSkills: true,
+              preferredSkills: true,
+              rate: true,
+              workload: true,
+              location: true,
+              remotePolicy: true,
+              companyProfileId: true,
+            },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+      },
       _count: { select: { savedJobs: true } },
     },
   });
@@ -65,6 +86,7 @@ export default async function FreelancerDashboard() {
   const preferenceCompleteness = workPreferenceCompleteness(profile.workPreference);
   const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
   const savedJobIds = new Set(profile.savedJobs.map((savedJob) => savedJob.jobPostId));
+  const feedbackByJobId = new Map(profile.recommendationFeedback.map((feedback) => [feedback.jobPostId, feedback]));
   const recommendationCandidates = await prisma.jobPost.findMany({
     where: {
       status: "published",
@@ -78,6 +100,7 @@ export default async function FreelancerDashboard() {
     appliedJobIds,
     freelancerReadinessPercent: readiness.percent,
     freelancerSkills: profile.skills,
+    recommendationFeedback: profile.recommendationFeedback,
     savedJobIds,
     workPreference: profile.workPreference,
   }).slice(0, 3);
@@ -87,6 +110,7 @@ export default async function FreelancerDashboard() {
       appliedJobIds,
       freelancerReadinessPercent: readiness.percent,
       freelancerSkills: profile.skills,
+      recommendationFeedback: profile.recommendationFeedback,
       savedJobIds,
       workPreference: profile.workPreference,
     }, { preferenceReasonLimit: 3 })),
@@ -194,6 +218,7 @@ export default async function FreelancerDashboard() {
                   matched={matched}
                   matchPercent={matchPercent}
                   preferenceReasons={preferenceReasons}
+                  recommendationFeedbackReason={feedbackByJobId.get(job.id)?.reason}
                   readinessComplete={readiness.isReady}
                   score={directScore}
                 />
@@ -223,9 +248,11 @@ export default async function FreelancerDashboard() {
                 .slice(0, 3)
                 .map(({ savedJob, recommendation }) => (
                 <SavedJobCard
+                  applied={appliedJobIds.has(savedJob.jobPost.id)}
                   job={savedJob.jobPost}
                   key={savedJob.id}
                   preferenceReasons={recommendation.preferenceReasons}
+                  recommendationFeedbackReason={feedbackByJobId.get(savedJob.jobPost.id)?.reason}
                   savedAt={savedJob.createdAt}
                   savedNote={savedJob.note}
                   score={recommendation.directScore}
@@ -352,14 +379,18 @@ function QueueSignal({
 }
 
 function SavedJobCard({
+  applied,
   job,
   preferenceReasons,
+  recommendationFeedbackReason,
   savedAt,
   savedNote,
   score,
 }: {
+  applied: boolean;
   job: SavedDashboardJob;
   preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
+  recommendationFeedbackReason?: string | null;
   savedAt: Date;
   savedNote?: string | null;
   score: number;
@@ -386,6 +417,18 @@ function SavedJobCard({
         ))}
       </div>
       {savedNote && <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{savedNote}</p>}
+      {!applied && job.applicationStatus === "open" && (
+        <div className="mt-3">
+          <RecommendationFeedbackForm
+            currentReason={recommendationFeedbackReason}
+            jobPostId={job.id}
+            returnTo="/freelancer"
+            source="freelancer_dashboard_saved"
+            sourceContext="/freelancer"
+            visibleReasons={preferenceReasons}
+          />
+        </div>
+      )}
       <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>条件確認・応募準備</Link>
     </Card>
   );
@@ -399,6 +442,7 @@ function RecommendedJobCard({
   matched,
   matchPercent,
   preferenceReasons,
+  recommendationFeedbackReason,
   readinessComplete,
   score,
 }: {
@@ -407,6 +451,7 @@ function RecommendedJobCard({
   matched: string[];
   matchPercent: number | null;
   preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
+  recommendationFeedbackReason?: string | null;
   readinessComplete: boolean;
   score: number;
 }) {
@@ -446,6 +491,16 @@ function RecommendedJobCard({
         ))}
       </div>
       <p className="mt-3 text-sm leading-6 text-stone-600">{nextAction}</p>
+      <div className="mt-3">
+        <RecommendationFeedbackForm
+          currentReason={recommendationFeedbackReason}
+          jobPostId={job.id}
+          returnTo="/freelancer"
+          source="freelancer_dashboard_recommended"
+          sourceContext="/freelancer"
+          visibleReasons={preferenceReasons}
+        />
+      </div>
       <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>案件条件を見る</Link>
     </Card>
   );
