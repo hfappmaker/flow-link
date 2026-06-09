@@ -33,6 +33,15 @@ export default async function JobsPage({
   const workload = filters.workload === "light" ? "light" : "";
   const rate = filters.rate === "high" ? "high" : "";
   const candidate = filters.candidate === "fresh" ? "fresh" : "";
+  const activeSearchFilterLabels = [
+    keyword && `キーワード: ${keyword}`,
+    remote && "リモート可",
+    accepting && "受付中のみ",
+    directReady && "条件が揃った案件",
+    workload === "light" && "週2-3日目安",
+    rate === "high" && "80万円以上目安",
+    candidate === "fresh" && "未対応の候補",
+  ].filter(Boolean);
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const andFilters: Prisma.JobPostWhereInput[] = [];
   if (directReady) {
@@ -117,6 +126,12 @@ export default async function JobsPage({
   const readiness = getFreelancerReadiness(freelancerProfile);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
   const fit = freelancerProfile && ["skill", "ready"].includes(filters.fit ?? "") ? filters.fit : "";
+  const activeFilterLabels = [
+    ...activeSearchFilterLabels,
+    fit === "skill" && "スキル一致あり",
+    fit === "ready" && "応募へ進みやすい",
+  ].filter(Boolean);
+  const hasActiveFilters = activeFilterLabels.length > 0;
   const appliedJobIds =
     freelancerProfile && jobs.length > 0
       ? new Set(
@@ -191,6 +206,12 @@ export default async function JobsPage({
       }
       return b.job.createdAt.getTime() - a.job.createdAt.getTime();
     });
+  const resultSummary =
+    jobs.length === 0 && !hasActiveFilters
+      ? "公開案件はまだありません。"
+      : `${rankedJobs.length}件の案件を表示中${activeFilterLabels.length > 0 ? ` / ${activeFilterLabels.join(" / ")}` : ""} / ${
+          sort === "direct" ? "応募しやすい順" : "新着順"
+        }`;
   const priorityJobs = [...rankedJobs]
     .sort((a, b) => b.directScore - a.directScore || b.contractReadinessPercent - a.contractReadinessPercent)
     .slice(0, 3);
@@ -314,7 +335,7 @@ export default async function JobsPage({
             <Link className="btn btn-secondary self-end" href="/jobs">クリア</Link>
           </form>
           <p className="mt-3 text-sm text-stone-500">
-            {rankedJobs.length}件の案件を表示中{keyword && ` / キーワード: ${keyword}`}{remote && " / リモート可"}{accepting && " / 受付中のみ"}{directReady && " / 条件が揃った案件"}{workload === "light" && " / 週2-3日目安"}{rate === "high" && " / 80万円以上目安"}{candidate === "fresh" && " / 未対応の候補"}{fit === "skill" && " / スキル一致あり"}{fit === "ready" && " / 応募へ進みやすい"} / {sort === "direct" ? "応募しやすい順" : "新着順"}
+            {resultSummary}
           </p>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <DiscoverySignal
@@ -383,7 +404,13 @@ export default async function JobsPage({
               returnTo={currentJobsPath}
             />
           ))}
-          {jobs.length === 0 && (
+          {jobs.length === 0 && !hasActiveFilters && (
+            <EmptyState
+              title="公開案件はまだありません。"
+              description="企業が公開した案件が表示されます。新しい案件が公開されると、このページで確認できます。"
+            />
+          )}
+          {jobs.length === 0 && hasActiveFilters && (
             <EmptyState
               title="条件に合う公開案件はありません。"
               description="キーワードを短くするか、勤務形態・条件確認の指定を外して再検索してください。"
