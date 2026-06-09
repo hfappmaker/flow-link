@@ -5,6 +5,7 @@ import { Shell, TopNav, Card, TextField } from "@/components/ui";
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
   const params = await searchParams;
   const callbackUrl = safeLoginCallbackUrl(params.callbackUrl ?? "");
+  const registerHref = callbackUrl ? { pathname: "/register", query: { callbackUrl } } : "/register";
   return (
     <Shell>
       <TopNav />
@@ -19,7 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <button className="btn btn-primary" type="submit">ログイン</button>
           </form>
           <p className="mt-4 text-sm text-stone-600">
-            アカウントがない場合は <Link className="font-semibold text-emerald-700" href="/register">登録</Link>
+            アカウントがない場合は <Link className="font-semibold text-emerald-700" href={registerHref}>登録</Link>
           </p>
         </Card>
       </div>

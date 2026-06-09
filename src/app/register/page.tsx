@@ -1,8 +1,9 @@
 import { registerUser } from "@/lib/actions";
 import { Shell, TopNav, Card, TextField, SelectField } from "@/components/ui";
 
-export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
   const params = await searchParams;
+  const callbackUrl = safeRegisterCallbackUrl(params.callbackUrl ?? "");
 
   return (
     <Shell>
@@ -16,6 +17,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
             </p>
           )}
           <form action={registerUser} className="mt-5 grid gap-4">
+            <input type="hidden" name="callbackUrl" value={callbackUrl} />
             <TextField name="name" label="氏名または企業名" required />
             <TextField name="email" label="メールアドレス" type="email" required />
             <TextField name="password" label="パスワード" type="password" required minLength={8} />
@@ -29,4 +31,8 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
       </div>
     </Shell>
   );
+}
+
+function safeRegisterCallbackUrl(value: string) {
+  return value.startsWith("/") && !value.startsWith("//") ? value : "";
 }

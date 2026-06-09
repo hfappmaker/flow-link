@@ -48,6 +48,7 @@ export async function registerUser(formData: FormData) {
   const email = toText(formData.get("email")).toLowerCase();
   const password = toText(formData.get("password"));
   const role = toText(formData.get("role")) as UserRole;
+  const callbackUrl = safeReturnPath(toText(formData.get("callbackUrl")) || "/");
 
   if (!email || password.length < 8 || !["freelancer", "company_user"].includes(role)) {
     throw new Error("登録内容を確認してください。");
@@ -84,15 +85,21 @@ export async function registerUser(formData: FormData) {
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      redirect("/register?error=email-exists");
+      const registerUrl = new URLSearchParams({ error: "email-exists" });
+      if (callbackUrl !== "/") {
+        registerUrl.set("callbackUrl", callbackUrl);
+      }
+      redirect(`/register?${registerUrl.toString()}`);
     }
     throw error;
   }
 
+  const redirectTo = registrationRedirectForRole(role, callbackUrl);
+
   await signIn("credentials", {
     email: user.email,
     password,
-    redirectTo: role === "freelancer" ? "/freelancer" : "/company",
+    redirectTo,
   });
 }
 
@@ -584,6 +591,14 @@ function formatDateForMessage(value: Date) {
 
 function safeReturnPath(value: string) {
   return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
+function registrationRedirectForRole(role: UserRole, callbackUrl: string) {
+  const defaultPath = role === "freelancer" ? "/freelancer" : "/company";
+  if (callbackUrl === "/") return defaultPath;
+  if (role === "freelancer" && callbackUrl.startsWith("/company")) return defaultPath;
+  if (role === "company_user" && callbackUrl.startsWith("/freelancer")) return defaultPath;
+  return callbackUrl;
 }
 
 function isHttpUrl(value: string) {
