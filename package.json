@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "npm run db:migration-status && next dev",
     "build": "NODE_ENV=production next build",
-    "db:migration-status": "prisma migrate status --schema=prisma/schema.prisma",
+    "db:migration-status": "node scripts/check-prisma-migration-status.mjs",
     "vercel-build": "prisma migrate deploy && next build",
     "test": "node --test --experimental-strip-types tests/*.test.mjs",
     "typecheck": "NODE_ENV=production next typegen && rm -rf .next/dev/types && tsc --noEmit",
