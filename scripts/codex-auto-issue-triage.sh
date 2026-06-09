@@ -67,7 +67,7 @@ case "$MODE" in
     AREA_LABEL="area:visual-design"
     MODE_TITLE="Visual design triage"
     MODE_FOCUS="Find visual design issues in layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, component consistency, and whether screens look professionally composed."
-    BROWSER_POLICY="Playwright browser verification is required by default for visual-design triage. Capture or inspect at least desktop and mobile viewports before creating an issue. If screenshots or browser launch fail, state the exact blocker in the issue Evidence and Verification plan."
+    BROWSER_POLICY="Playwright browser verification and screenshots are required for visual-design triage. Capture at least desktop and mobile screenshots before creating an issue, normally 1280x900 and 375x812. Save screenshots under .codex-automation/screenshots/ with stable names that include the mode, route, viewport, and timestamp. Include screenshot paths and visual observations in the issue Evidence section. If screenshots or browser launch fail, do not create a visual-design issue unless the issue is still critical; state the exact blocker in Evidence and Verification plan."
     ;;
   maintainability)
     AREA_LABEL="area:maintainability"
@@ -175,6 +175,7 @@ Browser verification policy:
 - Prefer Playwright with Chromium in headless mode and sandbox disabled when needed, for example: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
 - Prefer read-only browser checks. Do not write to Preview unless the issue truly needs it; if Preview write-path verification is needed, label the issue needs:preview-write and define cleanup requirements.
 - Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
+- For visual-design mode, screenshots are mandatory evidence. Store them in .codex-automation/screenshots/ and mention the exact paths in the issue body.
 
 Repository workflow:
 - Use gh CLI in this repository.

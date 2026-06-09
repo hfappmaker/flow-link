@@ -209,7 +209,7 @@ Playwright verification policy:
 - If the issue has label area:bug, area:ux, or area:visual-design, Playwright browser verification is required by default before closing the issue.
 - For area:bug, reproduce or verify the fixed user-visible behavior in a browser when feasible.
 - For area:ux, verify the relevant navigation, screen transition, form, login/register flow, empty/loading/error state, or task completion in a browser when feasible.
-- For area:visual-design, verify at least desktop and mobile viewports in a browser, using screenshots or direct Playwright inspection when feasible.
+- For area:visual-design, screenshots are mandatory before closing the issue. Verify at least desktop and mobile viewports in a browser, normally 1280x900 and 375x812, and save screenshots under .codex-automation/screenshots/ with stable names that include the issue number, route, viewport, and timestamp.
 - Use Chromium headless with sandbox disabled if needed: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
 - If Playwright cannot run, do not silently skip it. State the exact blocker, use the best available fallback such as HTTP checks or static inspection, and leave enough detail in your final message for the issue comment.
 - For product or maintainability issues, Playwright is optional unless the issue acceptance criteria require visible flow verification.
@@ -224,6 +224,7 @@ Repository rules:
 Verification:
 - Run relevant commands, usually npm run typecheck, npm run lint, npm run build, or targeted checks based on the issue.
 - For area:bug, area:ux, and area:visual-design, include the Playwright scenario, target URL, viewport(s), and result in your final message. If Playwright could not run, include the exact reason and fallback checks.
+- For area:visual-design, include the saved screenshot paths in your final message. If screenshots could not be captured, do not close the issue unless the final message clearly explains why screenshot capture was impossible and what fallback evidence was used.
 - Include commands/checks run in your final message.
 
 Git:
