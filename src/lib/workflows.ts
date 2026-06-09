@@ -358,18 +358,23 @@ type CreateCompanySafetyReportInput = {
   companyProfileId: string;
   reporterUserId: string | null;
   jobPostId: string | null;
+  jobApplicationId?: string | null;
+  interviewThreadId?: string | null;
   reportType: CompanySafetyReportType;
   detail: string;
 };
 
 export async function createCompanySafetyReportWorkflow(db: WorkflowDb, input: CreateCompanySafetyReportInput) {
   if (!input.detail.trim()) throw new Error("安全性レポートの詳細を入力してください。");
+  if (input.detail.length > 1200) throw new Error("安全性レポートの詳細は1200文字以内で入力してください。");
 
   return db.companySafetyReport.create({
     data: {
       companyProfileId: input.companyProfileId,
       reporterUserId: input.reporterUserId,
       jobPostId: input.jobPostId,
+      jobApplicationId: input.jobApplicationId ?? null,
+      interviewThreadId: input.interviewThreadId ?? null,
       reportType: input.reportType,
       detail: input.detail,
       status: CompanySafetyReportStatus.submitted,
