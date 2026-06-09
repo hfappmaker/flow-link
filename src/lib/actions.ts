@@ -4,17 +4,23 @@ import { put } from "@vercel/blob";
 import {
   ApplicationStatus,
   InterviewMessageType,
-  JobApplicationStatus,
   JobPostStatus,
   Prisma,
-  ResumeDocumentType,
-  UserRole,
+  type UserRole,
 } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { AuthError } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
+import {
+  parseApplicationStatus,
+  parseInterviewMessageType,
+  parseJobPostStatus,
+  parseResumeDocumentType,
+  parseScreeningResultStatus,
+  parseUserRole,
+} from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { buildScreeningPassedHandoffMessage, directContractChecklist, toOptionalText, toText } from "@/lib/utils";
@@ -47,10 +53,10 @@ async function currentCompanyUser() {
 export async function registerUser(formData: FormData) {
   const email = toText(formData.get("email")).toLowerCase();
   const password = toText(formData.get("password"));
-  const role = toText(formData.get("role")) as UserRole;
+  const role = parseUserRole(formData.get("role"));
   const callbackUrl = safeReturnPath(toText(formData.get("callbackUrl")) || "/");
 
-  if (!email || password.length < 8 || !["freelancer", "company_user"].includes(role)) {
+  if (!email || password.length < 8) {
     throw new Error("登録内容を確認してください。");
   }
 
@@ -194,9 +200,9 @@ export async function saveCareerHistory(formData: FormData) {
 
 export async function uploadResumeDocument(formData: FormData) {
   const { profile } = await currentFreelancer();
-  const type = toText(formData.get("documentType")) as ResumeDocumentType;
+  const type = parseResumeDocumentType(formData.get("documentType"));
   const file = formData.get("file");
-  if (!["resume", "career_history"].includes(type) || !(file instanceof File) || file.size === 0) {
+  if (!(file instanceof File) || file.size === 0) {
     throw new Error("PDFファイルを選択してください。");
   }
   if (file.type !== "application/pdf") throw new Error("PDFのみアップロードできます。");
@@ -259,7 +265,8 @@ export async function saveJobPost(formData: FormData) {
   if ((selectionFlow?.length ?? 0) > 800 || (contractTerms?.length ?? 0) > 800) {
     throw new Error("選考フローと契約・支払い条件は800文字以内で入力してください。");
   }
-  const requestedStatus = toText(formData.get("status")) as JobPostStatus;
+  const requestedStatus = parseJobPostStatus(formData.get("status"));
+  const applicationStatus = parseApplicationStatus(formData.get("applicationStatus"));
   const data = {
     companyProfileId: companyUser.companyProfileId,
     title: toText(formData.get("title")),
@@ -275,7 +282,7 @@ export async function saveJobPost(formData: FormData) {
     remotePolicy: toOptionalText(formData.get("remotePolicy")),
     openings: Number(toText(formData.get("openings"))) || null,
     status: requestedStatus,
-    applicationStatus: toText(formData.get("applicationStatus")) as ApplicationStatus,
+    applicationStatus,
   };
   if (!data.title || !data.description) {
     throw new Error("タイトルと業務内容を入力してください。");
@@ -425,11 +432,8 @@ export async function saveScreeningNote(formData: FormData) {
 export async function screenApplication(formData: FormData) {
   const { companyUser } = await currentCompanyUser();
   const applicationId = toText(formData.get("applicationId"));
-  const status = toText(formData.get("status")) as JobApplicationStatus;
+  const status = parseScreeningResultStatus(formData.get("status"));
   const handoffMessage = toOptionalText(formData.get("handoffMessage"));
-  if (!["screening_passed", "screening_rejected"].includes(status)) {
-    throw new Error("選考結果が不正です。");
-  }
   if (status === "screening_passed" && formData.get("handoffConfirmed") !== "on") {
     throw new Error("初回連絡文の確認にチェックを入れてください。");
   }
@@ -510,10 +514,7 @@ export async function markNotificationRead(formData: FormData) {
 export async function sendInterviewMessage(formData: FormData) {
   const user = await currentUser();
   const threadId = toText(formData.get("threadId"));
-  const messageType = toText(formData.get("messageType")) as InterviewMessageType;
-  if (!["text", "proposed_time", "accepted_time", "meeting_url"].includes(messageType)) {
-    throw new Error("メッセージ種別が不正です。");
-  }
+  const messageType = parseInterviewMessageType(formData.get("messageType"));
   await assertCanUseThread(user.id, threadId);
 
   const proposedAtText = toOptionalText(formData.get("proposedAt"));

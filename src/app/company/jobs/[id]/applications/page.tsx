@@ -1,18 +1,25 @@
 import Link from "next/link";
 import type { LinkProps } from "next/link";
-import type { JobApplicationStatus, Prisma } from "@prisma/client";
+import { JobApplicationStatus, type Prisma } from "@prisma/client";
 import { requireCompanyUser } from "@/lib/page-guards";
+import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
+const applicationStatusFilterValues = [
+  JobApplicationStatus.applied,
+  JobApplicationStatus.screening_passed,
+  JobApplicationStatus.screening_rejected,
+] as const satisfies readonly JobApplicationStatus[];
+
 const statusTabs: Array<{ label: string; value: JobApplicationStatus | "all" }> = [
   { label: "すべて", value: "all" },
-  { label: "未選考", value: "applied" },
-  { label: "OK", value: "screening_passed" },
-  { label: "NG", value: "screening_rejected" },
+  { label: "未選考", value: JobApplicationStatus.applied },
+  { label: "OK", value: JobApplicationStatus.screening_passed },
+  { label: "NG", value: JobApplicationStatus.screening_rejected },
 ];
 
 export default async function JobApplicationsPage({
@@ -24,13 +31,13 @@ export default async function JobApplicationsPage({
 }) {
   const { id } = await params;
   const filters = await searchParams;
-  const selectedStatus = statusTabs.some((tab) => tab.value === filters.status) ? filters.status! : "all";
+  const selectedStatus = parseJobApplicationStatusFilter(filters.status, applicationStatusFilterValues);
   const keyword = filters.q?.trim() ?? "";
   const readyOnly = filters.ready === "interview";
   const selectedSort = filters.sort === "new" ? "new" : "review";
   const { user, companyUser } = await requireCompanyUser();
   const applicationWhere: Prisma.JobApplicationWhereInput = {
-    ...(selectedStatus !== "all" ? { status: selectedStatus as JobApplicationStatus } : {}),
+    ...(selectedStatus !== "all" ? { status: selectedStatus } : {}),
     ...(keyword
       ? {
           OR: [

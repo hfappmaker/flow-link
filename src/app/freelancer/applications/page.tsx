@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LinkProps } from "next/link";
-import type { JobApplicationStatus } from "@prisma/client";
+import { JobApplicationStatus } from "@prisma/client";
+import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
@@ -15,11 +16,17 @@ import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/comp
 
 export const dynamic = "force-dynamic";
 
+const applicationStatusFilterValues = [
+  JobApplicationStatus.applied,
+  JobApplicationStatus.screening_passed,
+  JobApplicationStatus.screening_rejected,
+] as const satisfies readonly JobApplicationStatus[];
+
 const statusTabs: Array<{ label: string; value: JobApplicationStatus | "all" }> = [
   { label: "すべて", value: "all" },
-  { label: "選考中", value: "applied" },
-  { label: "面談調整", value: "screening_passed" },
-  { label: "見送り", value: "screening_rejected" },
+  { label: "選考中", value: JobApplicationStatus.applied },
+  { label: "面談調整", value: JobApplicationStatus.screening_passed },
+  { label: "見送り", value: JobApplicationStatus.screening_rejected },
 ];
 
 export default async function FreelancerApplicationsPage({
@@ -28,7 +35,7 @@ export default async function FreelancerApplicationsPage({
   searchParams: Promise<{ status?: string; action?: string; sort?: string }>;
 }) {
   const filters = await searchParams;
-  const selectedStatus = statusTabs.some((tab) => tab.value === filters.status) ? filters.status! : "all";
+  const selectedStatus = parseJobApplicationStatusFilter(filters.status, applicationStatusFilterValues);
   const selectedAction = ["interview", "waiting", "final"].includes(filters.action ?? "") ? filters.action! : "";
   const selectedSort = filters.sort === "new" ? "new" : "priority";
   const { user, profile } = await requireFreelancerProfile({
