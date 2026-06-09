@@ -240,6 +240,273 @@ export function directMatchScore(job: DirectMatchScoreInput) {
   return Math.min(100, Math.round(weightedSkill + weightedContract + weightedReadiness + applicationOpenBonus));
 }
 
+export type WorkPreferenceInput = {
+  status?: string | null;
+  targetRole?: string | null;
+  preferredSkills?: string | null;
+  targetRate?: string | null;
+  workload?: string | null;
+  locationMode?: string | null;
+  preferredLocation?: string | null;
+  availableFrom?: string | null;
+  excludedConditions?: string | null;
+  notificationCadence?: string | null;
+  privateNotes?: string | null;
+  lastConfirmedAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+} | null | undefined;
+
+type PreferenceAwareMatchInput = DirectMatchScoreInput & {
+  title?: string | null;
+  preferredSkills?: string | null;
+  location?: string | null;
+  remotePolicy?: string | null;
+  workPreference?: WorkPreferenceInput;
+};
+
+type PreferenceReason = {
+  label: string;
+  detail: string;
+  tone: "good" | "neutral" | "warn";
+};
+
+export function workPreferenceCompleteness(preference: WorkPreferenceInput, now = new Date()) {
+  const checks = [
+    Boolean(preference?.status),
+    Boolean(preference?.targetRole),
+    parseSkills(preference?.preferredSkills).length > 0,
+    Boolean(preference?.targetRate),
+    Boolean(preference?.workload),
+    Boolean(preference?.locationMode && preference.locationMode !== "flexible") || Boolean(preference?.preferredLocation),
+    Boolean(preference?.availableFrom),
+  ];
+  const completed = checks.filter(Boolean).length;
+  const referenceDate = preference?.lastConfirmedAt ?? preference?.updatedAt;
+  const stale = !referenceDate || daysSince(referenceDate, now) >= 30;
+
+  return {
+    completed,
+    total: checks.length,
+    percent: Math.round((completed / checks.length) * 100),
+    missing: checks.length - completed,
+    stale,
+    usable: Boolean(preference) && completed >= 3 && !stale && preference?.status !== "inactive",
+  };
+}
+
+export function preferenceAwareMatchScore(job: PreferenceAwareMatchInput) {
+  const baseScore = directMatchScore(job);
+  const preferenceFit = buildPreferenceFit(job);
+  const adjustment = preferenceFit.reasons.reduce((score, reason) => {
+    if (reason.tone === "good") return score + 4;
+    if (reason.tone === "warn") return score - 8;
+    return score;
+  }, job.workPreference?.status === "inactive" ? -20 : 0);
+
+  return Math.max(0, Math.min(100, baseScore + adjustment));
+}
+
+export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
+  const preference = job.workPreference;
+  const completeness = workPreferenceCompleteness(preference);
+  if (!preference || completeness.completed === 0) {
+    return {
+      completeness,
+      status: "missing" as const,
+      reasons: [
+        {
+          label: "希望条件未設定",
+          detail: "仕事探しの希望条件を保存すると、単価・稼働量・勤務地も含めて候補を並べ替えます。",
+          tone: "neutral" as const,
+        },
+      ],
+    };
+  }
+
+  const text = [
+    job.title,
+    job.description,
+    job.requiredSkills,
+    job.preferredSkills,
+    job.rate,
+    job.workload,
+    job.location,
+    job.remotePolicy,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const reasons: PreferenceReason[] = [];
+  const preferredSkills = parseSkills(preference.preferredSkills);
+  const matchedPreferredSkills = matchedSkills([job.requiredSkills, job.preferredSkills].filter(Boolean).join(","), preference.preferredSkills);
+
+  if (preference.status === "inactive") {
+    reasons.push({
+      label: "現在は積極募集外",
+      detail: "仕事探しステータスが停止中です。応募前に現在の募集状況を更新してください。",
+      tone: "warn",
+    });
+  } else if (preference.status === "active") {
+    reasons.push({
+      label: "積極的に探している",
+      detail: "現在の仕事探しステータスが有効です。",
+      tone: "good",
+    });
+  }
+
+  if (preference.targetRole) {
+    reasons.push(
+      includesAny(text, parseSkills(preference.targetRole))
+        ? {
+            label: "希望ロール一致",
+            detail: `${preference.targetRole}に近い案件です。`,
+            tone: "good",
+          }
+        : {
+            label: "ロール要確認",
+            detail: `希望ロール（${preference.targetRole}）との近さを詳細で確認してください。`,
+            tone: "neutral",
+          },
+    );
+  }
+
+  if (preferredSkills.length > 0) {
+    reasons.push(
+      matchedPreferredSkills.length > 0
+        ? {
+            label: "希望スキル一致",
+            detail: matchedPreferredSkills.slice(0, 4).join("、"),
+            tone: "good",
+          }
+        : {
+            label: "希望スキル不足",
+            detail: `${preferredSkills.slice(0, 3).join("、")}の記載は見つかっていません。`,
+            tone: "warn",
+          },
+    );
+  }
+
+  const rateTone = textFitTone(preference.targetRate, job.rate);
+  if (preference.targetRate) {
+    reasons.push({
+      label: rateTone === "good" ? "単価条件に近い" : rateTone === "warn" ? "単価ミスマッチ" : "単価要確認",
+      detail: `希望: ${preference.targetRate} / 案件: ${job.rate || "未設定"}`,
+      tone: rateTone,
+    });
+  }
+
+  const workloadTone = textFitTone(preference.workload, job.workload);
+  if (preference.workload) {
+    reasons.push({
+      label: workloadTone === "good" ? "稼働量に近い" : workloadTone === "warn" ? "稼働量ミスマッチ" : "稼働量要確認",
+      detail: `希望: ${preference.workload} / 案件: ${job.workload || "未設定"}`,
+      tone: workloadTone,
+    });
+  }
+
+  if (preference.locationMode && preference.locationMode !== "flexible") {
+    const locationTone = locationFitTone(preference, job);
+    reasons.push({
+      label: locationTone === "good" ? "働き方に近い" : locationTone === "warn" ? "働き方ミスマッチ" : "働き方要確認",
+      detail: `希望: ${locationModeLabel(preference.locationMode)}${preference.preferredLocation ? ` / ${preference.preferredLocation}` : ""} / 案件: ${
+        [job.location, job.remotePolicy].filter(Boolean).join(" / ") || "未設定"
+      }`,
+      tone: locationTone,
+    });
+  } else if (preference.preferredLocation) {
+    const locationTone = textFitTone(preference.preferredLocation, [job.location, job.remotePolicy].filter(Boolean).join(" "));
+    reasons.push({
+      label: locationTone === "good" ? "勤務地に近い" : locationTone === "warn" ? "勤務地ミスマッチ" : "勤務地要確認",
+      detail: `希望: ${preference.preferredLocation} / 案件: ${job.location || job.remotePolicy || "未設定"}`,
+      tone: locationTone,
+    });
+  }
+
+  if (preference.availableFrom) {
+    reasons.push({
+      label: job.contractPeriod || job.applicationStatus === "open" ? "開始時期を相談可" : "開始時期要確認",
+      detail: `希望開始: ${preference.availableFrom} / 契約期間: ${job.contractPeriod || "未設定"}`,
+      tone: job.contractPeriod || job.applicationStatus === "open" ? "neutral" : "warn",
+    });
+  }
+
+  const exclusions = parseSkills(preference.excludedConditions);
+  const matchedExclusions = exclusions.filter((condition) => text.includes(condition.toLowerCase()));
+  if (matchedExclusions.length > 0) {
+    reasons.push({
+      label: "避けたい条件あり",
+      detail: matchedExclusions.slice(0, 3).join("、"),
+      tone: "warn",
+    });
+  }
+
+  if (completeness.stale) {
+    reasons.unshift({
+      label: "希望条件が古い可能性",
+      detail: "30日以上確認されていないため、候補の優先度は控えめに扱います。",
+      tone: "warn",
+    });
+  }
+
+  return {
+    completeness,
+    status: completeness.usable ? "usable" as const : "low-confidence" as const,
+    reasons: reasons.length > 0 ? reasons.slice(0, 7) : [
+      {
+        label: "条件の手がかり不足",
+        detail: "希望条件をもう少し保存すると、理由付きで候補を比較できます。",
+        tone: "neutral" as const,
+      },
+    ],
+  };
+}
+
+export function visiblePreferenceReasons(job: PreferenceAwareMatchInput, limit = 4) {
+  return buildPreferenceFit(job).reasons.slice(0, limit);
+}
+
+export function locationModeLabel(mode?: string | null) {
+  const labels: Record<string, string> = {
+    remote: "リモート中心",
+    hybrid: "一部出社可",
+    onsite: "出社可",
+    flexible: "柔軟",
+  };
+  return mode ? labels[mode] ?? mode : "未設定";
+}
+
+function includesAny(text: string, words: string[]) {
+  return words.some((word) => text.includes(word.toLowerCase()));
+}
+
+function textFitTone(preference?: string | null, jobValue?: string | null): PreferenceReason["tone"] {
+  if (!preference) return "neutral";
+  if (!jobValue) return "neutral";
+  const preferenceTokens = parseSkills(preference).map((token) => token.toLowerCase());
+  const jobText = jobValue.toLowerCase();
+  if (preferenceTokens.length > 0 && preferenceTokens.some((token) => jobText.includes(token))) return "good";
+  if (hasNumericOverlap(preference, jobValue)) return "good";
+  return "warn";
+}
+
+function locationFitTone(preference: NonNullable<WorkPreferenceInput>, job: PreferenceAwareMatchInput): PreferenceReason["tone"] {
+  const remoteText = `${job.remotePolicy ?? ""} ${job.location ?? ""}`.toLowerCase();
+  if (!remoteText.trim()) return "neutral";
+  if (preference.locationMode === "remote") {
+    return remoteText.includes("リモート") || remoteText.includes("remote") ? "good" : "warn";
+  }
+  if (preference.locationMode === "onsite") {
+    return remoteText.includes("出社") || remoteText.includes("常駐") || remoteText.includes("オンサイト") ? "good" : "neutral";
+  }
+  if (preference.locationMode === "hybrid") {
+    return remoteText.includes("一部") || remoteText.includes("ハイブリッド") || remoteText.includes("週") ? "good" : "neutral";
+  }
+  return "neutral";
+}
+
+function hasNumericOverlap(left: string, right: string) {
+  const leftNumbers: string[] = left.match(/\d+/g) ?? [];
+  const rightNumbers: string[] = right.match(/\d+/g) ?? [];
+  return leftNumbers.some((number) => rightNumbers.includes(number));
+}
+
 export function applicationStatusLabel(status: string) {
   const labels: Record<string, string> = {
     applied: "応募済み",

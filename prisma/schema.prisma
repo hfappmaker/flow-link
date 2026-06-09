@@ -70,6 +70,19 @@ enum InteractionFeedbackModerationStatus {
   hidden
 }
 
+enum WorkPreferenceStatus {
+  active
+  passive
+  inactive
+}
+
+enum WorkLocationMode {
+  remote
+  hybrid
+  onsite
+  flexible
+}
+
 model User {
   id                  String                @id @default(cuid())
   email               String                @unique
@@ -105,9 +118,54 @@ model FreelancerProfile {
   careerHistory     CareerHistory?
   applications      JobApplication[]
   savedJobs         SavedJob[]
+  workPreference    WorkPreference?
+  savedJobSearches  SavedJobSearch[]
   receivedFeedback  InteractionFeedback[] @relation("FeedbackForFreelancer")
 
   @@map("freelancer_profiles")
+}
+
+model WorkPreference {
+  id                  String               @id @default(cuid())
+  freelancerProfileId String               @unique @map("freelancer_profile_id")
+  status              WorkPreferenceStatus @default(active)
+  targetRole          String?              @map("target_role")
+  preferredSkills     String?              @map("preferred_skills")
+  targetRate          String?              @map("target_rate")
+  workload            String?
+  locationMode        WorkLocationMode     @default(flexible) @map("location_mode")
+  preferredLocation   String?              @map("preferred_location")
+  availableFrom       String?              @map("available_from")
+  excludedConditions  String?              @map("excluded_conditions")
+  notificationCadence String?              @map("notification_cadence")
+  privateNotes        String?              @map("private_notes")
+  lastConfirmedAt     DateTime?            @map("last_confirmed_at")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile    @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("work_preferences")
+}
+
+model SavedJobSearch {
+  id                  String            @id @default(cuid())
+  freelancerProfileId String            @map("freelancer_profile_id")
+  name                String
+  query               String?
+  remote              Boolean           @default(false)
+  acceptingOnly       Boolean           @default(true) @map("accepting_only")
+  directReadyOnly     Boolean           @default(false) @map("direct_ready_only")
+  fit                 String?
+  workload            String?
+  rate                String?
+  sort                String            @default("direct")
+  notificationCadence String?           @map("notification_cadence")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([freelancerProfileId])
+  @@map("saved_job_searches")
 }
 
 model ResumeDocument {

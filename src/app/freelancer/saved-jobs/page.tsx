@@ -3,7 +3,16 @@ import type { Prisma } from "@prisma/client";
 import { removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
+import {
+  directContractChecklist,
+  formatDateTime,
+  matchedSkills,
+  parseSkills,
+  preferenceAwareMatchScore,
+  skillMatchPercent,
+  visiblePreferenceReasons,
+  workPreferenceCompleteness,
+} from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, TextArea } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +23,7 @@ export default async function SavedJobsPage() {
     include: {
       documents: true,
       careerHistory: true,
+      workPreference: true,
       applications: { select: { jobPostId: true, status: true } },
       savedJobs: {
         include: { jobPost: { include: { companyProfile: true } } },
@@ -22,6 +32,7 @@ export default async function SavedJobsPage() {
     },
   });
   const readiness = getFreelancerReadiness(profile);
+  const preferenceCompleteness = workPreferenceCompleteness(profile.workPreference);
   const appliedByJobId = new Map(profile.applications.map((application) => [application.jobPostId, application.status]));
   const savedJobs =
     profile.savedJobs
@@ -33,11 +44,13 @@ export default async function SavedJobsPage() {
         const matched = matchedSkills(job.requiredSkills, profile.skills);
         const matchedSkillSet = new Set(matched.map((skill) => skill.toLowerCase()));
         const skillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
-        const score = directMatchScore({
+        const score = preferenceAwareMatchScore({
           ...job,
           freelancerReadinessPercent: readiness.percent,
           freelancerSkills: profile.skills,
+          workPreference: profile.workPreference,
         });
+        const preferenceReasons = visiblePreferenceReasons({ ...job, workPreference: profile.workPreference }, 5);
         const prepSheet = buildSavedJobPrepSheet({
           matched,
           skillGaps,
@@ -55,6 +68,7 @@ export default async function SavedJobsPage() {
           matchPercent,
           matched,
           prepSheet,
+          preferenceReasons,
           score,
           appliedStatus: appliedByJobId.get(job.id),
           nextStep: buildSavedJobNextStep({
@@ -90,7 +104,8 @@ export default async function SavedJobsPage() {
               <div>
                 <h2 className="font-semibold">応募前の優先確認</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">
-                  応募しやすさ、必須スキル、契約・支払い条件、検討メモを見て、先に準備する案件を選べます。
+                応募しやすさ、必須スキル、契約・支払い条件、検討メモを見て、先に準備する案件を選べます。
+                  希望条件がある場合は、単価・稼働量・働き方の一致とミスマッチも優先度に反映します。
                 </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
@@ -100,8 +115,14 @@ export default async function SavedJobsPage() {
             </div>
           </Card>
         )}
+        {savedJobs.length > 0 && (!preferenceCompleteness.usable || preferenceCompleteness.stale) && (
+          <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+            希望条件が{preferenceCompleteness.stale ? "古い、または未確認です" : "まだ少ない状態です"}。検討リストは表示しますが、優先度の信頼度を上げるには希望条件を更新してください。
+            <Link className="ml-2 font-semibold text-amber-950 underline" href="/freelancer/preferences">希望条件を更新</Link>
+          </div>
+        )}
         <div className="mt-6 grid gap-4">
-          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, prepSheet, score, appliedStatus, nextStep }) => (
+          {savedJobs.map(({ savedJob, contractReadiness, matchPercent, matched, prepSheet, preferenceReasons, score, appliedStatus, nextStep }) => (
             <SavedJobRow
               appliedStatus={appliedStatus}
               contractMissingItems={contractReadiness.items.filter((item) => !item.done)}
@@ -113,6 +134,7 @@ export default async function SavedJobsPage() {
               nextStep={nextStep}
               note={savedJob.note}
               prepSheet={prepSheet}
+              preferenceReasons={preferenceReasons}
               savedAt={savedJob.createdAt}
               score={score}
             />
@@ -153,6 +175,7 @@ function SavedJobRow({
   nextStep,
   note,
   prepSheet,
+  preferenceReasons,
   savedAt,
   score,
 }: {
@@ -165,6 +188,7 @@ function SavedJobRow({
   nextStep: SavedJobNextStep;
   note?: string | null;
   prepSheet: SavedJobPrepSheet;
+  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
   savedAt: Date;
   score: number;
 }) {
@@ -200,6 +224,11 @@ function SavedJobRow({
               ))}
             </div>
           )}
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {preferenceReasons.map((reason) => (
+              <PreferenceReason reason={reason} key={`${job.id}-${reason.label}`} />
+            ))}
+          </div>
           {note && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-stone-600">{note}</p>}
           <SavedJobPrepSheetCard prepSheet={prepSheet} />
         </div>
@@ -246,6 +275,21 @@ function SavedJobRow({
         </div>
       </div>
     </Card>
+  );
+}
+
+function PreferenceReason({ reason }: { reason: ReturnType<typeof visiblePreferenceReasons>[number] }) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[reason.tone]}`}>
+      <p className="text-xs font-semibold">{reason.label}</p>
+      <p className="mt-1 text-xs leading-5 text-stone-600">{reason.detail}</p>
+    </div>
   );
 }
 

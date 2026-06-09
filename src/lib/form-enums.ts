@@ -5,6 +5,8 @@ import {
   JobPostStatus,
   ResumeDocumentType,
   UserRole,
+  WorkLocationMode,
+  WorkPreferenceStatus,
 } from "@prisma/client";
 
 type EnumObject<T extends string> = Record<string, T>;
@@ -41,6 +43,8 @@ export const jobPostStatusValues = enumValues(JobPostStatus);
 export const applicationStatusValues = enumValues(ApplicationStatus);
 export const jobApplicationStatusValues = enumValues(JobApplicationStatus);
 export const interviewMessageTypeValues = enumValues(InterviewMessageType);
+export const workPreferenceStatusValues = enumValues(WorkPreferenceStatus);
+export const workLocationModeValues = enumValues(WorkLocationMode);
 
 // Screening actions intentionally accept only terminal screening outcomes.
 export const screeningResultStatusValues = [
@@ -70,6 +74,14 @@ export function parseScreeningResultStatus(value: FormDataEntryValue | null) {
 
 export function parseInterviewMessageType(value: FormDataEntryValue | null) {
   return parseRequiredEnum(value, interviewMessageTypeValues, "メッセージ種別が不正です。");
+}
+
+export function parseWorkPreferenceStatus(value: FormDataEntryValue | null) {
+  return parseRequiredEnum(value, workPreferenceStatusValues, "仕事探しステータスを確認してください。");
+}
+
+export function parseWorkLocationMode(value: FormDataEntryValue | null) {
+  return parseRequiredEnum(value, workLocationModeValues, "希望する働き方を確認してください。");
 }
 
 export function parseJobApplicationStatusFilter(

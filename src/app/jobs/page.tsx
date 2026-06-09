@@ -1,11 +1,21 @@
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { removeSavedJob, saveJobForReview } from "@/lib/actions";
+import { removeSavedJob, saveCurrentJobSearch, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directContractChecklist, directMatchScore, formatOpenings, matchedSkills, parseSkills, skillMatchPercent, skillPreview } from "@/lib/utils";
+import {
+  directContractChecklist,
+  formatOpenings,
+  matchedSkills,
+  parseSkills,
+  preferenceAwareMatchScore,
+  skillMatchPercent,
+  skillPreview,
+  visiblePreferenceReasons,
+  workPreferenceCompleteness,
+} from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -118,14 +128,15 @@ export default async function JobsPage({
           () =>
             prisma.freelancerProfile.findUnique({
               where: { userId: session.user.id },
-              include: { documents: true, careerHistory: true },
+              include: { documents: true, careerHistory: true, workPreference: true, savedJobSearches: { orderBy: { createdAt: "desc" }, take: 4 } },
             }),
           null,
         )
       : null;
   const readiness = getFreelancerReadiness(freelancerProfile);
+  const preferenceCompleteness = workPreferenceCompleteness(freelancerProfile?.workPreference);
   const sort = filters.sort === "new" ? "new" : freelancerProfile ? "direct" : "new";
-  const fit = freelancerProfile && ["skill", "ready"].includes(filters.fit ?? "") ? filters.fit : "";
+  const fit = freelancerProfile && (filters.fit === "skill" || filters.fit === "ready") ? filters.fit : "";
   const activeFilterLabels = [
     ...activeSearchFilterLabels,
     fit === "skill" && "スキル一致あり",
@@ -184,13 +195,15 @@ export default async function JobsPage({
   const rankedJobs = jobs
     .map((job) => ({
       job,
-      directScore: directMatchScore({
+      directScore: preferenceAwareMatchScore({
         ...job,
         applicationStatus: job.applicationStatus,
         freelancerReadinessPercent: freelancerProfile ? readiness.percent : null,
         freelancerSkills: freelancerProfile?.skills,
+        workPreference: freelancerProfile?.workPreference,
       }),
       contractReadinessPercent: directContractChecklist(job).percent,
+      preferenceReasons: freelancerProfile ? visiblePreferenceReasons({ ...job, workPreference: freelancerProfile.workPreference }, 4) : [],
     }))
     .filter(({ job, contractReadinessPercent, directScore }) => {
       const matchesCandidate = candidate !== "fresh" || (!appliedJobIds.has(job.id) && !savedJobIds.has(job.id));
@@ -394,6 +407,19 @@ export default async function JobsPage({
           </Card>
         )}
         {showDiscoveryControls && freelancerProfile && jobs.length > 0 && (
+          <SavedSearchPanel
+            currentJobsPath={currentJobsPath}
+            filters={{ accepting, candidate, directReady, fit, keyword, rate, remote, sort: sort ?? "direct", workload }}
+            savedSearches={freelancerProfile.savedJobSearches}
+          />
+        )}
+        {showDiscoveryControls && freelancerProfile && (!preferenceCompleteness.usable || preferenceCompleteness.stale) && (
+          <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+            希望条件が{preferenceCompleteness.stale ? "古い、または未確認です" : "まだ少ない状態です"}。検索結果は表示しますが、単価・稼働量・働き方の一致理由は低信頼として扱います。
+            <Link className="ml-2 font-semibold text-amber-950 underline" href="/freelancer/preferences">希望条件を更新</Link>
+          </div>
+        )}
+        {showDiscoveryControls && freelancerProfile && jobs.length > 0 && (
           <ProfileDiscoveryShortcuts
             activeFit={fit}
             activeRate={rate}
@@ -421,7 +447,7 @@ export default async function JobsPage({
           />
         )}
         <div className="mt-6 grid gap-4">
-          {rankedJobs.map(({ job, directScore, contractReadinessPercent }) => (
+          {rankedJobs.map(({ job, directScore, contractReadinessPercent, preferenceReasons }) => (
             <JobCard
               applied={appliedJobIds.has(job.id)}
               contractReadinessPercent={contractReadinessPercent}
@@ -429,6 +455,7 @@ export default async function JobsPage({
               freelancerProfile={freelancerProfile}
               job={job}
               key={job.id}
+              preferenceReasons={preferenceReasons}
               readiness={readiness}
               saved={savedJobIds.has(job.id)}
               returnTo={currentJobsPath}
@@ -460,6 +487,7 @@ type RankedJob = {
   job: JobWithCompany;
   directScore: number;
   contractReadinessPercent: number;
+  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
 };
 
 type DiscoveryIntentCounts = {
@@ -507,6 +535,99 @@ function buildDiscoveryIntentCounts({
       return counts;
     },
     { readyToApply: 0, skillMatched: 0, conditionReady: 0, fresh: 0, preparation: 0 },
+  );
+}
+
+function SavedSearchPanel({
+  currentJobsPath,
+  filters,
+  savedSearches,
+}: {
+  currentJobsPath: string;
+  filters: {
+    accepting: boolean;
+    candidate: string;
+    directReady: boolean;
+    fit: string;
+    keyword: string;
+    rate: string;
+    remote: boolean;
+    sort: string;
+    workload: string;
+  };
+  savedSearches: Array<{
+    id: string;
+    name: string;
+    query?: string | null;
+    remote: boolean;
+    acceptingOnly: boolean;
+    directReadyOnly: boolean;
+    fit?: string | null;
+    workload?: string | null;
+    rate?: string | null;
+    sort: string;
+  }>;
+}) {
+  const defaultName =
+    filters.keyword ||
+    [
+      filters.remote && "リモート",
+      filters.accepting && "受付中",
+      filters.directReady && "条件確認済み",
+      filters.workload === "light" && "週2-3日",
+      filters.rate === "high" && "高単価",
+    ].filter(Boolean).join(" ") ||
+    "希望条件フィード";
+
+  return (
+    <section className="mt-5 rounded-md border border-stone-200 bg-white p-5">
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div>
+          <h2 className="font-semibold">この検索を仕事フィードに保存</h2>
+          <p className="mt-1 text-sm leading-6 text-stone-600">
+            キーワード、受付状況、リモート、条件確認などの検索条件を保存し、同じ条件で新しい候補を確認できます。
+          </p>
+          {savedSearches.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {savedSearches.map((search) => (
+                <Link className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-700 hover:border-emerald-300" href={savedSearchHref(search)} key={search.id}>
+                  {search.name}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+        <form action={saveCurrentJobSearch} className="grid gap-3">
+          <input type="hidden" name="returnTo" value={currentJobsPath} />
+          <input type="hidden" name="q" value={filters.keyword} />
+          <input type="hidden" name="remote" value={filters.remote ? "remote" : ""} />
+          <input type="hidden" name="accepting" value={filters.accepting ? "open" : ""} />
+          <input type="hidden" name="directReady" value={filters.directReady ? "ready" : ""} />
+          <input type="hidden" name="fit" value={filters.fit} />
+          <input type="hidden" name="workload" value={filters.workload} />
+          <input type="hidden" name="rate" value={filters.rate} />
+          <input type="hidden" name="sort" value={filters.sort} />
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            フィード名
+            <input
+              className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+              name="name"
+              defaultValue={defaultName}
+              maxLength={80}
+            />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+            今後の通知方針
+            <input
+              className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+              name="notificationCadence"
+              placeholder="例: 週1回、条件一致だけ、通知なし"
+            />
+          </label>
+          <button className="btn btn-primary" type="submit">仕事フィードに保存</button>
+        </form>
+      </div>
+    </section>
   );
 }
 
@@ -827,6 +948,7 @@ function JobCard({
   directScore,
   freelancerProfile,
   job,
+  preferenceReasons,
   readiness,
   returnTo,
   saved,
@@ -836,6 +958,7 @@ function JobCard({
   directScore: number;
   freelancerProfile: FreelancerForMatch | null;
   job: JobWithCompany;
+  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
   readiness: ReturnType<typeof getFreelancerReadiness>;
   returnTo: string;
   saved: boolean;
@@ -911,6 +1034,11 @@ function JobCard({
                 <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
                 <ScoreMeta label="応募準備" value={`${readiness.percent}%`} />
               </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {preferenceReasons.map((reason) => (
+                  <PreferenceReason reason={reason} key={`${job.id}-${reason.label}`} />
+                ))}
+              </div>
               <p className="mt-2 text-sm leading-6 text-stone-700">
                 {requiredSkillCount === 0
                   ? "必須スキル未設定のため、詳細画面で条件を確認して企業へ提案できます。"
@@ -947,6 +1075,21 @@ function JobCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+function PreferenceReason({ reason }: { reason: ReturnType<typeof visiblePreferenceReasons>[number] }) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-white/80 text-stone-700",
+    good: "border-emerald-200 bg-white/80 text-emerald-900",
+    warn: "border-amber-200 bg-white/80 text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[reason.tone]}`}>
+      <p className="text-xs font-semibold">{reason.label}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{reason.detail}</p>
+    </div>
   );
 }
 
@@ -1073,6 +1216,28 @@ function jobsHref({
       ...(rate ? { rate } : {}),
     },
   };
+}
+
+function savedSearchHref(search: {
+  query?: string | null;
+  remote: boolean;
+  acceptingOnly: boolean;
+  directReadyOnly: boolean;
+  fit?: string | null;
+  workload?: string | null;
+  rate?: string | null;
+  sort: string;
+}) {
+  return jobsHref({
+    q: search.query ?? "",
+    remote: search.remote,
+    accepting: search.acceptingOnly,
+    directReady: search.directReadyOnly,
+    fit: search.fit ?? "",
+    workload: search.workload ?? "",
+    rate: search.rate ?? "",
+    sort: search.sort,
+  });
 }
 
 function jobsPath(input: Parameters<typeof jobsHref>[0]) {

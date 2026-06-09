@@ -22,6 +22,8 @@ import {
   parseResumeDocumentType,
   parseScreeningResultStatus,
   parseUserRole,
+  parseWorkLocationMode,
+  parseWorkPreferenceStatus,
 } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
@@ -173,6 +175,84 @@ export async function saveFreelancerProfile(formData: FormData) {
 
   revalidatePath("/freelancer/profile");
   redirect("/freelancer");
+}
+
+export async function saveWorkPreference(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const excludedConditions = toOptionalText(formData.get("excludedConditions"));
+  const privateNotes = toOptionalText(formData.get("privateNotes"));
+  if ((excludedConditions?.length ?? 0) > 600 || (privateNotes?.length ?? 0) > 800) {
+    throw new Error("避けたい条件は600文字以内、非公開メモは800文字以内で入力してください。");
+  }
+
+  await prisma.workPreference.upsert({
+    where: { freelancerProfileId: profile.id },
+    create: {
+      freelancerProfileId: profile.id,
+      status: parseWorkPreferenceStatus(formData.get("status")),
+      targetRole: toOptionalText(formData.get("targetRole")),
+      preferredSkills: toOptionalText(formData.get("preferredSkills")),
+      targetRate: toOptionalText(formData.get("targetRate")),
+      workload: toOptionalText(formData.get("workload")),
+      locationMode: parseWorkLocationMode(formData.get("locationMode")),
+      preferredLocation: toOptionalText(formData.get("preferredLocation")),
+      availableFrom: toOptionalText(formData.get("availableFrom")),
+      excludedConditions,
+      notificationCadence: toOptionalText(formData.get("notificationCadence")),
+      privateNotes,
+      lastConfirmedAt: new Date(),
+    },
+    update: {
+      status: parseWorkPreferenceStatus(formData.get("status")),
+      targetRole: toOptionalText(formData.get("targetRole")),
+      preferredSkills: toOptionalText(formData.get("preferredSkills")),
+      targetRate: toOptionalText(formData.get("targetRate")),
+      workload: toOptionalText(formData.get("workload")),
+      locationMode: parseWorkLocationMode(formData.get("locationMode")),
+      preferredLocation: toOptionalText(formData.get("preferredLocation")),
+      availableFrom: toOptionalText(formData.get("availableFrom")),
+      excludedConditions,
+      notificationCadence: toOptionalText(formData.get("notificationCadence")),
+      privateNotes,
+      lastConfirmedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/freelancer/preferences");
+  revalidatePath("/freelancer");
+  revalidatePath("/jobs");
+  revalidatePath("/freelancer/saved-jobs");
+  redirect("/freelancer");
+}
+
+export async function saveCurrentJobSearch(formData: FormData) {
+  const { profile } = await currentFreelancer();
+  const name = toText(formData.get("name")) || "保存した仕事フィード";
+  const returnTo = safeReturnPath(toText(formData.get("returnTo")) || "/jobs");
+  if (name.length > 80) {
+    throw new Error("保存フィード名は80文字以内で入力してください。");
+  }
+
+  await prisma.savedJobSearch.create({
+    data: {
+      freelancerProfileId: profile.id,
+      name,
+      query: toOptionalText(formData.get("q")),
+      remote: formData.get("remote") === "remote",
+      acceptingOnly: formData.get("accepting") === "open",
+      directReadyOnly: formData.get("directReady") === "ready",
+      fit: toOptionalText(formData.get("fit")),
+      workload: toOptionalText(formData.get("workload")),
+      rate: toOptionalText(formData.get("rate")),
+      sort: toText(formData.get("sort")) === "new" ? "new" : "direct",
+      notificationCadence: toOptionalText(formData.get("notificationCadence")),
+    },
+  });
+
+  revalidatePath("/jobs");
+  revalidatePath("/freelancer");
+  revalidatePath("/freelancer/preferences");
+  redirect(returnTo);
 }
 
 export async function saveCareerHistory(formData: FormData) {

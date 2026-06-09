@@ -4,7 +4,17 @@ import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { getFreelancerReputationSummary } from "@/lib/reputation";
-import { applicationStatusLabel, buildScreeningPassedHandoffMessage, formatDateTime, matchedSkills, parseSkills, skillMatchPercent } from "@/lib/utils";
+import {
+  applicationStatusLabel,
+  buildScreeningPassedHandoffMessage,
+  formatDateTime,
+  locationModeLabel,
+  matchedSkills,
+  parseSkills,
+  skillMatchPercent,
+  visiblePreferenceReasons,
+  workPreferenceCompleteness,
+} from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
 
@@ -17,7 +27,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     where: { id, jobPost: { companyProfileId: companyUser.companyProfileId } },
     include: {
       jobPost: true,
-      freelancerProfile: { include: { careerHistory: true, documents: true } },
+      freelancerProfile: { include: { careerHistory: true, documents: true, workPreference: true } },
       notes: { orderBy: { createdAt: "desc" }, include: { companyUser: { include: { user: true } } } },
       interviewThread: true,
     },
@@ -26,6 +36,11 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     return <Shell><TopNav sessionRole={user.role} /><div className="mx-auto max-w-4xl px-5 py-8"><Card>応募情報が見つかりません。</Card></div></Shell>;
   }
   const readiness = getFreelancerReadiness(application.freelancerProfile);
+  const preferenceCompleteness = workPreferenceCompleteness(application.freelancerProfile.workPreference);
+  const preferenceReasons = visiblePreferenceReasons({
+    ...application.jobPost,
+    workPreference: application.freelancerProfile.workPreference,
+  }, 6);
   const requiredSkills = parseSkills(application.jobPost.requiredSkills);
   const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
@@ -275,6 +290,31 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   <FitSignal done={item.done} key={item.label} label={item.label} value={item.value} />
                 ))}
               </div>
+              <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">希望条件との適合</p>
+                    <p className="mt-1 text-sm leading-6 text-stone-600">
+                      応募者が共有可能な仕事探し条件だけを表示します。非公開メモは企業には表示されません。
+                    </p>
+                  </div>
+                  <StatusBadge tone={preferenceCompleteness.usable ? "good" : preferenceCompleteness.stale ? "warn" : "neutral"}>
+                    {preferenceCompleteness.stale ? "更新推奨" : `${preferenceCompleteness.percent}%`}
+                  </StatusBadge>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  <FitSignal done={application.freelancerProfile.workPreference?.status !== "inactive"} label="募集状況" value={workPreferenceStatusLabel(application.freelancerProfile.workPreference?.status)} />
+                  <FitSignal done={Boolean(application.freelancerProfile.workPreference?.availableFrom || application.freelancerProfile.availableFrom)} label="開始可能時期" value={application.freelancerProfile.workPreference?.availableFrom || application.freelancerProfile.availableFrom || "未設定"} />
+                  <FitSignal done={Boolean(application.freelancerProfile.workPreference?.workload || application.freelancerProfile.availability)} label="希望稼働量" value={application.freelancerProfile.workPreference?.workload || application.freelancerProfile.availability || "未設定"} />
+                  <FitSignal done={Boolean(application.freelancerProfile.workPreference?.targetRate || application.freelancerProfile.desiredRate)} label="希望単価" value={application.freelancerProfile.workPreference?.targetRate || application.freelancerProfile.desiredRate || "未設定"} />
+                  <FitSignal done={Boolean(application.freelancerProfile.workPreference?.locationMode || application.freelancerProfile.remotePreference)} label="働き方" value={application.freelancerProfile.workPreference ? locationModeLabel(application.freelancerProfile.workPreference.locationMode) : application.freelancerProfile.remotePreference || "未設定"} />
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {preferenceReasons.map((reason) => (
+                    <PreferenceReason reason={reason} key={reason.label} />
+                  ))}
+                </div>
+              </div>
               <div className="mt-4 grid gap-3">
                 <SkillReview
                   empty="必須スキルが未設定です。職務経歴と応募提案から判断してください。"
@@ -414,6 +454,33 @@ function FitSignal({ label, value, done }: { label: string; value: string; done:
       <span className="text-right text-xs font-semibold">{value}</span>
     </div>
   );
+}
+
+function PreferenceReason({ reason }: { reason: ReturnType<typeof visiblePreferenceReasons>[number] }) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-white text-stone-700",
+    good: "border-emerald-200 bg-white text-emerald-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 text-sm ${toneClasses[reason.tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{reason.label}</span>
+        <span className="text-xs font-semibold">{reason.tone === "good" ? "一致" : reason.tone === "warn" ? "要確認" : "参考"}</span>
+      </div>
+      <p className="mt-1 leading-6 text-stone-600">{reason.detail}</p>
+    </div>
+  );
+}
+
+function workPreferenceStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    active: "積極的に探している",
+    passive: "よい案件だけ連絡可",
+    inactive: "今は探していない",
+  };
+  return status ? labels[status] ?? status : "未設定";
 }
 
 function ApplicantTrustItem({ label, detail, done }: { label: string; detail: string; done: boolean }) {

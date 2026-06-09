@@ -4,7 +4,15 @@ import { logoutUser } from "@/lib/actions";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { directContractChecklist, directMatchScore, formatDateTime, matchedSkills, skillMatchPercent } from "@/lib/utils";
+import {
+  directContractChecklist,
+  formatDateTime,
+  matchedSkills,
+  preferenceAwareMatchScore,
+  skillMatchPercent,
+  visiblePreferenceReasons,
+  workPreferenceCompleteness,
+} from "@/lib/utils";
 import { Shell, TopNav, PageHeader, StatCard, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +27,9 @@ export default async function FreelancerDashboard() {
       savedJobs: {
         include: { jobPost: { include: { companyProfile: true } } },
         orderBy: { createdAt: "desc" },
-        take: 3,
       },
+      savedJobSearches: { orderBy: { createdAt: "desc" }, take: 3 },
+      workPreference: true,
       _count: { select: { savedJobs: true } },
     },
   });
@@ -51,6 +60,7 @@ export default async function FreelancerDashboard() {
     take: 5,
   });
   const readiness = getFreelancerReadiness(profile);
+  const preferenceCompleteness = workPreferenceCompleteness(profile.workPreference);
   const appliedJobIds = new Set(profile.applications.map((application) => application.jobPostId));
   const recommendationCandidates = await prisma.jobPost.findMany({
     where: {
@@ -67,13 +77,15 @@ export default async function FreelancerDashboard() {
       const contractReadiness = directContractChecklist(job);
       const matchPercent = skillMatchPercent(job.requiredSkills, profile.skills);
       const matched = matchedSkills(job.requiredSkills, profile.skills);
-      const score = directMatchScore({
+      const preferenceReasons = visiblePreferenceReasons({ ...job, workPreference: profile.workPreference }, 4);
+      const score = preferenceAwareMatchScore({
         ...job,
         freelancerReadinessPercent: readiness.percent,
         freelancerSkills: profile.skills,
+        workPreference: profile.workPreference,
       });
 
-      return { job, contractReadiness, matchPercent, matched, score };
+      return { job, contractReadiness, matchPercent, matched, preferenceReasons, score };
     })
     .sort((a, b) => b.score - a.score || b.contractReadiness.percent - a.contractReadiness.percent || b.job.createdAt.getTime() - a.job.createdAt.getTime())
     .slice(0, 3);
@@ -152,20 +164,29 @@ export default async function FreelancerDashboard() {
             <div>
               <h2 className="text-lg font-semibold">登録内容に近い受付中案件</h2>
               <p className="mt-1 text-sm leading-6 text-stone-600">
-                スキル、応募準備、案件側の条件公開を合わせて、次に確認しやすい案件を表示します。
+                仕事探しの希望条件、スキル、応募準備、案件側の条件公開を合わせて、次に確認しやすい案件を表示します。
               </p>
             </div>
-            <Link className="btn btn-secondary" href="/jobs?accepting=open&sort=direct">案件をもっと見る</Link>
+            <div className="flex flex-wrap gap-2">
+              <Link className="btn btn-secondary" href="/freelancer/preferences">希望条件を更新</Link>
+              <Link className="btn btn-secondary" href="/jobs?accepting=open&sort=direct">案件をもっと見る</Link>
+            </div>
           </div>
+          {(!preferenceCompleteness.usable || preferenceCompleteness.stale) && (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              希望条件が{preferenceCompleteness.stale ? "古い、または未確認です" : "まだ少ない状態です"}。候補がないとは判断せず、希望条件を更新すると単価・稼働量・働き方の理由を含めて並び替えます。
+            </div>
+          )}
           {recommendedJobs.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-3">
-              {recommendedJobs.map(({ job, contractReadiness, matchPercent, matched, score }) => (
+              {recommendedJobs.map(({ job, contractReadiness, matchPercent, matched, preferenceReasons, score }) => (
                 <RecommendedJobCard
                   contractPercent={contractReadiness.percent}
                   job={job}
                   key={job.id}
                   matched={matched}
                   matchPercent={matchPercent}
+                  preferenceReasons={preferenceReasons}
                   readinessComplete={readiness.isReady}
                   score={score}
                 />
@@ -174,8 +195,8 @@ export default async function FreelancerDashboard() {
           ) : (
             <EmptyState
               title="表示できる受付中案件はありません。"
-              description="新しい案件が公開されたら、プロフィールのスキルや希望条件に近いものをここに表示します。"
-              action={<Link className="btn btn-primary" href="/jobs">公開案件を見る</Link>}
+              description="希望条件が未設定または古い場合は、候補なしではなく低信頼の状態として扱います。希望条件を更新してから公開案件を確認してください。"
+              action={<Link className="btn btn-primary" href="/freelancer/preferences">希望条件を更新</Link>}
             />
           )}
         </section>
@@ -191,12 +212,27 @@ export default async function FreelancerDashboard() {
           </div>
           {profile.savedJobs.length > 0 ? (
             <div className="grid gap-4 lg:grid-cols-3">
-              {profile.savedJobs.map((savedJob) => (
+              {profile.savedJobs
+                .map((savedJob) => ({
+                  savedJob,
+                  score: preferenceAwareMatchScore({
+                    ...savedJob.jobPost,
+                    freelancerReadinessPercent: readiness.percent,
+                    freelancerSkills: profile.skills,
+                    workPreference: profile.workPreference,
+                  }),
+                  preferenceReasons: visiblePreferenceReasons({ ...savedJob.jobPost, workPreference: profile.workPreference }, 3),
+                }))
+                .sort((a, b) => b.score - a.score || b.savedJob.createdAt.getTime() - a.savedJob.createdAt.getTime())
+                .slice(0, 3)
+                .map(({ savedJob, preferenceReasons, score }) => (
                 <SavedJobCard
                   job={savedJob.jobPost}
                   key={savedJob.id}
+                  preferenceReasons={preferenceReasons}
                   savedAt={savedJob.createdAt}
                   savedNote={savedJob.note}
+                  score={score}
                 />
               ))}
             </div>
@@ -210,6 +246,7 @@ export default async function FreelancerDashboard() {
         </section>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <ActionCard href="/freelancer/profile" title="プロフィール編集" body="希望職種、スキル、稼働条件を更新します。" />
+          <ActionCard href="/freelancer/preferences" title="仕事探しの希望条件" body="単価、稼働量、働き方、保存フィードを管理します。" />
           <ActionCard href="/freelancer/career" title="職務経歴フォーム" body="検索や選考時に確認される職務経歴を整えます。" />
           <ActionCard href="/freelancer/documents" title="PDF書類" body="履歴書PDFと職務経歴書PDFをアップロードします。" />
           <ActionCard href="/freelancer/applications" title="応募済み案件" body="応募履歴と選考状況を確認します。" />
@@ -320,12 +357,16 @@ function QueueSignal({
 
 function SavedJobCard({
   job,
+  preferenceReasons,
   savedAt,
   savedNote,
+  score,
 }: {
   job: SavedDashboardJob;
+  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
   savedAt: Date;
   savedNote?: string | null;
+  score: number;
 }) {
   const contractReadiness = directContractChecklist(job);
 
@@ -338,10 +379,16 @@ function SavedJobCard({
         <StatusBadge tone={contractReadiness.isReady ? "good" : contractReadiness.percent >= 60 ? "neutral" : "warn"}>
           条件確認 {contractReadiness.percent}%
         </StatusBadge>
+        <StatusBadge tone={score >= 70 ? "good" : score >= 45 ? "neutral" : "warn"}>希望条件 {score}%</StatusBadge>
       </div>
       <h3 className="mt-3 line-clamp-2 font-semibold">{job.title}</h3>
       <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
       <p className="mt-3 text-xs text-stone-500">保存 {formatDateTime(savedAt)}</p>
+      <div className="mt-3 grid gap-2">
+        {preferenceReasons.slice(0, 2).map((reason) => (
+          <RecommendationReason reason={reason} key={`${job.id}-${reason.label}`} />
+        ))}
+      </div>
       {savedNote && <p className="mt-3 line-clamp-2 text-sm leading-6 text-stone-600">{savedNote}</p>}
       <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>条件確認・応募準備</Link>
     </Card>
@@ -355,6 +402,7 @@ function RecommendedJobCard({
   job,
   matched,
   matchPercent,
+  preferenceReasons,
   readinessComplete,
   score,
 }: {
@@ -362,6 +410,7 @@ function RecommendedJobCard({
   job: RecommendedJob;
   matched: string[];
   matchPercent: number | null;
+  preferenceReasons: ReturnType<typeof visiblePreferenceReasons>;
   readinessComplete: boolean;
   score: number;
 }) {
@@ -395,9 +444,29 @@ function RecommendedJobCard({
           ))}
         </div>
       )}
+      <div className="mt-3 grid gap-2">
+        {preferenceReasons.map((reason) => (
+          <RecommendationReason reason={reason} key={`${job.id}-${reason.label}`} />
+        ))}
+      </div>
       <p className="mt-3 text-sm leading-6 text-stone-600">{nextAction}</p>
       <Link className="btn btn-primary mt-4 w-full" href={`/jobs/${job.id}`}>案件条件を見る</Link>
     </Card>
+  );
+}
+
+function RecommendationReason({ reason }: { reason: ReturnType<typeof visiblePreferenceReasons>[number] }) {
+  const toneClasses = {
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    good: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    warn: "border-amber-200 bg-amber-50 text-amber-900",
+  };
+
+  return (
+    <div className={`rounded border px-3 py-2 ${toneClasses[reason.tone]}`}>
+      <p className="text-xs font-semibold">{reason.label}</p>
+      <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{reason.detail}</p>
+    </div>
   );
 }
 
