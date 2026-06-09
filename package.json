@@ -5,13 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "NODE_ENV=production next build",
+    "db:migration-status": "prisma migrate status --schema=prisma/schema.prisma",
     "vercel-build": "prisma migrate deploy && next build",
-    "test": "node --test --experimental-strip-types tests/page-guard-core.test.mjs",
+    "test": "node --test --experimental-strip-types tests/*.test.mjs",
     "typecheck": "NODE_ENV=production next typegen && rm -rf .next/dev/types && tsc --noEmit",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "start": "next start",
+    "start": "npm run db:migration-status && next start",
     "lint": "eslint"
   },
   "engines": {

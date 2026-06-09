@@ -37,6 +37,7 @@ npm run dev
 npm run typecheck
 npm run lint
 npm run build
+npm run db:migration-status
 npm run prisma:generate
 npm run prisma:migrate
 ```
@@ -57,4 +58,6 @@ npm run prisma:migrate
 
 - Prisma 7 は Node.js 20.19+ が必要なため、この環境では Prisma 6.19 に固定しています。
 - 初期 migration SQL は `prisma/migrations/20260606000000_init/migration.sql` にあります。
+- 本番起動前に `npm run db:migration-status` で pending migration がないことを確認してください。`npm start` は同じ確認を実行してから `next start` を起動します。企業プロフィール画面は `20260609000000_add_company_trust_fields`（`contact_team`, `operating_area`, `payment_policy`）が適用済みであることを前提にしています。
+- Vercel のビルドでは `vercel-build` が `prisma migrate deploy` を実行してから `next build` します。
 - PDFは Vercel Blob private に保存し、アプリ内の権限チェック済みAPI経由で表示します。
