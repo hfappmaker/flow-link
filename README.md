@@ -26,6 +26,7 @@ npm run dev
 
 ```bash
 DATABASE_URL="postgresql://flowlink:flowlink@db:5432/flow_link?schema=public"
+PRISMA_RUNTIME_DATABASE_URL="" # optional pooled app-runtime URL for serverless reads
 AUTH_SECRET="replace-with-a-long-random-secret"
 AUTH_TRUST_HOST="true"
 BLOB_READ_WRITE_TOKEN="vercel-blob-token"
@@ -61,4 +62,6 @@ npm run prisma:migrate
 - 初期 migration SQL は `prisma/migrations/20260606000000_init/migration.sql` にあります。
 - ローカル起動前に `npm run db:migration-status` で pending migration がないことを確認してください。`npm run dev` と `npm start` は同じ確認を実行してから Next.js を起動します。フリーランスのダッシュボード、希望条件、案件一覧は `work_preferences`、`saved_job_searches`、`recommendation_feedback` などの新しいテーブルが適用済みであることを前提にしています。
 - Vercel のビルドでは `vercel-build` が `prisma migrate deploy` を実行してから `next build` します。
+- Vercel などの serverless runtime では、`PRISMA_RUNTIME_DATABASE_URL` に pooled app-runtime 用の Postgres URL を設定してください。`DATABASE_URL` は migration/direct-role 用に残せます。`POSTGRES_PRISMA_URL` または `POSTGRES_URL` がある場合も runtime datasource として使われます。
+- Preview smoke check after deployment: read-only browser or HTTP sweeps should repeatedly request `/` and `/jobs` across desktop and mobile user agents and confirm 200 responses. Then verify runtime logs do not contain `P2037`, `PrismaClientInitializationError`, or `too many connections` for those public reads.
 - PDFは Vercel Blob private に保存し、アプリ内の権限チェック済みAPI経由で表示します。
