@@ -14,7 +14,7 @@ import {
   parseSkills,
   skillMatchPercent,
 } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton } from "@/components/ui";
 import { SafetyReportPanel } from "@/components/safety-reporting";
 
 export const dynamic = "force-dynamic";
@@ -202,7 +202,7 @@ export default async function FreelancerApplicationsPage({
                     <option value="new">新着順</option>
                   </select>
                 </label>
-                <button className="btn btn-primary self-end" type="submit">絞り込み</button>
+                <SubmitButton className="btn btn-primary self-end" pendingLabel="絞り込み中">絞り込み</SubmitButton>
                 <Link className="btn btn-secondary self-end" href="/freelancer/applications">クリア</Link>
               </form>
               <div className="flex items-end text-sm text-stone-600">

@@ -6,7 +6,7 @@ import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
 import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -151,7 +151,7 @@ export default async function JobApplicationsPage({
                     <option value="new">新着順</option>
                   </select>
                 </label>
-                <button className="btn btn-primary self-end" type="submit">検索</button>
+                <SubmitButton className="btn btn-primary self-end" pendingLabel="検索中">検索</SubmitButton>
                 <Link className="btn btn-secondary self-end" href={`/company/jobs/${job.id}/applications`}>クリア</Link>
               </form>
               <div className="flex items-end text-sm text-stone-600">表示 {reviewedApplications.length} / 全応募 {total} 件</div>

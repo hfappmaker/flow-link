@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, Briefcase, CheckCircle2, FileText, MessageSquare, Users } from "lucide-react";
+import { PendingLinkHint, SubmitButton } from "@/components/pending-feedback";
 import { cn } from "@/lib/utils";
 import { loginHref } from "@/lib/registration-intent";
 
@@ -33,7 +34,8 @@ export function TopNav({
       <div className="top-nav-inner mx-auto flex max-w-7xl items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
         <Link href="/" className="top-nav-brand flex items-center gap-2 text-lg font-semibold">
           <span className="grid size-8 place-items-center rounded bg-emerald-700 text-sm text-white">FL</span>
-          Flow Link
+          <span>Flow Link</span>
+          <PendingLinkHint />
         </Link>
         <nav className="top-nav-menu flex items-center gap-2 text-sm">
           <NavLink href="/jobs" active={currentSection === "jobs"}>
@@ -61,6 +63,7 @@ export function TopNav({
               href={registerHref}
             >
               登録
+              <PendingLinkHint />
             </Link>
           )}
         </nav>
@@ -73,6 +76,7 @@ function NavLink({ active, children, href }: { active?: boolean; children: React
   return (
     <Link aria-current={active ? "page" : undefined} className={cn("nav-link", active && "nav-link-active")} href={href}>
       {children}
+      <PendingLinkHint />
     </Link>
   );
 }
@@ -244,3 +248,5 @@ export const icons = {
   chat: <MessageSquare size={18} />,
   arrow: <ArrowRight size={16} />,
 };
+
+export { SubmitButton };
