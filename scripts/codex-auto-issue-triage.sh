@@ -262,6 +262,17 @@ Hard rules:
 - Create or update at most one GitHub issue in this run.
 - If no worthwhile issue exists, create no issue and explain why.
 
+Log review policy:
+- Before creating an issue, inspect recent automation logs that may explain whether this has already been found, blocked, fixed, or skipped:
+  - .codex-automation/issue-triage-logs/
+  - .codex-automation/issue-worker-logs/
+- Search recent logs for related route names, user actions, error messages, fingerprints, issue numbers, PR numbers, and mode labels.
+- If a similar issue was blocked, update that issue or create a follow-up only when the blocker is resolved, the failure is different, or new evidence changes the decision.
+- If a similar issue was already fixed or merged, verify that the current behavior still fails before creating a new issue.
+- For bug issues, inspect Vercel, local server, Playwright console, browser network, Prisma, Blob, and Auth logs when available. Describe the user-visible failure, not only raw stack traces.
+- For UX and visual-design issues verified with Playwright, include relevant browser console/network observations or explicitly state that none were observed.
+- Mention the relevant logs inspected in the issue Evidence or Environment section.
+
 Dirty working tree policy:
 - This triage run may execute when the local working tree has uncommitted changes.
 - If the working tree is dirty, treat local code and browser observations as provisional.
