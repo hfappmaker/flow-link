@@ -35,8 +35,9 @@ import { prisma } from "@/lib/prisma";
 import {
   recommendationFeedbackSentiment,
 } from "@/lib/recommendation-feedback";
+import { getApplicationReadiness, getJobPublishingReadiness, shouldHoldJobAsDraftForPublishing } from "@/lib/readiness";
 import { loginErrorUrl } from "@/lib/registration-intent";
-import { directContractChecklist, toOptionalText, toText } from "@/lib/utils";
+import { toOptionalText, toText } from "@/lib/utils";
 import {
   applyToJobWorkflow,
   createCompanySafetyReportWorkflow,
@@ -432,8 +433,8 @@ export async function saveJobPost(formData: FormData) {
   if (!data.title || !data.description) {
     throw new Error("タイトルと業務内容を入力してください。");
   }
-  const publishReadiness = directContractChecklist(data);
-  const heldAsDraft = requestedStatus === "published" && !publishReadiness.isReady;
+  const publishReadiness = getJobPublishingReadiness(data, companyUser.companyProfile);
+  const heldAsDraft = shouldHoldJobAsDraftForPublishing(requestedStatus, publishReadiness);
   if (heldAsDraft) {
     data.status = JobPostStatus.draft;
     data.applicationStatus = ApplicationStatus.paused;
@@ -502,6 +503,18 @@ export async function applyToJob(formData: FormData) {
   }
   if ((proposedStart?.length ?? 0) > 120 || (contactPreference?.length ?? 0) > 120) {
     throw new Error("稼働開始目安と連絡希望は120文字以内で入力してください。");
+  }
+  const profileForReadiness = await prisma.freelancerProfile.findUnique({
+    where: { id: profile.id },
+    include: { documents: true, careerHistory: true, workPreference: true },
+  });
+  const applicationReadiness = getApplicationReadiness(profileForReadiness, {
+    proposalMessage,
+    proposedStart,
+    contactPreference,
+  });
+  if (!applicationReadiness.isReady) {
+    throw new Error(`応募前に${applicationReadiness.missingRequired.map((item) => item.label).join("、")}を登録してください。`);
   }
   await applyToJobWorkflow(prisma, {
     freelancerProfileId: profile.id,

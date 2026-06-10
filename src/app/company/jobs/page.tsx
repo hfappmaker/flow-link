@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireCompanyUser } from "@/lib/page-guards";
 import { prisma } from "@/lib/prisma";
-import { buildApplicationResponseState, directContractChecklist, jobStatusLabel } from "@/lib/utils";
+import { getJobPublishingReadiness } from "@/lib/readiness";
+import { buildApplicationResponseState, jobStatusLabel } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function CompanyJobsPage({
   const selectedStatus = ["published", "draft", "private", "closed"].includes(filters.status ?? "") ? filters.status! : "";
   const selectedAction = ["pending", "overdue", "conditions", "paused", "interviews"].includes(filters.action ?? "") ? filters.action! : "";
   const selectedSort = filters.sort === "new" || filters.sort === "conditions" ? filters.sort : "attention";
-  const { user, companyUser } = await requireCompanyUser();
+  const { user, companyUser } = await requireCompanyUser({ include: { companyProfile: true } });
   const jobs = await prisma.jobPost.findMany({
     where: {
       companyProfileId: companyUser.companyProfileId,
@@ -29,7 +30,7 @@ export default async function CompanyJobsPage({
       const pendingApplications = job.applications.filter((application) => application.status === "applied");
       const passedApplications = job.applications.filter((application) => application.status === "screening_passed").length;
       const responseDueCount = pendingApplications.filter((application) => buildApplicationResponseState(application).priorityBoost >= 15).length;
-      const conditionReadiness = directContractChecklist(job);
+      const conditionReadiness = getJobPublishingReadiness(job, companyUser.companyProfile);
       const missingConditionLabels = conditionReadiness.items.filter((item) => !item.done).map((item) => item.label);
       const attentionScore =
         responseDueCount * 30 +
@@ -65,7 +66,7 @@ export default async function CompanyJobsPage({
     });
   const jobStats = jobs.reduce(
     (stats, job) => {
-      const conditionReadiness = directContractChecklist(job);
+      const conditionReadiness = getJobPublishingReadiness(job, companyUser.companyProfile);
       const pendingApplications = job.applications.filter((application) => application.status === "applied");
       const responseDueCount = pendingApplications.filter((application) => buildApplicationResponseState(application).priorityBoost >= 15).length;
       stats.pending += pendingApplications.length;

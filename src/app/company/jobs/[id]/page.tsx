@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EditJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { user, companyUser } = await requireCompanyUser();
+  const { user, companyUser } = await requireCompanyUser({ include: { companyProfile: true } });
   const job = await prisma.jobPost.findFirst({ where: { id, companyProfileId: companyUser.companyProfileId } });
   const feedback = job
     ? await prisma.recommendationFeedback.findMany({
@@ -28,7 +28,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       <div className="mx-auto max-w-5xl px-5 py-8">
         <PageHeader title="案件編集" />
         {job && <CompanyFeedbackInsights insights={insights} totalCount={feedback.length} />}
-        <Card className="mt-6">{job ? <JobPostForm action={saveJobPost} job={job} /> : "案件が見つかりません。"}</Card>
+        <Card className="mt-6">{job ? <JobPostForm action={saveJobPost} company={companyUser.companyProfile} job={job} /> : "案件が見つかりません。"}</Card>
       </div>
     </Shell>
   );

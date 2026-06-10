@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import type { JobPost } from "@prisma/client";
-import { directContractChecklist } from "@/lib/utils";
+import { getJobPublishingReadiness } from "@/lib/readiness";
 
-export function JobPostForm({ action, job }: { action: (formData: FormData) => void | Promise<void>; job?: JobPost }) {
+export function JobPostForm({
+  action,
+  company,
+  job,
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  company: { name: string | null };
+  job?: JobPost;
+}) {
   const [formValues, setFormValues] = useState({
     title: job?.title ?? "",
     description: job?.description ?? "",
@@ -21,7 +29,7 @@ export function JobPostForm({ action, job }: { action: (formData: FormData) => v
     status: job?.status ?? "draft",
     applicationStatus: job?.applicationStatus ?? "open",
   });
-  const contractReadiness = directContractChecklist(formValues);
+  const contractReadiness = getJobPublishingReadiness(formValues, company);
   const missingItems = contractReadiness.items.filter((item) => !item.done);
   const isPublishingIncomplete = formValues.status === "published" && missingItems.length > 0;
   const nextGuide = buildConditionGuide(formValues).find((guide) => !guide.done);
