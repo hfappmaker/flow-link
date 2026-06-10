@@ -981,7 +981,7 @@ function JobCard({
         contractReadinessPercent,
         jobId: job.id,
         matchPercent,
-        missingReadinessItem: readiness.items.find((item) => !item.done),
+        missingReadinessItem: readiness.items.find(hasMissingReadinessHref),
         requiredSkillGaps,
         trustStatus: trustConfidence.paymentStatus === "confirmed" ? trustConfidence.companyStatus : trustConfidence.paymentStatus,
       })
@@ -1142,6 +1142,12 @@ function TrustReason({ status, title }: { status: TrustConfidenceStatus; title: 
       <p className="mt-1 line-clamp-2 text-xs leading-5 text-stone-600">{detail[status]}</p>
     </div>
   );
+}
+
+function hasMissingReadinessHref(
+  item: ReturnType<typeof getFreelancerReadiness>["items"][number],
+): item is ReturnType<typeof getFreelancerReadiness>["items"][number] & { href: string } {
+  return !item.done && Boolean(item.href);
 }
 
 function buildJobCardNextStep({

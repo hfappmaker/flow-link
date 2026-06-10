@@ -4,13 +4,12 @@ import { auth } from "@/lib/auth";
 import { applyToJob, removeSavedJob, saveJobForReview } from "@/lib/actions";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead } from "@/lib/public-db";
-import { getFreelancerReadiness } from "@/lib/readiness";
+import { getFreelancerReadiness, getJobPublishingReadiness } from "@/lib/readiness";
 import { getCompanyReputationSummary } from "@/lib/reputation";
 import { activeSafetyReviewSummary } from "@/lib/safety-reports";
 import {
   applicationStatusLabel,
   buildTrustConfidence,
-  directContractChecklist,
   formatDateTime,
   formatOpenings,
   matchedSkills,
@@ -136,7 +135,7 @@ export default async function JobDetailPage({
   const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
   const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
-  const contractReadiness = directContractChecklist(job);
+  const contractReadiness = getJobPublishingReadiness(job, job.companyProfile);
   const companyConfidence = buildTrustConfidence({ company: job.companyProfile, job });
   const activeSafetyReview = activeSafetyReviewSummary(job.companyProfile.safetyReports);
   const preferenceReasons = freelancerProfile
@@ -243,7 +242,7 @@ export default async function JobDetailPage({
               </div>
               <div className="mt-4 grid gap-2">
                 {contractReadiness.items.map((item) => (
-                  <ContractReadinessItem detail={item.detail} done={item.done} key={item.key} label={item.label} />
+                  <ContractReadinessItem detail={item.detail ?? ""} done={item.done} key={item.key} label={item.label} />
                 ))}
               </div>
             </Card>
@@ -404,12 +403,14 @@ export default async function JobDetailPage({
                   <TextField
                     name="proposedStart"
                     label="稼働開始目安"
+                    required
                     maxLength={120}
                     placeholder="例: 7月第1週から / 契約後2週間で開始可"
                   />
                   <TextField
                     name="contactPreference"
                     label="連絡希望"
+                    required
                     maxLength={120}
                     placeholder="例: 平日18時以降のオンライン面談を希望"
                   />
@@ -423,9 +424,9 @@ export default async function JobDetailPage({
                   </p>
                   <div className="mt-4 grid gap-2">
                     {readiness.items
-                      .filter((item) => !item.done)
+                      .filter((item) => !item.done && item.href)
                       .map((item) => (
-                        <Link className="btn btn-secondary justify-start" href={item.href} key={item.key}>
+                        <Link className="btn btn-secondary justify-start" href={item.href!} key={item.key}>
                           {item.label}を登録
                         </Link>
                       ))}

@@ -12,7 +12,7 @@ import {
   type JobApplicationStatus,
   type PrismaClient,
 } from "@prisma/client";
-import { getFreelancerReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
+import { getApplicationReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
 import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
 type WorkflowDb = Pick<
@@ -38,11 +38,11 @@ type ApplyToJobInput = {
 export async function applyToJobWorkflow(db: WorkflowDb, input: ApplyToJobInput) {
   const readinessProfile = await db.freelancerProfile.findUnique({
     where: { id: input.freelancerProfileId },
-    include: { documents: true, careerHistory: true },
+    include: { documents: true, careerHistory: true, workPreference: true },
   });
-  const readiness = getFreelancerReadiness(readinessProfile as FreelancerReadinessProfile | null);
+  const readiness = getApplicationReadiness(readinessProfile as FreelancerReadinessProfile | null, input);
   if (!readiness.isReady) {
-    throw new Error("応募前にプロフィール、職務経歴フォーム、履歴書PDF、職務経歴書PDFを登録してください。");
+    throw new Error(`応募前に${readiness.missingRequired.map((item) => item.label).join("、")}を登録してください。`);
   }
 
   const job = await db.jobPost.findUnique({ where: { id: input.jobPostId } });

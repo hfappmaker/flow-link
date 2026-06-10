@@ -30,6 +30,8 @@ function readyProfile() {
     fullName: "山田 太郎",
     desiredOccupation: "PM",
     skills: "Next.js, Prisma",
+    availability: "週4日",
+    availableFrom: "来月",
     careerHistory: { summary: "SaaS projects" },
     documents: [{ documentType: "resume" }, { documentType: "career_history" }],
   };
@@ -143,7 +145,17 @@ test("unready freelancer cannot apply", async () => {
 
   await assert.rejects(
     () => applyToJobWorkflow(db, applicationInput),
-    /応募前にプロフィール、職務経歴フォーム、履歴書PDF、職務経歴書PDFを登録してください。/,
+    /応募前に職務経歴書PDFを登録してください。/,
+  );
+  assert.equal(db.calls.length, 0);
+});
+
+test("application gate requires proposal start and contact before creating an application", async () => {
+  const db = workflowDb();
+
+  await assert.rejects(
+    () => applyToJobWorkflow(db, { ...applicationInput, proposedStart: null, contactPreference: null }),
+    /応募前に稼働開始目安、連絡希望を登録してください。/,
   );
   assert.equal(db.calls.length, 0);
 });

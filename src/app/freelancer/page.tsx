@@ -151,12 +151,12 @@ export default async function FreelancerDashboard() {
             </div>
           </div>
           <div className="mt-5 grid gap-2 md:grid-cols-3">
-            {readiness.items.map((item) => (
+            {readiness.items.filter((item) => item.href).map((item) => (
               <Link
                 className={`rounded border px-3 py-2 text-sm font-semibold ${
                   item.done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
                 }`}
-                href={item.href}
+                href={item.href!}
                 key={item.key}
               >
                 {item.done ? "完了" : "未完了"}: {item.label}
