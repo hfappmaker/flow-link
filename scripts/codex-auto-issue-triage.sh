@@ -68,8 +68,8 @@ case "$MODE" in
     AREA_LABEL="area:ux"
     MODE_TITLE="UX triage"
     LOCAL_APP_PORT="3013"
-    MODE_FOCUS="Find issues in navigation, screen transitions, user flow, confusing copy, input burden, empty/loading/error states, and developer-facing terms that freelancers or companies should not need to understand."
-    BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
+    MODE_FOCUS="Find issues in navigation, screen transitions, user flow, missing pending/loading feedback, confusing copy, input burden, empty/loading/error states, and developer-facing terms that freelancers or companies should not need to understand."
+    BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, missing route-transition or form-submit pending feedback, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
     ;;
   visual-design)
     AREA_LABEL="area:visual-design"
@@ -292,6 +292,7 @@ Labels:
 
 Classification:
 - Screen transitions and user flow problems usually belong to area:ux.
+- Missing feedback after clicking links, submitting forms, switching filters, or starting any user-visible navigation belongs to area:ux unless it causes a runtime error.
 - Navigation that fails with 404/500, broken redirects, or runtime errors belongs to area:bug.
 - Business workflow or service-positioning questions belong to area:product.
 - Navigation visual treatment, current-location indicators, and layout consistency belong to area:visual-design.
@@ -311,6 +312,7 @@ Issue body format:
 Quality bar:
 - Write issues from the freelancer/company user's perspective.
 - In the Competitive relevance section, state which competitor user behavior this could affect, why this would make Flow Link more attractive, and why it is worth doing now.
+- Treat clear pending feedback for route transitions and form submissions as a baseline marketplace UX requirement. If a user can click and wait without knowing whether anything is happening, create or update an area:ux issue unless an equivalent issue already exists.
 - Avoid developer-facing UI terms such as MVC, MVP, direct matching, direct contract, direct match, core differentiation, or implementation jargon unless the issue is explicitly about source code maintainability.
 - For product mode, use current public competitor or adjacent-market information when network access is available, and include source URLs in the issue body.
 - For bug mode, treat Vercel Preview logs as strong signals but describe the likely user-visible failure, not just the stack trace.

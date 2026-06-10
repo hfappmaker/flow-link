@@ -243,7 +243,7 @@ Issue rules:
 Playwright verification policy:
 - If the issue has label area:bug, area:ux, or area:visual-design, Playwright browser verification is required by default before marking the issue fixed.
 - For area:bug, reproduce or verify the fixed user-visible behavior in a browser when feasible.
-- For area:ux, verify the relevant navigation, screen transition, form, login/register flow, empty/loading/error state, or task completion in a browser when feasible.
+- For area:ux, verify the relevant navigation, screen transition, route-transition pending feedback, form-submit pending feedback, login/register flow, empty/loading/error state, or task completion in a browser when feasible.
 - For area:visual-design, screenshots are mandatory. Verify at least desktop and mobile viewports in a browser, normally 1280x900 and 375x812, and save screenshots under .codex-automation/screenshots/ with stable names that include the issue number, route, viewport, and timestamp.
 - Use Chromium headless with sandbox disabled if needed: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
 - Use localhost port $LOCAL_APP_PORT for worker browser verification when starting the app, for example HOSTNAME=127.0.0.1 PORT=$LOCAL_APP_PORT npm run dev.
