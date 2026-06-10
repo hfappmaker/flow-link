@@ -356,7 +356,6 @@ gh issue comment "$ISSUE_NUMBER" --body "Codex issue worker opened PR: $PR_URL" 
 set +e
 gh pr merge "$PR_URL" \
   --"$MERGE_METHOD" \
-  --delete-branch \
   --subject "Codex: $ISSUE_TITLE" \
   --body "Closes #$ISSUE_NUMBER"
 MERGE_STATUS=$?
