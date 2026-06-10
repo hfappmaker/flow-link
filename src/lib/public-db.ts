@@ -10,7 +10,7 @@ export async function publicDbRead<T>(read: () => Promise<T>, fallback: T) {
 }
 
 export async function publicDbReadResult<T>(read: () => Promise<T>, fallback: T): Promise<PublicDbReadResult<T>> {
-  if (!process.env.DATABASE_URL) return { status: "unavailable", data: fallback };
+  if (!hasRuntimeDatabaseUrl()) return { status: "unavailable", data: fallback };
 
   try {
     return { status: "available", data: await read() };
@@ -20,9 +20,27 @@ export async function publicDbReadResult<T>(read: () => Promise<T>, fallback: T)
   }
 }
 
+function hasRuntimeDatabaseUrl() {
+  return Boolean(
+    process.env.PRISMA_RUNTIME_DATABASE_URL ||
+      process.env.POSTGRES_PRISMA_URL ||
+      process.env.POSTGRES_URL ||
+      process.env.DATABASE_URL,
+  );
+}
+
 function isDatabaseUnavailableError(error: unknown) {
+  const code = typeof error === "object" && error && "code" in error ? error.code : undefined;
+  const message = error instanceof Error ? error.message : "";
+
   return (
-    error instanceof Prisma.PrismaClientInitializationError &&
-    error.message.includes("Can't reach database server")
+    code === "P2037" ||
+    (error instanceof Prisma.PrismaClientInitializationError &&
+      [
+        "Can't reach database server",
+        "Too many database connections opened",
+        "too many connections",
+        "remaining connection slots are reserved",
+      ].some((unavailableMessage) => message.includes(unavailableMessage)))
   );
 }
