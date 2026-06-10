@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { registerUser } from "@/lib/actions";
-import { Shell, TopNav, Card, TextField, SelectField } from "@/components/ui";
+import { Shell, TopNav, Card, TextField, SelectField, SubmitButton } from "@/components/ui";
 import { loginHref, registrationRoleIntent, safeAuthCallbackUrl } from "@/lib/registration-intent";
 
 export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
@@ -32,7 +32,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
               <option value="freelancer">フリーランス</option>
               <option value="company_user">企業ユーザー</option>
             </SelectField>
-            <button className="btn btn-primary" type="submit">登録して開始</button>
+            <SubmitButton className="btn btn-primary" pendingLabel="登録中">登録して開始</SubmitButton>
           </form>
         </Card>
       </div>

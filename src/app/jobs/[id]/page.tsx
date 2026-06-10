@@ -17,7 +17,7 @@ import {
   visiblePreferenceReasons,
   type TrustConfidenceStatus,
 } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea, TextField } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, StatusBadge, SubmitButton, TextArea, TextField } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
 import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 import { SafetyReportPanel } from "@/components/safety-reporting";
@@ -320,9 +320,9 @@ export default async function JobDetailPage({
                     <form action={savedJob ? removeSavedJob : saveJobForReview}>
                       <input type="hidden" name="jobPostId" value={job.id} />
                       <input type="hidden" name="returnTo" value={`/jobs/${job.id}`} />
-                      <button className="btn btn-secondary w-full sm:w-auto" type="submit">
+                      <SubmitButton className="btn btn-secondary w-full sm:w-auto" pendingLabel="更新中">
                         {savedJob ? "検討リストから外す" : "検討リストに保存"}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -414,7 +414,7 @@ export default async function JobDetailPage({
                     maxLength={120}
                     placeholder="例: 平日18時以降のオンライン面談を希望"
                   />
-                  <button className="btn btn-primary" type="submit">この案件に応募</button>
+                  <SubmitButton className="btn btn-primary" pendingLabel="応募送信中">この案件に応募</SubmitButton>
                 </form>
               ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" ? (
                 <div>

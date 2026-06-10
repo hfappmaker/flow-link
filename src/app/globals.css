@@ -30,6 +30,12 @@ body {
   font-weight: 600;
 }
 
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.75;
+}
+
 .btn-primary {
   background: #047857;
   color: white;
@@ -88,6 +94,55 @@ body {
 
 .top-nav-menu .btn {
   white-space: nowrap;
+}
+
+.link-pending-hint {
+  display: inline-grid;
+  width: 0.75rem;
+  height: 0.75rem;
+  place-items: center;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.link-pending-hint-visible {
+  visibility: visible;
+  animation: pending-hint-fade 180ms ease 100ms forwards;
+}
+
+.global-pending-feedback {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 50;
+  display: inline-flex;
+  min-height: 2.25rem;
+  max-width: calc(100vw - 2rem);
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #a7f3d0;
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.5rem 0.875rem;
+  color: #065f46;
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: 0 12px 30px rgba(28, 25, 23, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -0.75rem);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.global-pending-feedback-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@keyframes pending-hint-fade {
+  to {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 360px) {

@@ -21,7 +21,7 @@ import {
   visiblePreferenceReasons,
   workPreferenceCompleteness,
 } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, StatusBadge, TextArea } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, StatusBadge, SubmitButton, TextArea } from "@/components/ui";
 import { ReputationSummaryCard } from "@/components/reputation";
 
 export const dynamic = "force-dynamic";
@@ -206,7 +206,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   defaultValue={screeningRubric.note}
                   maxLength={2400}
                 />
-                <button className="btn btn-secondary" type="submit">判断メモを保存</button>
+                <SubmitButton className="btn btn-secondary" pendingLabel="保存中">判断メモを保存</SubmitButton>
               </form>
             </Card>
             {(application.jobPost.selectionFlow || application.jobPost.contractTerms) && (
@@ -239,7 +239,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               <form action={saveScreeningNote} className="mt-4 grid gap-3">
                 <input type="hidden" name="applicationId" value={application.id} />
                 <TextArea name="note" label="メモ" />
-                <button className="btn btn-secondary" type="submit">メモを追加</button>
+                <SubmitButton className="btn btn-secondary" pendingLabel="保存中">メモを追加</SubmitButton>
               </form>
               <div className="mt-5 grid gap-3">
                 {application.notes.map((note) => (
@@ -414,7 +414,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                   defaultValue={interviewPrepSheet}
                   maxLength={2400}
                 />
-                <button className="btn btn-secondary" type="submit">企業内メモに保存</button>
+                <SubmitButton className="btn btn-secondary" pendingLabel="保存中">企業内メモに保存</SubmitButton>
               </form>
             </Card>
             <Card>
@@ -455,7 +455,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                     初回連絡文に、面談調整で必要な候補日時の依頼、契約・支払い条件、確認したい点が入っていることを確認しました。
                   </span>
                 </label>
-                <button className="btn btn-primary w-full" type="submit">書類選考OK・初回連絡を送る</button>
+                <SubmitButton className="btn btn-primary w-full" pendingLabel="選考結果を送信中">書類選考OK・初回連絡を送る</SubmitButton>
               </form>
             </Card>
             <Card>
@@ -465,7 +465,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <form action={screenApplication}>
                   <input type="hidden" name="applicationId" value={application.id} />
                   <input type="hidden" name="status" value="screening_rejected" />
-                  <button className="btn btn-danger w-full" type="submit">書類選考NG</button>
+                  <SubmitButton className="btn btn-danger w-full" pendingLabel="選考結果を送信中">書類選考NG</SubmitButton>
                 </form>
                 {application.interviewThread && <Link className="btn btn-secondary" href={`/interviews/${application.interviewThread.id}`}>面談チャット</Link>}
               </div>

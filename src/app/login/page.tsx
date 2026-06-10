@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { loginUser } from "@/lib/actions";
-import { Shell, TopNav, Card, TextField } from "@/components/ui";
+import { Shell, TopNav, Card, SubmitButton, TextField } from "@/components/ui";
 import { safeAuthCallbackUrl } from "@/lib/registration-intent";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
@@ -18,7 +18,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <input type="hidden" name="callbackUrl" value={callbackUrl} />
             <TextField name="email" label="メールアドレス" type="email" required />
             <TextField name="password" label="パスワード" type="password" required minLength={8} />
-            <button className="btn btn-primary" type="submit">ログイン</button>
+            <SubmitButton className="btn btn-primary" pendingLabel="ログイン中">ログイン</SubmitButton>
           </form>
           <p className="mt-4 text-sm text-stone-600">
             アカウントがない場合は <Link className="font-semibold text-emerald-700" href={registerHref}>登録</Link>

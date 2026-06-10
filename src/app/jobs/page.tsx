@@ -24,7 +24,7 @@ import {
   workPreferenceCompleteness,
   type TrustConfidenceStatus,
 } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, icons } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton, icons } from "@/components/ui";
 import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 
 export const dynamic = "force-dynamic";
@@ -415,7 +415,7 @@ export default async function JobsPage({
               </label>
               {fit && <input type="hidden" name="fit" value={fit} />}
               <div className="grid gap-3 md:col-span-2 md:grid-cols-2 lg:col-span-4 lg:flex lg:justify-end">
-                <button className="btn btn-primary w-full lg:w-32" type="submit">検索</button>
+                <SubmitButton className="btn btn-primary w-full lg:w-32" pendingLabel="検索中">検索</SubmitButton>
                 <Link className="btn btn-secondary w-full lg:w-32" href="/jobs">クリア</Link>
               </div>
             </form>
@@ -625,7 +625,7 @@ function SavedSearchPanel({
               <option value="paused">{alertCadenceLabel("paused")}</option>
             </select>
           </label>
-          <button className="btn btn-primary" type="submit">仕事フィードに保存</button>
+          <SubmitButton className="btn btn-primary" pendingLabel="保存中">仕事フィードに保存</SubmitButton>
         </form>
       </div>
     </section>
@@ -1080,9 +1080,9 @@ function JobCard({
               <form action={saved ? removeSavedJob : saveJobForReview}>
                 <input type="hidden" name="jobPostId" value={job.id} />
                 <input type="hidden" name="returnTo" value={returnTo} />
-                <button className="btn btn-secondary w-full" type="submit">
+                <SubmitButton className="btn btn-secondary w-full" pendingLabel="更新中">
                   {saved ? "検討リストから外す" : "検討リストに保存"}
-                </button>
+                </SubmitButton>
               </form>
               <RecommendationFeedbackForm
                 currentReason={recommendationFeedbackReason}
