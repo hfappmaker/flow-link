@@ -233,6 +233,7 @@ Primary goal:
 - Handle only this one issue in this run.
 - Preserve the issue's competitive purpose: Flow Link is being improved to win users from competitor services such as レバテック, Findy Freelance, and adjacent freelance/job marketplace services.
 - If implementation choices trade off simplicity, user value, and polish, prefer the option that most directly improves freelancer/company acquisition, activation, trust, speed to useful match/application, fit clarity, or core marketplace reliability.
+- For validation/readiness issues, preserve a lightweight registration path, prefer actionable readiness guidance before hard blocking, and hard-block only when missing or invalid data would harm marketplace quality for the other side.
 
 Issue rules:
 - If the issue is unclear, risky, impossible, or missing required credentials/configuration, leave the worktree clean and explain the blocker in your final message.

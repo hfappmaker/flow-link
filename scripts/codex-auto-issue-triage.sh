@@ -241,6 +241,13 @@ Strategic goal:
 - Prefer issues that create a concrete reason for a freelancer or company already using a competitor to try, trust, or switch to Flow Link.
 - Skip cosmetic, speculative, or internally interesting issues when their competitive relevance is weak.
 
+Validation and readiness policy:
+- Treat validation/readiness as product quality, not only technical input checking.
+- Check whether required fields match the user's next valuable action: lightweight registration, freelancer readiness before applying, company/job readiness before publishing, trust/payment readiness before freelancers decide, and post-application workflow readiness before either side must act.
+- Prefer actionable readiness guidance over hard blocking when users can still browse, learn, or draft.
+- Hard-block only when missing or invalid data would create bad marketplace behavior, such as unreviewable applications, untrustworthy job posts, unsafe payment expectations, duplicate submissions, broken contact paths, or unclear next actions.
+- For validation/readiness issues, state which action is gated, which fields are required or recommended, why the boundary improves marketplace quality, and what user-facing guidance appears when data is missing.
+
 Maturity and stopping conditions:
 - The wrapper skips this run before Codex starts when open codex:ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds configured thresholds.
 - Even when the wrapper allows the run, do not create an issue if the main freelancer/company marketplace flows already appear competitively adequate for this mode and no high-leverage gap is found.
@@ -294,6 +301,8 @@ Classification:
 - Screen transitions and user flow problems usually belong to area:ux.
 - Missing feedback after clicking links, submitting forms, switching filters, or starting any user-visible navigation belongs to area:ux unless it causes a runtime error.
 - Navigation that fails with 404/500, broken redirects, or runtime errors belongs to area:bug.
+- Required-field policy, readiness gates, applying/publishing eligibility, and marketplace-quality validation usually belong to area:product.
+- Validation implementation gaps, parser/type drift, missing workflow tests, and duplicated validation logic usually belong to area:maintainability.
 - Business workflow or service-positioning questions belong to area:product.
 - Navigation visual treatment, current-location indicators, and layout consistency belong to area:visual-design.
 
@@ -313,6 +322,7 @@ Quality bar:
 - Write issues from the freelancer/company user's perspective.
 - In the Competitive relevance section, state which competitor user behavior this could affect, why this would make Flow Link more attractive, and why it is worth doing now.
 - Treat clear pending feedback for route transitions and form submissions as a baseline marketplace UX requirement. If a user can click and wait without knowing whether anything is happening, create or update an area:ux issue unless an equivalent issue already exists.
+- Treat applying and publishing readiness as baseline marketplace quality. If users can apply or publish with too little information for the other side to evaluate trust, fit, timing, or payment expectations, create or update an area:product issue unless an equivalent issue already exists.
 - Avoid developer-facing UI terms such as MVC, MVP, direct matching, direct contract, direct match, core differentiation, or implementation jargon unless the issue is explicitly about source code maintainability.
 - For product mode, use current public competitor or adjacent-market information when network access is available, and include source URLs in the issue body.
 - For bug mode, treat Vercel Preview logs as strong signals but describe the likely user-visible failure, not just the stack trace.
