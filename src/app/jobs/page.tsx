@@ -23,6 +23,7 @@ import {
 import { JOBS_KEYWORD_CANDIDATE_LIMIT, filterJobsBySearchQuery, jobKeywordCandidateWhere } from "@/lib/job-search";
 import {
   buildTrustConfidence,
+  directContractChecklist,
   directContractReadyJobWhere,
   formatOpenings,
   matchedSkills,
@@ -413,9 +414,9 @@ export default async function JobsPage({
                   tone={directReady || fit === "ready" || workload || rate ? "good" : "neutral"}
                 />
                 <DiscoverySignal
-                  label="高スコア案件"
-                  value={`${rankedJobs.filter(({ directScore }) => directScore >= 70).length}件`}
-                  tone={rankedJobs.some(({ directScore }) => directScore >= 70) ? "good" : "neutral"}
+                  label="受付・条件あり"
+                  value={`${rankedJobs.filter(({ job, contractReadinessPercent }) => job.applicationStatus === "open" && contractReadinessPercent >= 80).length}件`}
+                  tone={rankedJobs.some(({ job, contractReadinessPercent }) => job.applicationStatus === "open" && contractReadinessPercent >= 80) ? "good" : "neutral"}
                 />
                 <DiscoverySignal
                   label={freelancerProfile ? "未対応の候補" : "条件確認100%"}
@@ -833,7 +834,7 @@ function DirectPriorityStrip({
         )}
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {jobs.map(({ job, directScore, contractReadinessPercent }) => {
+        {jobs.map(({ job, contractReadinessPercent }) => {
           const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
           const reasons = buildPriorityReasons({
             contractReadinessPercent,
@@ -854,7 +855,7 @@ function DirectPriorityStrip({
                   <p className="mt-1 text-xs text-stone-500">{job.companyProfile.name}</p>
                 </div>
                 <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                  {directScore}%
+                  {contractReadinessPercent >= 80 ? "条件充実" : job.applicationStatus === "open" ? "受付中" : "要確認"}
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -866,7 +867,7 @@ function DirectPriorityStrip({
               </div>
               <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-2">
                 <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
-                <ScoreMeta label="必須一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
+                <ScoreMeta label={freelancerProfile ? "必須一致" : "公開条件"} value={matchPercent === null ? `${reasons.length}件` : `${matchPercent}%`} />
               </div>
             </Link>
           );
@@ -896,6 +897,80 @@ function buildPriorityReasons({
   else if (matchPercent >= 60) reasons.push("スキル高一致");
   else if (matchPercent > 0) reasons.push("一致スキルあり");
   return reasons.slice(0, 4);
+}
+
+type JobCardReason = {
+  label: string;
+  tone: "neutral" | "good" | "warn" | "bad";
+};
+
+function buildJobCardDecisionReasons({
+  contractReadiness,
+  job,
+}: {
+  contractReadiness: ReturnType<typeof directContractChecklist>;
+  job: JobWithCompany;
+}): JobCardReason[] {
+  const reasons: JobCardReason[] = [];
+  const skillCount = parseSkills(job.requiredSkills).length;
+
+  if (job.remotePolicy) reasons.push({ label: job.remotePolicy, tone: remoteReasonTone(job.remotePolicy) });
+  else if (job.location) reasons.push({ label: job.location, tone: "neutral" });
+
+  if (job.workload) reasons.push({ label: job.workload, tone: "good" });
+  if (job.rate) reasons.push({ label: "単価あり", tone: "good" });
+  if (job.selectionFlow && job.contractTerms) reasons.push({ label: "選考・支払い条件あり", tone: "good" });
+  else if (job.selectionFlow) reasons.push({ label: "選考条件あり", tone: "neutral" });
+  else if (job.contractTerms) reasons.push({ label: "支払い条件あり", tone: "neutral" });
+  if (skillCount > 0) reasons.push({ label: `必須スキル${skillCount}件`, tone: "neutral" });
+  if (contractReadiness.isReady) reasons.push({ label: "応募前条件あり", tone: "good" });
+
+  return reasons.slice(0, 5);
+}
+
+function buildJobCardConcernReasons({
+  contractReadiness,
+  job,
+  trustConfidence,
+}: {
+  contractReadiness: ReturnType<typeof directContractChecklist>;
+  job: JobWithCompany;
+  trustConfidence: ReturnType<typeof buildTrustConfidence>;
+}): JobCardReason[] {
+  const reasons: JobCardReason[] = [];
+
+  if (job.applicationStatus !== "open") reasons.push({ label: "応募受付停止中", tone: "warn" });
+  if (parseSkills(job.requiredSkills).length === 0) reasons.push({ label: "必須スキル未記載", tone: "warn" });
+
+  const missingContractLabels = contractReadiness.items
+    .filter((item) => !item.done)
+    .map((item) => item.label);
+  if (missingContractLabels.includes("報酬・支払い")) reasons.push({ label: "支払い・契約条件を確認", tone: "warn" });
+  if (missingContractLabels.includes("稼働条件")) reasons.push({ label: "稼働量・期間を確認", tone: "warn" });
+  if (missingContractLabels.includes("働き方")) reasons.push({ label: "勤務地・リモート条件を確認", tone: "warn" });
+  if (missingContractLabels.includes("選考フロー")) reasons.push({ label: "選考フローを確認", tone: "warn" });
+
+  const trustStatuses = [trustConfidence.companyStatus, trustConfidence.paymentStatus];
+  if (trustStatuses.includes("rejected")) reasons.push({ label: "会社・支払い再確認中", tone: "bad" });
+  else if (trustStatuses.includes("missing")) reasons.push({ label: "会社・支払い未確認", tone: "warn" });
+  else if (trustStatuses.includes("stale")) reasons.push({ label: "確認情報の更新待ち", tone: "warn" });
+  else if (trustStatuses.includes("pending")) reasons.push({ label: "会社・支払い確認中", tone: "neutral" });
+  else if (trustStatuses.includes("selfReported")) reasons.push({ label: "会社・支払いは自己申告", tone: "neutral" });
+
+  return dedupeReasons(reasons).slice(0, 4);
+}
+
+function remoteReasonTone(remotePolicy: string): JobCardReason["tone"] {
+  return /フルリモート|リモート可|在宅|remote/i.test(remotePolicy) ? "good" : "neutral";
+}
+
+function dedupeReasons(reasons: JobCardReason[]) {
+  const seen = new Set<string>();
+  return reasons.filter((reason) => {
+    if (seen.has(reason.label)) return false;
+    seen.add(reason.label);
+    return true;
+  });
 }
 
 function DiscoverySignal({
@@ -951,6 +1026,9 @@ function JobCard({
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
   const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
   const requiredSkillGaps = freelancerProfile ? unmatchedSkills(job.requiredSkills, freelancerProfile.skills) : parseSkills(job.requiredSkills);
+  const contractReadiness = directContractChecklist(job);
+  const decisionReasons = buildJobCardDecisionReasons({ job, contractReadiness });
+  const concernReasons = buildJobCardConcernReasons({ job, contractReadiness, trustConfidence });
   const nextStep = freelancerProfile
     ? buildJobCardNextStep({
         applied,
@@ -972,12 +1050,12 @@ function JobCard({
             <StatusBadge tone={job.applicationStatus === "open" ? "good" : "warn"}>
               {job.applicationStatus === "open" ? "受付中" : "受付停止"}
             </StatusBadge>
-            <StatusBadge>{job.remotePolicy ?? "勤務形態未設定"}</StatusBadge>
-            {(job.selectionFlow || job.contractTerms) && <StatusBadge tone="good">条件あり</StatusBadge>}
-            <StatusBadge tone={directScore >= 70 ? "good" : directScore >= 45 ? "neutral" : "warn"}>
-              応募しやすさ {directScore}%
-            </StatusBadge>
-            <StatusBadge tone={trustConfidence.tone}>{trustConfidence.label}</StatusBadge>
+            {decisionReasons.map((reason) => (
+              <StatusBadge tone={reason.tone} key={reason.label}>{reason.label}</StatusBadge>
+            ))}
+            {concernReasons.slice(0, 2).map((reason) => (
+              <StatusBadge tone={reason.tone} key={reason.label}>{reason.label}</StatusBadge>
+            ))}
           </div>
           <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
           <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
@@ -1013,7 +1091,8 @@ function JobCard({
                   </StatusBadge>
                 )}
               </div>
-              <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-3">
+              <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-4">
+                <ScoreMeta label="おすすめ度" value={`${directScore}%`} />
                 <ScoreMeta label="スキル一致" value={matchPercent === null ? "未設定" : `${matchPercent}%`} />
                 <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
                 <ScoreMeta label="信頼確認" value={`${trustConfidence.score}%`} />
