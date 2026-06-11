@@ -147,17 +147,19 @@ export function GlobalPendingFeedback() {
     };
   }, [clearHideTimer, hidePending, showPending]);
 
-  const message = pendingKind === "submit" ? "送信内容を処理しています" : "画面を読み込んでいます";
+  const active = pendingKind !== null;
+  const message = pendingKind === "submit" ? "送信内容を処理しています" : pendingKind === "route" ? "画面を読み込んでいます" : "";
 
   return (
     <div
-      aria-live="polite"
+      aria-hidden={!active}
+      aria-live={active ? "polite" : "off"}
       aria-atomic="true"
-      className={cn("global-pending-feedback", pendingKind && "global-pending-feedback-visible")}
+      className={cn("global-pending-feedback", active && "global-pending-feedback-visible")}
       data-testid="global-pending-feedback"
     >
       <LoaderCircle aria-hidden className="size-4 animate-spin" />
-      <span>{message}</span>
+      {active && <span>{message}</span>}
     </div>
   );
 }
