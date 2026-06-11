@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
+  applicantKeywordCandidateWhere,
   applicantKeywordCandidateTerms,
   applicantMatchesSearchQuery,
   filterApplicantsBySearchQuery,
@@ -50,6 +51,76 @@ test("company applicant search rejects short skill fragments", () => {
 
   assert.equal(applicantMatchesSearchQuery("act", reactApplication), false);
   assert.deepEqual(filterApplicantsBySearchQuery([reactApplication], "act"), []);
+});
+
+test("company applicant search matches career-history-only evidence", () => {
+  const cases = [
+    {
+      query: "GraphQL",
+      careerHistory: { summary: "GraphQL API migration lead" },
+    },
+    {
+      query: "SRE",
+      careerHistory: { workExperiences: "SREとして可観測性と障害対応を担当" },
+    },
+    {
+      query: "決済",
+      careerHistory: { projects: "BtoB決済プラットフォームの0→1開発" },
+    },
+    {
+      query: "AWS認定",
+      careerHistory: { certifications: "AWS認定 Solutions Architect Professional" },
+    },
+    {
+      query: "情報工学",
+      careerHistory: { education: "情報工学専攻 修士課程修了" },
+    },
+  ];
+
+  for (const { query, careerHistory } of cases) {
+    const matchingApplication = application({
+      id: `career-match-${query}`,
+      proposalMessage: "Queue review text.",
+      skills: "Product management",
+      careerHistory,
+    });
+    const nonMatchingApplication = application({
+      id: `career-miss-${query}`,
+      proposalMessage: "Queue review text.",
+      skills: "Product management",
+      careerHistory: { summary: "Customer support operations" },
+    });
+
+    assert.equal(applicantMatchesSearchQuery(query, matchingApplication), true, `${query} should match career history`);
+    assert.deepEqual(
+      filterApplicantsBySearchQuery([matchingApplication, nonMatchingApplication], query).map((item) => item.id),
+      [matchingApplication.id],
+      `${query} should keep only the career-history match`,
+    );
+  }
+});
+
+test("company applicant keyword candidate where includes the same career-history fields", () => {
+  const whereJson = JSON.stringify(applicantKeywordCandidateWhere("決済"));
+
+  for (const field of ["summary", "workExperiences", "projects", "certifications", "education"]) {
+    assert.match(whereJson, new RegExp(`"careerHistory".*"${field}"`));
+  }
+});
+
+test("company applicant search excludes private freelancer work-preference notes", () => {
+  const privateNoteOnlyApplication = application({
+    proposalMessage: "Queue review text.",
+    skills: "Product management",
+    careerHistory: { summary: "Customer support operations" },
+    workPreference: { privateNotes: "GraphQL案件だけ検討したい" },
+  });
+
+  assert.equal(applicantMatchesSearchQuery("GraphQL", privateNoteOnlyApplication), false);
+  assert.deepEqual(filterApplicantsBySearchQuery([privateNoteOnlyApplication], "GraphQL"), []);
+
+  const whereJson = JSON.stringify(applicantKeywordCandidateWhere("GraphQL"));
+  assert.doesNotMatch(whereJson, /privateNotes|private_notes|workPreference/);
 });
 
 test("company applicant keyword candidates include aliases and broad text terms", () => {
@@ -161,6 +232,7 @@ function application(overrides = {}) {
       availability: field(overrides, "availability", "週3日"),
       documents: overrides.documents ?? [{ id: "doc-1" }, { id: "doc-2" }],
       careerHistory: overrides.careerHistory ?? { summary: "Frontend apps" },
+      workPreference: overrides.workPreference,
     },
   };
 }

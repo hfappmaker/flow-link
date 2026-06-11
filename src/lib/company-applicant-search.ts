@@ -17,6 +17,13 @@ type SearchableApplicant = {
     desiredOccupation?: string | null;
     skills?: string | null;
     preferredLocation?: string | null;
+    careerHistory?: {
+      summary?: string | null;
+      workExperiences?: string | null;
+      projects?: string | null;
+      certifications?: string | null;
+      education?: string | null;
+    } | null;
   };
 };
 
@@ -26,6 +33,11 @@ export function applicantKeywordText(application: SearchableApplicant) {
     application.freelancerProfile.desiredOccupation,
     application.freelancerProfile.skills,
     application.freelancerProfile.preferredLocation,
+    application.freelancerProfile.careerHistory?.summary,
+    application.freelancerProfile.careerHistory?.workExperiences,
+    application.freelancerProfile.careerHistory?.projects,
+    application.freelancerProfile.careerHistory?.certifications,
+    application.freelancerProfile.careerHistory?.education,
     application.proposalMessage,
     application.proposedStart,
     application.rateExpectation,
@@ -34,7 +46,8 @@ export function applicantKeywordText(application: SearchableApplicant) {
 }
 
 export function applicantMatchesSearchQuery(query: string | null | undefined, application: SearchableApplicant) {
-  return normalizedTextMatchesQuery(query, applicantKeywordText(application));
+  const text = applicantKeywordText(application);
+  return normalizedTextMatchesQuery(query, text) || cjkSubstringMatchesQuery(query, text);
 }
 
 export function filterApplicantsBySearchQuery<T extends SearchableApplicant>(applications: T[], query: string | null | undefined) {
@@ -52,6 +65,11 @@ export function applicantKeywordCandidateWhere(query: string | null | undefined)
       { freelancerProfile: { desiredOccupation: { contains: term, mode: "insensitive" as const } } },
       { freelancerProfile: { skills: { contains: term, mode: "insensitive" as const } } },
       { freelancerProfile: { preferredLocation: { contains: term, mode: "insensitive" as const } } },
+      { freelancerProfile: { careerHistory: { is: { summary: { contains: term, mode: "insensitive" as const } } } } },
+      { freelancerProfile: { careerHistory: { is: { workExperiences: { contains: term, mode: "insensitive" as const } } } } },
+      { freelancerProfile: { careerHistory: { is: { projects: { contains: term, mode: "insensitive" as const } } } } },
+      { freelancerProfile: { careerHistory: { is: { certifications: { contains: term, mode: "insensitive" as const } } } } },
+      { freelancerProfile: { careerHistory: { is: { education: { contains: term, mode: "insensitive" as const } } } } },
       { proposalMessage: { contains: term, mode: "insensitive" as const } },
       { proposedStart: { contains: term, mode: "insensitive" as const } },
       { rateExpectation: { contains: term, mode: "insensitive" as const } },
@@ -72,6 +90,20 @@ function tokenCandidateTerms(query: string) {
   return query
     .normalize("NFKC")
     .match(/[a-z0-9+#]+|[一-龯ぁ-んァ-ヶー]+/gi)?.filter((token) => token.length >= 2) ?? [];
+}
+
+function cjkSubstringMatchesQuery(query: string | null | undefined, text: string | null | undefined) {
+  const queryTokens = tokenCandidateTerms(query ?? "");
+  if (!queryTokens.some((token) => /[一-龯ぁ-んァ-ヶー]/.test(token))) return false;
+
+  const normalizedText = (text ?? "").normalize("NFKC").toLocaleLowerCase();
+  const textTokens = new Set(normalizedText.match(/[a-z0-9+#]+|[一-龯ぁ-んァ-ヶー]+/g) ?? []);
+  return queryTokens.every((token) => {
+    const normalizedToken = token.toLocaleLowerCase();
+    return /[一-龯ぁ-んァ-ヶー]/.test(normalizedToken)
+      ? normalizedText.includes(normalizedToken)
+      : textTokens.has(normalizedToken);
+  });
 }
 
 function uniqueSearchTerms(terms: string[]) {
