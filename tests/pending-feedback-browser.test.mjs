@@ -29,9 +29,26 @@ test(
 
       for (const route of ["/jobs", "/register", "/login"]) {
         await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
-        assert.equal(await page.locator('[data-testid="global-pending-feedback"]').count(), 1, `${route} should hydrate global pending feedback`);
+        const feedback = page.locator('[data-testid="global-pending-feedback"]');
+        assert.equal(await feedback.count(), 1, `${route} should hydrate global pending feedback`);
+        assert.equal(await feedback.getAttribute("aria-hidden"), "true", `${route} should hide inactive global pending feedback from assistive tech`);
+        assert.equal(await feedback.textContent(), "", `${route} should not keep inactive pending feedback text in the DOM`);
+        assert.doesNotMatch(await page.locator("body").ariaSnapshot(), /画面を読み込んでいます|送信内容を処理しています/, `${route} should not expose inactive pending feedback in the accessibility tree`);
         assert.ok((await page.locator(".link-pending-hint").count()) > 0, `${route} should render inline link pending hints`);
       }
+
+      await page.goto(`${baseUrl}/jobs`, { waitUntil: "networkidle" });
+      await page.locator('form[action="/jobs"] input[name="q"]').fill("react");
+      const submitFeedback = page.waitForFunction(() => {
+        const feedback = document.querySelector('[data-testid="global-pending-feedback"]');
+        return (
+          feedback?.classList.contains("global-pending-feedback-visible") &&
+          feedback.getAttribute("aria-live") === "polite" &&
+          feedback.textContent?.includes("送信内容を処理しています")
+        );
+      });
+      await page.locator('form[action="/jobs"] button[type="submit"]').click();
+      await submitFeedback;
 
       await page.goto(`${baseUrl}/jobs`, { waitUntil: "networkidle" });
       const visibleFeedback = page.waitForFunction(() =>
@@ -39,6 +56,9 @@ test(
       );
       await page.locator('header a[href="/register"]').click();
       await visibleFeedback;
+      const activeFeedback = page.locator('[data-testid="global-pending-feedback"]');
+      assert.equal(await activeFeedback.getAttribute("aria-live"), "polite", "active route pending feedback should use a polite live region");
+      assert.match(await activeFeedback.textContent(), /画面を読み込んでいます/, "active route pending feedback should announce route loading");
 
       assert.equal(consoleErrors.length, 0, `unexpected browser console errors:\n${consoleErrors.join("\n")}`);
     } finally {
@@ -52,6 +72,7 @@ async function startServer(base) {
   const url = new URL(base);
   const child = spawn("npm", ["run", "dev"], {
     cwd: process.cwd(),
+    detached: true,
     env: {
       ...process.env,
       HOSTNAME: url.hostname,
@@ -89,11 +110,21 @@ async function startServer(base) {
 async function stopServer(child) {
   if (child.exitCode !== null) return;
 
-  child.kill("SIGTERM");
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    child.kill("SIGTERM");
+  }
   await Promise.race([
     once(child, "exit"),
     new Promise((resolve) => setTimeout(resolve, 5_000)),
   ]);
 
-  if (child.exitCode === null) child.kill("SIGKILL");
+  if (child.exitCode === null) {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
+  }
 }
