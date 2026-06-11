@@ -12,6 +12,7 @@ import { getFreelancerReadiness } from "@/lib/readiness";
 import { getFreelancerReputationSummary } from "@/lib/reputation";
 import {
   applicationStatusLabel,
+  applicationConditionFit,
   applicationConditionTerms,
   buildScreeningPassedHandoffMessage,
   formatDateTime,
@@ -55,8 +56,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const requiredSkillGaps = unmatchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const conditionTerms = applicationConditionTerms(application);
+  const conditionFit = applicationConditionFit(application);
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
-  const hasRateSignal = conditionTerms.rate.source !== "missing";
+  const hasRateSignal = conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch";
+  const hasWorkloadSignal = conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch";
   const interviewDecisionItems = [
     {
       label: "必須スキル",
@@ -75,8 +78,15 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     },
     {
       label: "希望単価",
-      value: conditionTerms.rate.display,
+      value: `${conditionTerms.rate.display} / ${conditionFit.rate.label}`,
       done: hasRateSignal,
+      tone: conditionFit.rate.tone,
+    },
+    {
+      label: "希望稼働量",
+      value: `${conditionTerms.workload.display} / ${conditionFit.workload.label}`,
+      done: hasWorkloadSignal,
+      tone: conditionFit.workload.tone,
     },
   ];
   const interviewDecisionCompleted = interviewDecisionItems.filter((item) => item.done).length;
@@ -133,6 +143,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     rateExpectation: application.rateExpectation,
     jobRate: application.jobPost.rate,
     workload: application.jobPost.workload,
+    rateFitLabel: conditionFit.rate.label,
+    workloadFitLabel: conditionFit.workload.label,
+    hasRateFit: conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch",
+    hasWorkloadFit: conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch",
     contractTerms: application.jobPost.contractTerms,
   });
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({
@@ -151,7 +165,11 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     requiredSkillCount: requiredSkills.length,
     hasProposal: Boolean(application.proposalMessage),
     hasStartSignal,
-    hasApplicationTerms: conditionTerms.rate.source === "application" && conditionTerms.workload.source === "application",
+    hasApplicationTerms:
+      conditionTerms.rate.source === "application" &&
+      conditionTerms.workload.source === "application" &&
+      conditionFit.rate.readiness !== "mismatch" &&
+      conditionFit.workload.readiness !== "mismatch",
     hasContactSignal: Boolean(application.contactPreference),
     hasSelectionFlow: Boolean(application.jobPost.selectionFlow),
     hasContractTerms: Boolean(application.jobPost.contractTerms),
@@ -187,8 +205,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </p>
               <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                 <SummaryInfo label="稼働開始目安" value={application.proposedStart} />
-                <SummaryInfo label="この案件での希望単価" value={conditionTerms.rate.display} />
-                <SummaryInfo label="この案件での希望稼働量" value={conditionTerms.workload.display} />
+                <SummaryInfo label="この案件での希望単価" value={`${conditionTerms.rate.display} / ${conditionFit.rate.label}`} />
+                <SummaryInfo label="この案件での希望稼働量" value={`${conditionTerms.workload.display} / ${conditionFit.workload.label}`} />
                 <SummaryInfo label="連絡希望" value={application.contactPreference} />
               </dl>
             </Card>
@@ -332,7 +350,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </div>
               <div className="mt-4 grid gap-2">
                 {interviewDecisionItems.map((item) => (
-                  <FitSignal done={item.done} key={item.label} label={item.label} value={item.value} />
+                  <FitSignal done={item.done} key={item.label} label={item.label} tone={item.tone} value={item.value} />
                 ))}
               </div>
               <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
@@ -488,12 +506,27 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   );
 }
 
-function FitSignal({ label, value, done }: { label: string; value: string; done: boolean }) {
+function FitSignal({
+  label,
+  value,
+  done,
+  tone,
+}: {
+  label: string;
+  value: string;
+  done: boolean;
+  tone?: "good" | "neutral" | "warn";
+}) {
+  const signalTone = tone ?? (done ? "good" : "warn");
+  const toneClasses = {
+    good: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    neutral: "border-stone-200 bg-stone-50 text-stone-700",
+    warn: "border-amber-200 bg-amber-50 text-amber-800",
+  };
+
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${
-        done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
-      }`}
+      className={`flex items-center justify-between gap-3 rounded border px-3 py-2 text-sm ${toneClasses[signalTone]}`}
     >
       <span className="font-medium">{label}</span>
       <span className="text-right text-xs font-semibold">{value}</span>
@@ -809,6 +842,10 @@ function buildScreeningRubric({
   rateExpectation,
   jobRate,
   workload,
+  rateFitLabel,
+  workloadFitLabel,
+  hasRateFit,
+  hasWorkloadFit,
   contractTerms,
 }: {
   freelancerName: string;
@@ -828,6 +865,10 @@ function buildScreeningRubric({
   rateExpectation?: string | null;
   jobRate?: string | null;
   workload?: string | null;
+  rateFitLabel: string;
+  workloadFitLabel: string;
+  hasRateFit: boolean;
+  hasWorkloadFit: boolean;
   contractTerms?: string | null;
 }) {
   const candidateWorkload = workloadExpectation || availability;
@@ -835,6 +876,7 @@ function buildScreeningRubric({
   const hasStartCondition = Boolean(proposedStart || candidateWorkload);
   const hasRateCondition = Boolean(candidateRate);
   const hasContractCondition = Boolean(workload && contractTerms);
+  const hasCompatibleConditions = hasRateFit && hasWorkloadFit && hasContractCondition;
   const items: RubricItem[] = [
     {
       label: "スキル適合",
@@ -864,15 +906,23 @@ function buildScreeningRubric({
     },
     {
       label: "稼働・連絡",
-      grade: hasStartCondition && contactPreference ? "確認済み" : hasStartCondition || contactPreference ? "追加確認" : "未確認",
-      detail: `開始目安: ${proposedStart || "未設定"} / 希望稼働量: ${candidateWorkload || "未設定"} / 連絡希望: ${contactPreference || "未設定"}`,
-      questions: ["面談候補日時、開始時期、週あたりの稼働量を確認する"],
+      grade: hasStartCondition && contactPreference && hasWorkloadFit ? "確認済み" : hasStartCondition || contactPreference ? "追加確認" : "未確認",
+      detail: `開始目安: ${proposedStart || "未設定"} / 希望稼働量: ${candidateWorkload || "未設定"}（${workloadFitLabel}） / 連絡希望: ${contactPreference || "未設定"}`,
+      questions: [
+        hasWorkloadFit
+          ? "面談候補日時、開始時期、週あたりの稼働量を確認する"
+          : "案件の稼働量に合わせられるか、週あたりの日数・時間をすり合わせる",
+      ],
     },
     {
       label: "契約・支払い条件",
-      grade: hasRateCondition && hasContractCondition ? "確認済み" : hasRateCondition || hasContractCondition ? "追加確認" : "未確認",
-      detail: `希望単価: ${candidateRate || "未設定"} / 案件単価: ${jobRate || "未設定"} / 案件稼働量: ${workload || "未設定"} / 条件: ${contractTerms || "未設定"}`,
-      questions: ["契約期間、支払い条件、稼働開始後の確認サイクルを面談前に整理する"],
+      grade: hasRateCondition && hasCompatibleConditions ? "確認済み" : hasRateCondition || hasContractCondition ? "追加確認" : "未確認",
+      detail: `希望単価: ${candidateRate || "未設定"}（${rateFitLabel}） / 案件単価: ${jobRate || "未設定"} / 案件稼働量: ${workload || "未設定"} / 条件: ${contractTerms || "未設定"}`,
+      questions: [
+        hasRateFit
+          ? "契約期間、支払い条件、稼働開始後の確認サイクルを面談前に整理する"
+          : "案件単価で進められるか、単価条件と調整余地をすり合わせる",
+      ],
     },
   ];
   const readyCount = items.filter((item) => item.grade === "確認済み").length;

@@ -5,7 +5,7 @@ import { requireCompanyUser } from "@/lib/page-guards";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
-import { applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime, jobStatusLabel } from "@/lib/utils";
+import { applicationConditionFit, applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime, jobStatusLabel } from "@/lib/utils";
 import {
   applicantKeywordCandidateWhere,
   applicantMatchesSearchQuery,
@@ -226,7 +226,13 @@ export default async function JobApplicationsPage({
         )}
         <div className="mt-6 grid gap-4">
           {reviewedApplications.map(({ application, responseState, review }) => (
-            <ApplicationCard application={application} key={application.id} responseState={responseState} review={review} />
+            <ApplicationCard
+              application={application}
+              jobPost={{ rate: job?.rate, workload: job?.workload }}
+              key={application.id}
+              responseState={responseState}
+              review={review}
+            />
           ))}
           {job && total === 0 && (
             <EmptyState
@@ -311,10 +317,12 @@ function HighlightedApplicationRow({
 
 function ApplicationCard({
   application,
+  jobPost,
   review,
   responseState,
 }: {
   application: ApplicationWithProfile;
+  jobPost: { rate?: string | null; workload?: string | null };
   review: ApplicationReview;
   responseState: ReturnType<typeof buildApplicationResponseState>;
 }) {
@@ -325,6 +333,7 @@ function ApplicationCard({
     "未設定";
   const contactSignal = application.contactPreference || "面談判断後に調整";
   const conditionTerms = applicationConditionTerms(application);
+  const conditionFit = applicationConditionFit({ ...application, jobPost });
   const nextReviewAction = buildApplicantReviewAction({
     status: application.status,
     isInterviewReady: review.isInterviewReady,
@@ -390,13 +399,13 @@ function ApplicationCard({
             />
             <ApplicantSignal
               label="応募時希望単価"
-              value={conditionTerms.rate.display}
-              tone={conditionTerms.rate.source === "application" ? "good" : conditionTerms.rate.source === "profile" ? "neutral" : "warn"}
+              value={`${conditionTerms.rate.display} / ${conditionFit.rate.label}`}
+              tone={conditionFit.rate.tone}
             />
             <ApplicantSignal
               label="応募時希望稼働量"
-              value={conditionTerms.workload.display}
-              tone={conditionTerms.workload.source === "application" ? "good" : conditionTerms.workload.source === "profile" ? "neutral" : "warn"}
+              value={`${conditionTerms.workload.display} / ${conditionFit.workload.label}`}
+              tone={conditionFit.workload.tone}
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
