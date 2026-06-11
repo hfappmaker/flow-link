@@ -12,6 +12,8 @@ import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
 import { isLightWorkloadText } from "./workload.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
+// Dispatch workers reclaim processing rows after this lease to recover from crashes.
+export const SAVED_FEED_ALERT_DISPATCH_LEASE_MS = 15 * 60 * 1000;
 
 type AlertDb = Pick<
   Prisma.TransactionClient,
@@ -215,25 +217,36 @@ export async function enqueueSavedFeedJobAlertDispatch(
 
 export async function dispatchPendingSavedFeedJobAlerts(
   db: AlertDispatchDb,
-  { limit = 10, now = new Date() }: { limit?: number; now?: Date } = {},
+  {
+    limit = 10,
+    now = new Date(),
+    leaseMs = SAVED_FEED_ALERT_DISPATCH_LEASE_MS,
+  }: { limit?: number; now?: Date; leaseMs?: number } = {},
 ) {
+  const staleLockedBefore = new Date(now.getTime() - leaseMs);
   const tasks = await db.jobAlertDispatch.findMany({
-    where: { status: { in: [JobAlertDispatchStatus.pending, JobAlertDispatchStatus.failed] } },
+    where: dispatchRetryableWhere(staleLockedBefore),
     orderBy: { createdAt: "asc" },
     take: limit,
   });
 
   let completed = 0;
   let failed = 0;
+  let processed = 0;
   for (const task of tasks) {
-    await db.jobAlertDispatch.update({
-      where: { id: task.id },
+    const claim = await db.jobAlertDispatch.updateMany({
+      where: {
+        id: task.id,
+        ...dispatchRetryableWhere(staleLockedBefore),
+      },
       data: {
         status: JobAlertDispatchStatus.processing,
         lockedAt: now,
         attempts: { increment: 1 },
       },
     });
+    if (claim.count === 0) continue;
+    processed += 1;
 
     try {
       await evaluateSavedFeedJobAlerts(db, {
@@ -264,7 +277,19 @@ export async function dispatchPendingSavedFeedJobAlerts(
     }
   }
 
-  return { processed: tasks.length, completed, failed };
+  return { processed, completed, failed };
+}
+
+function dispatchRetryableWhere(staleLockedBefore: Date): Prisma.JobAlertDispatchWhereInput {
+  return {
+    OR: [
+      { status: { in: [JobAlertDispatchStatus.pending, JobAlertDispatchStatus.failed] } },
+      {
+        status: JobAlertDispatchStatus.processing,
+        lockedAt: { lte: staleLockedBefore },
+      },
+    ],
+  };
 }
 
 export async function sendDueJobAlertDigests(

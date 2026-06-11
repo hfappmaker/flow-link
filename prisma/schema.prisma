@@ -545,6 +545,7 @@ model JobAlertDispatch {
   jobPost     JobPost                @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
 
   @@index([status, createdAt])
+  @@index([status, lockedAt])
   @@map("job_alert_dispatches")
 }
 
