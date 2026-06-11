@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { clsx, type ClassValue } from "clsx";
 import { rateFitTone } from "./rates.ts";
 import { normalizeWorkLocation } from "./work-location.ts";
+import { workloadFitTone } from "./workload.ts";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -848,7 +849,7 @@ export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
     });
   }
 
-  const workloadTone = textFitTone(preference.workload, job.workload);
+  const workloadTone = workloadFitTone(preference.workload, job.workload);
   if (preference.workload) {
     reasons.push({
       label: workloadTone === "good" ? "稼働量に近い" : workloadTone === "warn" ? "稼働量ミスマッチ" : "稼働量要確認",

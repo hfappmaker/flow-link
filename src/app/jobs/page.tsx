@@ -14,6 +14,11 @@ import {
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { filterRemoteCompatibleJobs } from "@/lib/work-location";
 import {
+  LIGHT_WORKLOAD_FILTER_LABEL,
+  filterLightWorkloadJobs,
+  lightWorkloadCandidateWhere,
+} from "@/lib/workload";
+import {
   buildDiscoveryIntentCounts,
   rankJobRecommendations,
   sortJobRecommendations,
@@ -69,7 +74,7 @@ export default async function JobsPage({
     remote && "リモート可",
     accepting && "受付中のみ",
     directReady && "条件が揃った案件",
-    workload === "light" && "週2-3日目安",
+    workload === "light" && LIGHT_WORKLOAD_FILTER_LABEL,
     rateThreshold && monthlyRateBandLabel(rateThreshold),
     candidate === "fresh" && "未対応の候補",
   ].filter(Boolean);
@@ -83,17 +88,7 @@ export default async function JobsPage({
     if (keywordCandidateWhere) andFilters.push(keywordCandidateWhere);
   }
   if (workload === "light") {
-    andFilters.push({
-      OR: [
-        { workload: { contains: "週2", mode: "insensitive" } },
-        { workload: { contains: "週3", mode: "insensitive" } },
-        { workload: { contains: "副業", mode: "insensitive" } },
-        { workload: { contains: "0.4", mode: "insensitive" } },
-        { workload: { contains: "0.5", mode: "insensitive" } },
-        { workload: { contains: "40%", mode: "insensitive" } },
-        { workload: { contains: "50%", mode: "insensitive" } },
-      ],
-    });
+    andFilters.push(lightWorkloadCandidateWhere());
   }
   const where: Prisma.JobPostWhereInput = {
     status: "published",
@@ -105,7 +100,7 @@ export default async function JobsPage({
       prisma.jobPost.findMany({
         where,
         orderBy: { createdAt: "desc" },
-        ...(keyword ? { take: JOBS_KEYWORD_CANDIDATE_LIMIT } : {}),
+        ...(keyword && workload !== "light" ? { take: JOBS_KEYWORD_CANDIDATE_LIMIT } : {}),
         include: {
           companyProfile: {
             include: {
@@ -120,7 +115,8 @@ export default async function JobsPage({
     [],
   );
   const keywordFilteredJobs = filterJobsBySearchQuery(jobsResult.data, keyword);
-  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(keywordFilteredJobs) : keywordFilteredJobs;
+  const workloadFilteredJobs = workload === "light" ? filterLightWorkloadJobs(keywordFilteredJobs) : keywordFilteredJobs;
+  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(workloadFilteredJobs) : workloadFilteredJobs;
   const jobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
@@ -356,7 +352,7 @@ export default async function JobsPage({
                   defaultValue={workload}
                 >
                   <option value="">すべて</option>
-                  <option value="light">週2-3日目安</option>
+                  <option value="light">{LIGHT_WORKLOAD_FILTER_LABEL}</option>
                 </select>
               </label>
               <label className="grid gap-1.5 text-sm font-medium text-stone-700">
@@ -554,7 +550,7 @@ function SavedSearchPanel({
       filters.remote && "リモート",
       filters.accepting && "受付中",
       filters.directReady && "条件確認済み",
-      filters.workload === "light" && "週2-3日",
+      filters.workload === "light" && LIGHT_WORKLOAD_FILTER_LABEL,
       filters.rate && monthlyRateBandLabel(Number(filters.rate)),
     ].filter(Boolean).join(" ") ||
     "希望条件フィード";
@@ -748,7 +744,7 @@ function ProfileDiscoveryShortcuts({
       active: activeCandidate === "fresh",
     },
     {
-      label: "週2-3日目安",
+      label: LIGHT_WORKLOAD_FILTER_LABEL,
       href: jobsHref({ q: keyword, remote, accepting: true, workload: "light", sort: "direct", candidate: activeCandidate }),
       active: activeWorkload === "light",
     },
