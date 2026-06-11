@@ -90,6 +90,26 @@ test("high-rate saved feed alerts use normalized monthly lower bounds", async ()
   assert.equal(hourlyDb.notifications.length, 0);
 });
 
+test("remote saved feed alerts use shared work-location semantics", async () => {
+  const aliasDb = alertDb();
+  await evaluateSavedFeedJobAlerts(aliasDb, { job: job({ remotePolicy: "在宅可" }) });
+  assert.equal(aliasDb.notifications.length, 1);
+
+  const hybridDb = alertDb();
+  await evaluateSavedFeedJobAlerts(hybridDb, { job: job({ remotePolicy: "週1出社" }) });
+  assert.equal(hybridDb.notifications.length, 1);
+
+  const negativeDb = alertDb();
+  await evaluateSavedFeedJobAlerts(negativeDb, { job: job({ remotePolicy: "リモート不可" }) });
+  assert.equal(negativeDb.notifications.length, 0);
+  assert.equal(negativeDb.matches.length, 0);
+
+  const onsiteDb = alertDb();
+  await evaluateSavedFeedJobAlerts(onsiteDb, { job: job({ remotePolicy: "常駐必須" }) });
+  assert.equal(onsiteDb.notifications.length, 0);
+  assert.equal(onsiteDb.matches.length, 0);
+});
+
 test("saved feed alerts match canonical skill aliases without raw substring fragments", async () => {
   const aliasDb = alertDb({ query: "TS", skills: "TS" });
   await evaluateSavedFeedJobAlerts(aliasDb, {

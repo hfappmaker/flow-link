@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { publicDbRead, publicDbReadResult } from "@/lib/public-db";
 import { isHighMonthlyRateText } from "@/lib/rates";
 import { getFreelancerReadiness } from "@/lib/readiness";
+import { filterRemoteCompatibleJobs } from "@/lib/work-location";
 import {
   buildDiscoveryIntentCounts,
   rankJobRecommendations,
@@ -104,14 +105,6 @@ export default async function JobsPage({
   const where: Prisma.JobPostWhereInput = {
     status: "published",
     ...(accepting ? { applicationStatus: "open" } : {}),
-    ...(remote
-      ? {
-          remotePolicy: {
-            contains: "リモート",
-            mode: "insensitive",
-          },
-        }
-      : {}),
     ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
   const jobsResult = await publicDbReadResult(
@@ -132,7 +125,8 @@ export default async function JobsPage({
       }),
     [],
   );
-  const jobs = rate === "high" ? jobsResult.data.filter((job) => isHighMonthlyRateText(job.rate)) : jobsResult.data;
+  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(jobsResult.data) : jobsResult.data;
+  const jobs = rate === "high" ? remoteFilteredJobs.filter((job) => isHighMonthlyRateText(job.rate)) : remoteFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
     !jobsUnavailable && session?.user?.role === "freelancer"
