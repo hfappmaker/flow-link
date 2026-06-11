@@ -40,11 +40,20 @@ export type JobRecommendationContext = {
   workPreference?: WorkPreferenceInput;
 };
 
+export type RecommendationInteractionState =
+  | "fresh"
+  | "positive_interest"
+  | "saved"
+  | "applied"
+  | "negative_dismissed"
+  | "already_handled";
+
 export type JobRecommendation<J extends JobRecommendationJob> = {
   job: J;
   contractReadiness: ReturnType<typeof directContractChecklist>;
   contractReadinessPercent: number;
   directScore: number;
+  interactionState: RecommendationInteractionState;
   isFreshCandidate: boolean;
   isOpen: boolean;
   isReadyToApply: boolean;
@@ -81,7 +90,13 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
   });
   const trustAdjustment = options.trustAdjusted === false || !trustConfidence ? 0 : trustRecommendationAdjustment(trustConfidence);
   const isOpen = job.applicationStatus === "open";
-  const isFreshCandidate = !appliedJobIds.has(job.id) && !savedJobIds.has(job.id);
+  const exactFeedback = (context.recommendationFeedback ?? []).find((signal) => signal.jobPostId === job.id);
+  const interactionState = buildRecommendationInteractionState({
+    applied: appliedJobIds.has(job.id),
+    exactFeedback,
+    saved: savedJobIds.has(job.id),
+  });
+  const isFreshCandidate = interactionState === "fresh" || interactionState === "positive_interest";
   const feedbackAdjustment = recommendationFeedbackAdjustment({
     applied: appliedJobIds.has(job.id),
     feedback: context.recommendationFeedback,
@@ -104,6 +119,7 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     contractReadiness,
     contractReadinessPercent: contractReadiness.percent,
     directScore,
+    interactionState,
     isFreshCandidate,
     isOpen,
     isReadyToApply: isOpen && directScore >= READY_TO_APPLY_SCORE_THRESHOLD && contractReadiness.percent >= READY_TO_APPLY_CONTRACT_THRESHOLD,
@@ -126,6 +142,23 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     skillGaps,
     trustConfidence,
   };
+}
+
+export function buildRecommendationInteractionState({
+  applied,
+  exactFeedback,
+  saved,
+}: {
+  applied?: boolean;
+  exactFeedback?: RecommendationFeedbackSignal | null;
+  saved?: boolean;
+}): RecommendationInteractionState {
+  if (applied) return "applied";
+  if (saved) return "saved";
+  if (exactFeedback?.sentiment === "negative") return "negative_dismissed";
+  if (exactFeedback?.reason === "already_handled") return "already_handled";
+  if (exactFeedback?.sentiment === "positive") return "positive_interest";
+  return "fresh";
 }
 
 export function buildJobRecommendations<J extends JobRecommendationJob>(

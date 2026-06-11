@@ -6,6 +6,7 @@ const {
   READY_TO_APPLY_SCORE_THRESHOLD,
   buildDiscoveryIntentCounts,
   buildJobRecommendation,
+  buildRecommendationInteractionState,
   countReadySavedJobs,
   filterJobRecommendations,
   rankJobRecommendations,
@@ -63,16 +64,88 @@ function matchesWhere(candidate, where) {
   });
 }
 
-test("fresh candidate detection uses both applied and saved job ids", () => {
-  assert.equal(buildJobRecommendation(job({ id: "fresh" }), readyContext).isFreshCandidate, true);
+test("recommendation interaction state separates fresh, positive, saved, applied, dismissed, and handled jobs", () => {
+  assert.equal(buildRecommendationInteractionState({}), "fresh");
   assert.equal(
-    buildJobRecommendation(job({ id: "applied" }), { ...readyContext, appliedJobIds: ["applied"] }).isFreshCandidate,
-    false,
+    buildRecommendationInteractionState({
+      exactFeedback: feedbackSignal({ jobPostId: "job-1", reason: "good_fit", sentiment: "positive" }),
+    }),
+    "positive_interest",
+  );
+  assert.equal(buildRecommendationInteractionState({ saved: true }), "saved");
+  assert.equal(buildRecommendationInteractionState({ applied: true, saved: true }), "applied");
+  assert.equal(
+    buildRecommendationInteractionState({
+      exactFeedback: feedbackSignal({ jobPostId: "job-1", reason: "rate_mismatch", sentiment: "negative" }),
+    }),
+    "negative_dismissed",
   );
   assert.equal(
-    buildJobRecommendation(job({ id: "saved" }), { ...readyContext, savedJobIds: ["saved"] }).isFreshCandidate,
-    false,
+    buildRecommendationInteractionState({
+      exactFeedback: feedbackSignal({ jobPostId: "job-1", reason: "hide_similar", sentiment: "negative", hideSimilar: true }),
+    }),
+    "negative_dismissed",
   );
+  assert.equal(
+    buildRecommendationInteractionState({
+      exactFeedback: feedbackSignal({ jobPostId: "job-1", reason: "already_handled", sentiment: "neutral" }),
+    }),
+    "already_handled",
+  );
+});
+
+test("fresh candidate detection uses saved, applied, and exact feedback interaction state", () => {
+  const cases = [
+    { id: "fresh", expectedFresh: true, expectedState: "fresh" },
+    { id: "applied", context: { appliedJobIds: ["applied"] }, expectedFresh: false, expectedState: "applied" },
+    { id: "saved", context: { savedJobIds: ["saved"] }, expectedFresh: false, expectedState: "saved" },
+    {
+      id: "negative",
+      context: { recommendationFeedback: [feedbackSignal({ jobPostId: "negative", reason: "not_relevant", sentiment: "negative" })] },
+      expectedFresh: false,
+      expectedState: "negative_dismissed",
+    },
+    {
+      id: "handled",
+      context: { recommendationFeedback: [feedbackSignal({ jobPostId: "handled", reason: "already_handled", sentiment: "neutral" })] },
+      expectedFresh: false,
+      expectedState: "already_handled",
+    },
+    {
+      id: "hide-similar",
+      context: { recommendationFeedback: [feedbackSignal({ jobPostId: "hide-similar", reason: "hide_similar", sentiment: "negative", hideSimilar: true })] },
+      expectedFresh: false,
+      expectedState: "negative_dismissed",
+    },
+    {
+      id: "positive",
+      context: { recommendationFeedback: [feedbackSignal({ jobPostId: "positive", reason: "good_fit", sentiment: "positive" })] },
+      expectedFresh: true,
+      expectedState: "positive_interest",
+    },
+    {
+      id: "similar-not-exact",
+      context: {
+        recommendationFeedback: [
+          feedbackSignal({
+            jobPostId: "reference",
+            reason: "hide_similar",
+            sentiment: "negative",
+            hideSimilar: true,
+            jobPost: job({ id: "reference", requiredSkills: "TypeScript, React" }),
+          }),
+        ],
+      },
+      expectedFresh: true,
+      expectedState: "fresh",
+    },
+  ];
+
+  for (const { context, expectedFresh, expectedState, id } of cases) {
+    const recommendation = buildJobRecommendation(job({ id }), { ...readyContext, ...context });
+    assert.equal(recommendation.isFreshCandidate, expectedFresh, id);
+    assert.equal(recommendation.interactionState, expectedState, id);
+  }
 });
 
 test("ready-to-apply requires score and contract readiness thresholds", () => {
@@ -310,3 +383,52 @@ test("recommendation feedback adjusts ranking without removing manual search res
   assert.equal(ranked.find((recommendation) => recommendation.job.id === "similar").directScore < ranked[0].directScore, true);
   assert.match(ranked[0].preferenceReasons[0].detail, /フィードバック/);
 });
+
+test("jobs fresh filter excludes exact dismissed jobs while all results keep them recoverable", () => {
+  const jobs = [
+    job({ id: "fresh", title: "TypeScript product engineer" }),
+    job({ id: "positive", title: "TypeScript product engineer" }),
+    job({ id: "negative", title: "TypeScript product engineer" }),
+    job({ id: "handled", title: "TypeScript product engineer" }),
+    job({ id: "similar", title: "TypeScript product engineer", createdAt: "2026-05-01T00:00:00.000Z" }),
+  ];
+  const context = {
+    ...readyContext,
+    recommendationFeedback: [
+      feedbackSignal({ jobPostId: "positive", reason: "good_fit", sentiment: "positive", jobPost: jobs[1] }),
+      feedbackSignal({ jobPostId: "negative", reason: "rate_mismatch", sentiment: "negative", jobPost: jobs[2] }),
+      feedbackSignal({ jobPostId: "handled", reason: "already_handled", sentiment: "neutral", jobPost: jobs[3] }),
+      feedbackSignal({ jobPostId: "reference", reason: "hide_similar", sentiment: "negative", hideSimilar: true, jobPost: job({ id: "reference" }) }),
+    ],
+  };
+
+  const allResults = rankJobRecommendations(jobs, context);
+  const freshResults = rankJobRecommendations(jobs, context, { candidate: "fresh" });
+  const counts = buildDiscoveryIntentCounts({ jobs: allResults, readinessComplete: true });
+
+  assert.deepEqual(new Set(allResults.map((recommendation) => recommendation.job.id)), new Set(["fresh", "positive", "negative", "handled", "similar"]));
+  assert.deepEqual(
+    freshResults.map((recommendation) => recommendation.job.id).sort(),
+    ["fresh", "positive", "similar"],
+  );
+  assert.equal(counts.fresh, 3);
+  assert.equal(
+    allResults.findIndex((recommendation) => recommendation.job.id === "negative") >
+      allResults.findIndex((recommendation) => recommendation.job.id === "fresh"),
+    true,
+  );
+  assert.equal(allResults.find((recommendation) => recommendation.job.id === "negative").preferenceReasons[0].label, "単価が合わない");
+  assert.equal(allResults.find((recommendation) => recommendation.job.id === "handled").preferenceReasons[0].label, "別で対応済み");
+});
+
+function feedbackSignal(overrides = {}) {
+  const value = (key, fallback) => Object.hasOwn(overrides, key) ? overrides[key] : fallback;
+  return {
+    jobPostId: value("jobPostId", "job-1"),
+    reason: value("reason", "not_relevant"),
+    sentiment: value("sentiment", "negative"),
+    hideSimilar: value("hideSimilar", false),
+    visibleReasons: value("visibleReasons", null),
+    jobPost: value("jobPost", null),
+  };
+}

@@ -57,7 +57,7 @@ test("new published matching jobs create one immediate notification per feed", a
   assert.equal(db.notifications.length, 1);
 });
 
-test("alerts suppress jobs already saved, applied, or marked negative", async () => {
+test("alerts suppress jobs already saved, applied, dismissed, or handled", async () => {
   const savedDb = alertDb({ savedJobIds: ["job-1"] });
   await evaluateSavedFeedJobAlerts(savedDb, { job: job() });
   assert.equal(savedDb.notifications.length, 0);
@@ -70,6 +70,15 @@ test("alerts suppress jobs already saved, applied, or marked negative", async ()
   await evaluateSavedFeedJobAlerts(feedbackDb, { job: job() });
   assert.equal(feedbackDb.notifications.length, 0);
   assert.equal(feedbackDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(feedbackDb.matches[0].suppressionReason, /フィードバック済み/);
+
+  const handledDb = alertDb({
+    feedback: [{ jobPostId: "job-1", reason: "already_handled", sentiment: RecommendationFeedbackSentiment.neutral, hideSimilar: false, visibleReasons: null }],
+  });
+  await evaluateSavedFeedJobAlerts(handledDb, { job: job() });
+  assert.equal(handledDb.notifications.length, 0);
+  assert.equal(handledDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(handledDb.matches[0].suppressionReason, /対応済み/);
 });
 
 test("daily digest matches wait until the digest window is due", async () => {

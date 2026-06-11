@@ -108,13 +108,17 @@ export async function evaluateSavedFeedJobAlerts(
 
     const appliedJobIds = new Set(applications.map((application) => application.jobPostId));
     const savedJobIds = new Set(savedJobs.map((savedJob) => savedJob.jobPostId));
-    const exactNegativeFeedback = feedback.find((signal) => signal.sentiment === RecommendationFeedbackSentiment.negative);
+    const exactHandledFeedback = feedback.find(
+      (signal) => signal.sentiment === RecommendationFeedbackSentiment.negative || signal.reason === "already_handled",
+    );
     const suppressionReason = appliedJobIds.has(job.id)
       ? "応募済み"
       : savedJobIds.has(job.id)
         ? "検討リストに保存済み"
-        : exactNegativeFeedback
-          ? "関連なし、非表示、条件不一致などのフィードバック済み"
+        : exactHandledFeedback
+          ? exactHandledFeedback.reason === "already_handled"
+            ? "別経路で対応済み"
+            : "関連なし、非表示、条件不一致などのフィードバック済み"
           : null;
 
     const recommendation = buildJobRecommendation(job, {
