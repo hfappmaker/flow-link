@@ -34,6 +34,7 @@ import { prisma } from "@/lib/prisma";
 import {
   recommendationFeedbackSentiment,
 } from "@/lib/recommendation-feedback";
+import { monthlyRateBandFilterValue } from "@/lib/rates";
 import { getApplicationReadiness, getJobPublishingReadiness, shouldHoldJobAsDraftForPublishing } from "@/lib/readiness";
 import { loginErrorUrl } from "@/lib/registration-intent";
 import { toOptionalText, toText } from "@/lib/utils";
@@ -263,7 +264,7 @@ export async function saveCurrentJobSearch(formData: FormData) {
       directReadyOnly: formData.get("directReady") === "ready",
       fit: toOptionalText(formData.get("fit")),
       workload: toOptionalText(formData.get("workload")),
-      rate: toOptionalText(formData.get("rate")),
+      rate: monthlyRateBandFilterValue(toOptionalText(formData.get("rate"))),
       sort: toText(formData.get("sort")) === "new" ? "new" : "direct",
       notificationCadence: normalizeAlertCadence(formData.get("notificationCadence")),
     },

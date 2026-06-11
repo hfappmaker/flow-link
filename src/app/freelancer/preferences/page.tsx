@@ -2,6 +2,7 @@ import Link from "next/link";
 import { deleteSavedJobSearch, saveWorkPreference, updateSavedJobSearch } from "@/lib/actions";
 import { alertCadenceLabel } from "@/lib/job-alerts";
 import { requireFreelancerProfile } from "@/lib/page-guards";
+import { monthlyRateBandFromFilter, monthlyRateBandLabel } from "@/lib/rates";
 import { formatDateTime, locationModeLabel, workPreferenceCompleteness } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, SelectField, StatusBadge, TextArea, TextField } from "@/components/ui";
 
@@ -253,6 +254,7 @@ function savedSearchHref(search: SavedSearch) {
 }
 
 function savedSearchSummary(search: SavedSearch) {
+  const rateThreshold = monthlyRateBandFromFilter(search.rate);
   return [
     search.query && `キーワード: ${search.query}`,
     search.remote && "リモート可",
@@ -261,7 +263,7 @@ function savedSearchSummary(search: SavedSearch) {
     search.fit === "skill" && "スキル一致",
     search.fit === "ready" && "応募へ進みやすい",
     search.workload === "light" && "週2-3日",
-    search.rate === "high" && "80万円以上",
+    rateThreshold && monthlyRateBandLabel(rateThreshold),
     search.notificationCadence && `通知: ${alertCadenceLabel(search.notificationCadence)}`,
   ].filter(Boolean).join(" / ") || `働き方: ${locationModeLabel("flexible")}`;
 }

@@ -5,7 +5,12 @@ import { removeSavedJob, saveCurrentJobSearch, saveJobForReview } from "@/lib/ac
 import { alertCadenceLabel } from "@/lib/job-alerts";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead, publicDbReadResult } from "@/lib/public-db";
-import { isHighMonthlyRateText } from "@/lib/rates";
+import {
+  MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN,
+  isMonthlyRateAtLeastText,
+  monthlyRateBandFromFilter,
+  monthlyRateBandLabel,
+} from "@/lib/rates";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { filterRemoteCompatibleJobs } from "@/lib/work-location";
 import {
@@ -54,7 +59,8 @@ export default async function JobsPage({
   const accepting = filters.accepting === "open";
   const directReady = filters.directReady === "ready";
   const workload = filters.workload === "light" ? "light" : "";
-  const rate = filters.rate === "high" ? "high" : "";
+  const rateThreshold = monthlyRateBandFromFilter(filters.rate);
+  const rate = rateThreshold ? String(rateThreshold) : "";
   const candidate = filters.candidate === "fresh" ? "fresh" : "";
   const activeSearchFilterLabels = [
     keyword && `キーワード: ${keyword}`,
@@ -62,7 +68,7 @@ export default async function JobsPage({
     accepting && "受付中のみ",
     directReady && "条件が揃った案件",
     workload === "light" && "週2-3日目安",
-    rate === "high" && "月80万円以上",
+    rateThreshold && monthlyRateBandLabel(rateThreshold),
     candidate === "fresh" && "未対応の候補",
   ].filter(Boolean);
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
@@ -119,7 +125,7 @@ export default async function JobsPage({
     [],
   );
   const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(jobsResult.data) : jobsResult.data;
-  const jobs = rate === "high" ? remoteFilteredJobs.filter((job) => isHighMonthlyRateText(job.rate)) : remoteFilteredJobs;
+  const jobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
     !jobsUnavailable && session?.user?.role === "freelancer"
@@ -365,7 +371,9 @@ export default async function JobsPage({
                   defaultValue={rate}
                 >
                   <option value="">すべて</option>
-                  <option value="high">月80万円以上</option>
+                  {MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN.map((threshold) => (
+                    <option value={threshold} key={threshold}>{monthlyRateBandLabel(threshold)}</option>
+                  ))}
                 </select>
                 <span className="text-xs font-normal text-stone-500">時給・日給は月額換算せず除外</span>
               </label>
@@ -551,7 +559,7 @@ function SavedSearchPanel({
       filters.accepting && "受付中",
       filters.directReady && "条件確認済み",
       filters.workload === "light" && "週2-3日",
-      filters.rate === "high" && "高単価",
+      filters.rate && monthlyRateBandLabel(Number(filters.rate)),
     ].filter(Boolean).join(" ") ||
     "希望条件フィード";
 
@@ -747,11 +755,6 @@ function ProfileDiscoveryShortcuts({
       label: "週2-3日目安",
       href: jobsHref({ q: keyword, remote, accepting: true, workload: "light", sort: "direct", candidate: activeCandidate }),
       active: activeWorkload === "light",
-    },
-    {
-      label: "月80万円以上",
-      href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct", candidate: activeCandidate }),
-      active: activeRate === "high",
     },
     {
       label: "リモート受付中",

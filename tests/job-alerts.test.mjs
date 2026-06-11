@@ -76,7 +76,30 @@ test("daily digest matches wait until the digest window is due", async () => {
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
 });
 
-test("high-rate saved feed alerts use normalized monthly lower bounds", async () => {
+test("saved feed alerts use selected monthly rate bands with normalized lower bounds", async () => {
+  const cases = [
+    { rate: "60", included: "月60万円", excluded: "55〜75万円" },
+    { rate: "80", included: "月額120万円", excluded: "75〜95万円" },
+    { rate: "100", included: "100〜130万円", excluded: "90〜120万円" },
+    { rate: "120", included: "月120万円", excluded: "100〜130万円" },
+  ];
+
+  for (const { rate, included, excluded } of cases) {
+    const includedDb = alertDb({ rate });
+    await evaluateSavedFeedJobAlerts(includedDb, { job: job({ rate: included }) });
+    assert.equal(includedDb.notifications.length, 1, `${included} should match saved feed rate ${rate}`);
+
+    const excludedDb = alertDb({ rate });
+    await evaluateSavedFeedJobAlerts(excludedDb, { job: job({ rate: excluded }) });
+    assert.equal(excludedDb.notifications.length, 0, `${excluded} should not match saved feed rate ${rate}`);
+  }
+
+  const hourlyDb = alertDb({ rate: "60" });
+  await evaluateSavedFeedJobAlerts(hourlyDb, { job: job({ rate: "時給8,000円" }) });
+  assert.equal(hourlyDb.notifications.length, 0);
+});
+
+test("legacy high-rate saved feed alerts continue to mean monthly 80万円以上", async () => {
   const highDb = alertDb({ rate: "high" });
   await evaluateSavedFeedJobAlerts(highDb, { job: job({ rate: "月額120万円" }) });
   assert.equal(highDb.notifications.length, 1);
@@ -84,10 +107,6 @@ test("high-rate saved feed alerts use normalized monthly lower bounds", async ()
   const rangeDb = alertDb({ rate: "high" });
   await evaluateSavedFeedJobAlerts(rangeDb, { job: job({ rate: "75〜95万円" }) });
   assert.equal(rangeDb.notifications.length, 0);
-
-  const hourlyDb = alertDb({ rate: "high" });
-  await evaluateSavedFeedJobAlerts(hourlyDb, { job: job({ rate: "時給8,000円" }) });
-  assert.equal(hourlyDb.notifications.length, 0);
 });
 
 test("remote saved feed alerts use shared work-location semantics", async () => {
