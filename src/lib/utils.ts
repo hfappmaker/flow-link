@@ -297,12 +297,14 @@ export function buildTrustConfidence({
   const conditionCount = [job.rate, job.workload, job.contractPeriod, job.location || job.remotePolicy].filter(Boolean).length;
   const companyStatus = trustStatusForEvidence({
     hasReviewedAt: companyReviewed,
+    now,
     stale: companyStale,
     selfReported: companySelfReported,
     request: companyRequest,
   });
   const paymentStatus = trustStatusForEvidence({
     hasReviewedAt: paymentReviewed,
+    now,
     stale: paymentStale,
     selfReported: paymentSelfReported,
     request: paymentRequest,
@@ -401,11 +403,13 @@ function isTrustEvidenceStale(reviewedAt: Date | string | null | undefined, expi
 
 function trustStatusForEvidence({
   hasReviewedAt,
+  now,
   request,
   selfReported,
   stale,
 }: {
   hasReviewedAt: boolean;
+  now: Date;
   request?: CompanyVerificationRequestInput | null;
   selfReported: boolean;
   stale: boolean;
@@ -413,7 +417,7 @@ function trustStatusForEvidence({
   if (hasReviewedAt && !stale) return "confirmed";
   if (hasReviewedAt && stale) return "stale";
   if (request?.status === "submitted") return "pending";
-  if (request?.status === "confirmed") return request.expiresAt && isTrustEvidenceStale(request.reviewedAt, request.expiresAt, new Date()) ? "stale" : "confirmed";
+  if (request?.status === "confirmed") return request.expiresAt && isTrustEvidenceStale(request.reviewedAt, request.expiresAt, now) ? "stale" : "confirmed";
   if (request?.status === "needs_renewal") return "stale";
   if (request?.status === "rejected") return "rejected";
   return selfReported ? "selfReported" : "missing";
