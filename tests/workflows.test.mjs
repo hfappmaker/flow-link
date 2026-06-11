@@ -22,6 +22,7 @@ const {
   screenApplicationWorkflow,
   saveCompanyJobPostWorkflow,
   sendInterviewMessageWorkflow,
+  parseInteractionFeedbackRating,
   submitInteractionFeedbackWorkflow,
 } = await import("../src/lib/workflows.ts");
 
@@ -177,6 +178,32 @@ const companyJobInput = {
     applicationStatus: ApplicationStatus.open,
   },
 };
+
+function interactionFeedbackInput(overrides = {}) {
+  return {
+    thread: {
+      scheduledAt: new Date("2026-05-02T00:00:00.000Z"),
+      jobApplicationId: "application-1",
+      jobApplication: {
+        jobPostId: "job-1",
+        freelancerProfileId: "freelancer-profile-1",
+        freelancerProfile: { userId: "freelancer-user-1" },
+        jobPost: {
+          companyProfileId: "company-profile-1",
+          companyProfile: { users: [{ userId: "company-auth-user-1" }] },
+        },
+      },
+    },
+    authorUserId: "company-auth-user-1",
+    followThroughRating: 4,
+    collaborationRating: 5,
+    interactionCompleted: true,
+    wouldWorkAgain: true,
+    privateNote: "再依頼したい",
+    moderationStatus: InteractionFeedbackModerationStatus.visible,
+    ...overrides,
+  };
+}
 
 test("company job save enqueues saved-feed alert work without running fanout inline", async () => {
   const db = workflowDb();
@@ -569,31 +596,54 @@ test("feedback edit attempts after 14 days are rejected", async () => {
   await assert.rejects(
     () =>
       submitInteractionFeedbackWorkflow(db, {
-        thread: {
-          scheduledAt: new Date("2026-05-02T00:00:00.000Z"),
-          jobApplicationId: "application-1",
-          jobApplication: {
-            jobPostId: "job-1",
-            freelancerProfileId: "freelancer-profile-1",
-            freelancerProfile: { userId: "freelancer-user-1" },
-            jobPost: {
-              companyProfileId: "company-profile-1",
-              companyProfile: { users: [{ userId: "company-auth-user-1" }] },
-            },
-          },
-        },
-        authorUserId: "company-auth-user-1",
-        followThroughRating: 4,
-        collaborationRating: 5,
-        interactionCompleted: true,
-        wouldWorkAgain: true,
-        privateNote: "再依頼したい",
-        moderationStatus: InteractionFeedbackModerationStatus.visible,
+        ...interactionFeedbackInput(),
         now: new Date("2026-05-16T00:00:00.000Z"),
       }),
     /フィードバックの編集期限を過ぎています。/,
   );
   assert.equal(db.calls.filter(([name]) => name === "interactionFeedback.upsert").length, 0);
+});
+
+test("interaction feedback rating parser accepts only integer ratings from 1 to 5", () => {
+  assert.equal(parseInteractionFeedbackRating("1"), 1);
+  assert.equal(parseInteractionFeedbackRating(5), 5);
+  assert.throws(() => parseInteractionFeedbackRating("0"), /評価は1〜5/);
+  assert.throws(() => parseInteractionFeedbackRating(6), /評価は1〜5/);
+  assert.throws(() => parseInteractionFeedbackRating(3.5), /評価は1〜5/);
+});
+
+test("interaction feedback workflow rejects invalid ratings before writing feedback", async () => {
+  for (const ratings of [
+    { followThroughRating: 0, collaborationRating: 5 },
+    { followThroughRating: 99, collaborationRating: 5 },
+    { followThroughRating: 4.5, collaborationRating: 5 },
+    { followThroughRating: 4, collaborationRating: 0 },
+    { followThroughRating: 4, collaborationRating: 99 },
+    { followThroughRating: 4, collaborationRating: 2.5 },
+  ]) {
+    const db = workflowDb();
+    await assert.rejects(
+      () => submitInteractionFeedbackWorkflow(db, interactionFeedbackInput(ratings)),
+      /評価は1〜5の整数で入力してください。/,
+    );
+    assert.equal(db.calls.filter(([name]) => name === "interactionFeedback.upsert").length, 0);
+    assert.equal(db.calls.length, 0);
+  }
+});
+
+test("interaction feedback workflow persists valid 1 and 5 boundary ratings", async () => {
+  const db = workflowDb();
+
+  await submitInteractionFeedbackWorkflow(db, interactionFeedbackInput({
+    followThroughRating: 1,
+    collaborationRating: 5,
+  }));
+
+  const upsert = db.calls.find(([name]) => name === "interactionFeedback.upsert");
+  assert.equal(upsert[1].create.followThroughRating, 1);
+  assert.equal(upsert[1].create.collaborationRating, 5);
+  assert.equal(upsert[1].update.followThroughRating, 1);
+  assert.equal(upsert[1].update.collaborationRating, 5);
 });
 
 test("submitted verification request can be confirmed with review metadata", async () => {
