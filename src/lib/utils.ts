@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { rateFitTone } from "./rates.ts";
+import { normalizeWorkLocation } from "./work-location.ts";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -828,16 +829,20 @@ function textFitTone(preference?: string | null, jobValue?: string | null): Pref
 }
 
 function locationFitTone(preference: NonNullable<WorkPreferenceInput>, job: PreferenceAwareMatchInput): PreferenceReason["tone"] {
-  const remoteText = `${job.remotePolicy ?? ""} ${job.location ?? ""}`.toLowerCase();
-  if (!remoteText.trim()) return "neutral";
+  const workLocation = normalizeWorkLocation(job);
+  if (workLocation.kind === "unknown") return "neutral";
   if (preference.locationMode === "remote") {
-    return remoteText.includes("リモート") || remoteText.includes("remote") ? "good" : "warn";
+    return workLocation.remoteCompatible ? "good" : "warn";
   }
   if (preference.locationMode === "onsite") {
-    return remoteText.includes("出社") || remoteText.includes("常駐") || remoteText.includes("オンサイト") ? "good" : "neutral";
+    if (workLocation.kind === "onsite_required" || workLocation.kind === "hybrid" || workLocation.kind === "remote_not_allowed") return "good";
+    if (workLocation.kind === "remote_required_or_primary") return "warn";
+    return "neutral";
   }
   if (preference.locationMode === "hybrid") {
-    return remoteText.includes("一部") || remoteText.includes("ハイブリッド") || remoteText.includes("週") ? "good" : "neutral";
+    if (workLocation.kind === "hybrid") return "good";
+    if (workLocation.kind === "onsite_required" || workLocation.kind === "remote_not_allowed") return "warn";
+    return "neutral";
   }
   return "neutral";
 }

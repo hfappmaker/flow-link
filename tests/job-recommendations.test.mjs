@@ -153,6 +153,43 @@ test("recommendation, preference, and company review copy share canonical skill 
   assert.equal(review.nextChecks.includes("必須スキルの補足"), false);
 });
 
+test("work-location preference reasons use normalized remote semantics", () => {
+  const remotePreference = {
+    status: "active",
+    locationMode: "remote",
+    lastConfirmedAt: new Date(),
+  };
+  const hybridPreference = {
+    status: "active",
+    locationMode: "hybrid",
+    lastConfirmedAt: new Date(),
+  };
+
+  const wfhReasons = visiblePreferenceReasons({
+    ...job({ remotePolicy: "在宅可" }),
+    workPreference: remotePreference,
+  }, 6);
+  assert.equal(wfhReasons.find((reason) => reason.label === "働き方に近い")?.tone, "good");
+
+  const remoteNegativeReasons = visiblePreferenceReasons({
+    ...job({ remotePolicy: "リモート不可" }),
+    workPreference: remotePreference,
+  }, 6);
+  assert.equal(remoteNegativeReasons.find((reason) => reason.label === "働き方ミスマッチ")?.tone, "warn");
+
+  const hybridReasons = visiblePreferenceReasons({
+    ...job({ remotePolicy: "週1出社" }),
+    workPreference: hybridPreference,
+  }, 6);
+  assert.equal(hybridReasons.find((reason) => reason.label === "働き方に近い")?.tone, "good");
+
+  const onsiteReasons = visiblePreferenceReasons({
+    ...job({ remotePolicy: "常駐必須" }),
+    workPreference: hybridPreference,
+  }, 6);
+  assert.equal(onsiteReasons.find((reason) => reason.label === "働き方ミスマッチ")?.tone, "warn");
+});
+
 test("saved-job readiness counts use the shared open score and contract thresholds", () => {
   const savedRecommendations = [
     buildJobRecommendation(job({ id: "ready" }), readyContext),
