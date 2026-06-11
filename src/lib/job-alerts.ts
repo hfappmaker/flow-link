@@ -8,8 +8,10 @@ import {
 import { buildJobRecommendation, type JobRecommendationJob } from "./job-recommendations.ts";
 import { jobMatchesSearchQuery } from "./job-search.ts";
 import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter } from "./rates.ts";
+import { getFreelancerReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
 import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
 import { isLightWorkloadText } from "./workload.ts";
+import type { WorkPreferenceInput } from "./utils.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
 // Dispatch workers reclaim processing rows after this lease to recover from crashes.
@@ -36,12 +38,12 @@ type SavedFeed = {
   notificationCadence: JobAlertCadence | string;
 };
 
-type AlertFreelancer = {
+type AlertFreelancer = FreelancerReadinessProfile & {
   id: string;
   userId: string;
   skills?: string | null;
   savedJobSearches: SavedFeed[];
-  workPreference?: Record<string, unknown> | null;
+  workPreference?: WorkPreferenceInput;
 };
 
 type AlertJob = JobRecommendationJob & {
@@ -80,6 +82,8 @@ export async function evaluateSavedFeedJobAlerts(
       workPreference: { is: { status: { not: "inactive" } } },
     },
     include: {
+      careerHistory: true,
+      documents: true,
       savedJobSearches: true,
       workPreference: true,
     },
@@ -113,6 +117,7 @@ export async function evaluateSavedFeedJobAlerts(
     const exactHandledFeedback = feedback.find(
       (signal) => signal.sentiment === RecommendationFeedbackSentiment.negative || signal.reason === "already_handled",
     );
+    const readiness = getFreelancerReadiness(freelancer);
     const suppressionReason = appliedJobIds.has(job.id)
       ? "応募済み"
       : savedJobIds.has(job.id)
@@ -125,6 +130,7 @@ export async function evaluateSavedFeedJobAlerts(
 
     const recommendation = buildJobRecommendation(job, {
       appliedJobIds,
+      freelancerReadinessPercent: readiness.percent,
       freelancerSkills: freelancer.skills,
       recommendationFeedback: feedback,
       savedJobIds,
@@ -132,7 +138,7 @@ export async function evaluateSavedFeedJobAlerts(
     });
 
     for (const feed of activeFeeds) {
-      if (!savedFeedMatchesRecommendation(feed, recommendation)) continue;
+      if (!savedFeedMatchesRecommendation(feed, recommendation, { freelancerReady: readiness.isReady })) continue;
       const fitReasons = alertFitReasons(recommendation);
       const trustWarning = alertTrustWarning(recommendation);
       const cadence = normalizeAlertCadence(feed.notificationCadence);
@@ -361,14 +367,18 @@ export function alertCadenceLabel(cadence?: JobAlertCadence | string | null) {
   return cadence ? labels[cadence] ?? String(cadence) : labels.immediate;
 }
 
-function savedFeedMatchesRecommendation(feed: SavedFeed, recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
+function savedFeedMatchesRecommendation(
+  feed: SavedFeed,
+  recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>,
+  { freelancerReady }: { freelancerReady: boolean },
+) {
   const job = recommendation.job;
   if (feed.acceptingOnly && !recommendation.isOpen) return false;
   if (feed.remote && !isRemoteCompatibleWorkLocation(job)) return false;
   if (feed.query && !jobMatchesSearchQuery(feed.query, job)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
-  if (feed.fit === "ready" && !recommendation.isReadyToApply) return false;
+  if (feed.fit === "ready" && (!freelancerReady || !recommendation.isReadyToApply)) return false;
   if (feed.workload === "light" && !isLightWorkloadText(job.workload)) return false;
   const rateThreshold = monthlyRateBandFromFilter(feed.rate);
   if (rateThreshold !== null && !isMonthlyRateAtLeastText(job.rate, rateThreshold)) return false;
