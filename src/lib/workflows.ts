@@ -12,7 +12,15 @@ import {
   type JobApplicationStatus,
   type PrismaClient,
 } from "@prisma/client";
-import { getApplicationReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
+import { enqueueSavedFeedJobAlertDispatch, shouldDispatchSavedFeedJobAlerts } from "./job-alerts.ts";
+import {
+  getApplicationReadiness,
+  getJobPublishingReadiness,
+  shouldHoldJobAsDraftForPublishing,
+  type CompanyPublishingReadinessInput,
+  type FreelancerReadinessProfile,
+  type JobPublishingReadinessInput,
+} from "./readiness.ts";
 import { validatePostInterviewOutcomePolicy } from "./post-interview-outcomes.ts";
 import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
@@ -22,11 +30,53 @@ type WorkflowDb = Pick<
   | "companySafetyReport"
   | "companyVerificationRequest"
   | "freelancerProfile"
+  | "jobAlertDispatch"
   | "jobPost"
   | "jobApplication"
   | "interactionFeedback"
   | "postInterviewOutcome"
 >;
+
+type SaveCompanyJobPostInput = {
+  companyProfileId: string;
+  companyProfile: CompanyPublishingReadinessInput | null;
+  jobPostId?: string | null;
+  data: JobPublishingReadinessInput & {
+    companyProfileId: string;
+    title: string;
+    description: string;
+    status: JobPostStatus;
+    applicationStatus: ApplicationStatus;
+  };
+};
+
+export async function saveCompanyJobPostWorkflow(db: WorkflowDb, input: SaveCompanyJobPostInput) {
+  const data = { ...input.data };
+  const publishReadiness = getJobPublishingReadiness(data, input.companyProfile);
+  const heldAsDraft = shouldHoldJobAsDraftForPublishing(data.status, publishReadiness);
+  if (heldAsDraft) {
+    data.status = JobPostStatus.draft;
+    data.applicationStatus = ApplicationStatus.paused;
+  }
+
+  let savedJob: typeof data & { id: string };
+  await db.$transaction(async (tx) => {
+    if (input.jobPostId) {
+      savedJob = await tx.jobPost.update({
+        where: { id: input.jobPostId, companyProfileId: input.companyProfileId },
+        data,
+      });
+    } else {
+      savedJob = await tx.jobPost.create({ data });
+    }
+
+    if (shouldDispatchSavedFeedJobAlerts(savedJob)) {
+      await enqueueSavedFeedJobAlertDispatch(tx, { jobPostId: savedJob.id });
+    }
+  });
+
+  return { savedJob: savedJob!, heldAsDraft };
+}
 
 type ApplyToJobInput = {
   freelancerProfileId: string;

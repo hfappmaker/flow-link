@@ -2,10 +2,8 @@
 
 import { put } from "@vercel/blob";
 import {
-  ApplicationStatus,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
-  JobPostStatus,
   Prisma,
   type UserRole,
 } from "@prisma/client";
@@ -14,7 +12,7 @@ import { AuthError } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth, authorizeCredentials, signIn, signOut } from "@/lib/auth";
-import { evaluateSavedFeedJobAlerts, normalizeAlertCadence } from "@/lib/job-alerts";
+import { normalizeAlertCadence } from "@/lib/job-alerts";
 import {
   parseApplicationStatus,
   parseCompanySafetyReportType,
@@ -35,7 +33,7 @@ import {
   recommendationFeedbackSentiment,
 } from "@/lib/recommendation-feedback";
 import { monthlyRateBandFilterValue } from "@/lib/rates";
-import { getApplicationReadiness, getJobPublishingReadiness, shouldHoldJobAsDraftForPublishing } from "@/lib/readiness";
+import { getApplicationReadiness } from "@/lib/readiness";
 import { loginErrorUrl } from "@/lib/registration-intent";
 import { toOptionalText, toText } from "@/lib/utils";
 import {
@@ -44,6 +42,7 @@ import {
   recordCompanyPostInterviewOutcomeWorkflow,
   recordFreelancerPostInterviewOutcomeWorkflow,
   screenApplicationWorkflow,
+  saveCompanyJobPostWorkflow,
   sendInterviewMessageWorkflow,
   submitInteractionFeedbackWorkflow,
 } from "@/lib/workflows";
@@ -435,26 +434,12 @@ export async function saveJobPost(formData: FormData) {
   if (!data.title || !data.description) {
     throw new Error("タイトルと業務内容を入力してください。");
   }
-  const publishReadiness = getJobPublishingReadiness(data, companyUser.companyProfile);
-  const heldAsDraft = shouldHoldJobAsDraftForPublishing(requestedStatus, publishReadiness);
-  if (heldAsDraft) {
-    data.status = JobPostStatus.draft;
-    data.applicationStatus = ApplicationStatus.paused;
-  }
-
-  let savedJob;
-  if (id) {
-    savedJob = await prisma.jobPost.update({
-      where: { id, companyProfileId: companyUser.companyProfileId },
-      data,
-    });
-  } else {
-    savedJob = await prisma.jobPost.create({ data });
-  }
-
-  if (savedJob.status === JobPostStatus.published && savedJob.applicationStatus === ApplicationStatus.open) {
-    await evaluateSavedFeedJobAlerts(prisma, { jobPostId: savedJob.id });
-  }
+  const { heldAsDraft } = await saveCompanyJobPostWorkflow(prisma, {
+    companyProfileId: companyUser.companyProfileId,
+    companyProfile: companyUser.companyProfile,
+    jobPostId: id,
+    data,
+  });
 
   revalidatePath("/company/jobs");
   revalidatePath("/freelancer/notifications");

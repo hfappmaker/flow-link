@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { JobAlertCadence, JobAlertMatchStatus, RecommendationFeedbackSentiment } from "@prisma/client";
+import { JobAlertCadence, JobAlertDispatchStatus, JobAlertMatchStatus, RecommendationFeedbackSentiment } from "@prisma/client";
 
 const {
+  dispatchPendingSavedFeedJobAlerts,
+  enqueueSavedFeedJobAlertDispatch,
   evaluateSavedFeedJobAlerts,
   normalizeAlertCadence,
   sendDueJobAlertDigests,
 } = await import("../src/lib/job-alerts.ts");
 
 const migrationSql = await readFile("prisma/migrations/20260609154000_add_saved_feed_job_alerts/migration.sql", "utf8");
+const dispatchMigrationSql = await readFile("prisma/migrations/20260611160000_add_job_alert_dispatches/migration.sql", "utf8");
 const schema = await readFile("prisma/schema.prisma", "utf8");
 
 test("saved feed alert migration adds delivery state and notification links", () => {
@@ -20,6 +23,14 @@ test("saved feed alert migration adds delivery state and notification links", ()
   assert.match(schema, /enum JobAlertCadence/);
   assert.match(schema, /model JobAlertMatch/);
   assert.match(schema, /actionUrl\s+String\?\s+@map\("action_url"\)/);
+});
+
+test("saved feed alert dispatch migration adds a per-job outbox", () => {
+  assert.match(dispatchMigrationSql, /CREATE TYPE "JobAlertDispatchStatus"/);
+  assert.match(dispatchMigrationSql, /CREATE TABLE "job_alert_dispatches"/);
+  assert.match(dispatchMigrationSql, /UNIQUE INDEX "job_alert_dispatches_job_post_id_key"/);
+  assert.match(schema, /model JobAlertDispatch/);
+  assert.match(schema, /jobPostId\s+String\s+@unique @map\("job_post_id"\)/);
 });
 
 test("alert cadence parser maps explicit and legacy text values", () => {
@@ -74,6 +85,44 @@ test("daily digest matches wait until the digest window is due", async () => {
   assert.equal(due.notified, 1);
   assert.equal(db.notifications[0].type, "job_alert_digest");
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
+});
+
+test("dispatch boundary evaluates one queued job without sending unrelated digests", async () => {
+  const db = alertDb({ cadence: JobAlertCadence.daily });
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+
+  const result = await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-10T00:00:00Z") });
+
+  assert.deepEqual(result, { processed: 1, completed: 1, failed: 0 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.completed);
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches[0].status, JobAlertMatchStatus.pending_digest);
+});
+
+test("dispatch boundary records failures and retries idempotently", async () => {
+  const db = alertDb({ failNotifications: true });
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+
+  const failed = await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-09T00:00:00Z") });
+  assert.deepEqual(failed, { processed: 1, completed: 0, failed: 1 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.failed);
+  assert.equal(db.dispatches[0].attempts, 1);
+  assert.match(db.dispatches[0].lastError, /notification outage/);
+  assert.equal(db.notifications.length, 0);
+
+  db.failNotifications = false;
+  const retried = await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-09T01:00:00Z") });
+  assert.deepEqual(retried, { processed: 1, completed: 1, failed: 0 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.completed);
+  assert.equal(db.dispatches[0].attempts, 2);
+  assert.equal(db.notifications.length, 1);
+
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+  assert.equal(db.dispatches.length, 1);
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.pending);
+
+  await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-09T02:00:00Z") });
+  assert.equal(db.notifications.length, 1);
 });
 
 test("saved feed alerts use selected monthly rate bands with normalized lower bounds", async () => {
@@ -237,10 +286,12 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript" } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", failNotifications = false } = {}) {
   const state = {
+    dispatches: [],
     matches: [],
     notifications: [],
+    failNotifications,
   };
   const freelancer = {
     id: "freelancer-1",
@@ -273,6 +324,15 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
   };
 
   return {
+    get dispatches() {
+      return state.dispatches;
+    },
+    get failNotifications() {
+      return state.failNotifications;
+    },
+    set failNotifications(value) {
+      state.failNotifications = value;
+    },
     get matches() {
       return state.matches;
     },
@@ -296,9 +356,52 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
     },
     notification: {
       create: async ({ data }) => {
+        if (state.failNotifications) throw new Error("notification outage");
         const notification = { id: `notification-${state.notifications.length + 1}`, createdAt: new Date(), ...data };
         state.notifications.push(notification);
         return notification;
+      },
+    },
+    jobAlertDispatch: {
+      upsert: async ({ where, create, update }) => {
+        const existing = state.dispatches.find((dispatch) => dispatch.jobPostId === where.jobPostId);
+        if (existing) {
+          Object.assign(existing, Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)), {
+            updatedAt: new Date(),
+          });
+          return existing;
+        }
+        const dispatch = {
+          id: `dispatch-${state.dispatches.length + 1}`,
+          jobPostId: create.jobPostId,
+          status: create.status ?? JobAlertDispatchStatus.pending,
+          attempts: create.attempts ?? 0,
+          lastError: create.lastError ?? null,
+          lockedAt: create.lockedAt ?? null,
+          processedAt: create.processedAt ?? null,
+          createdAt: new Date("2026-06-09T00:00:00Z"),
+          updatedAt: new Date("2026-06-09T00:00:00Z"),
+        };
+        state.dispatches.push(dispatch);
+        return dispatch;
+      },
+      findMany: async ({ where, orderBy, take }) => {
+        void orderBy;
+        return state.dispatches
+          .filter((dispatch) => where.status.in.includes(dispatch.status))
+          .slice(0, take);
+      },
+      update: async ({ where, data }) => {
+        const dispatch = state.dispatches.find((item) => item.id === where.id);
+        Object.assign(dispatch, {
+          ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined && typeof value !== "object")),
+          attempts: data.attempts?.increment ? dispatch.attempts + data.attempts.increment : data.attempts ?? dispatch.attempts,
+          lockedAt: data.lockedAt ?? null,
+          processedAt: data.processedAt ?? dispatch.processedAt,
+          lastError: data.lastError ?? null,
+          updatedAt: new Date(),
+        });
+        return dispatch;
       },
     },
     jobAlertMatch: {
