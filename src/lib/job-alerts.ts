@@ -5,8 +5,8 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { buildJobRecommendation, type JobRecommendationJob } from "./job-recommendations.ts";
+import { jobMatchesSearchQuery } from "./job-search.ts";
 import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter } from "./rates.ts";
-import { normalizedTextMatchesQuery } from "./utils.ts";
 import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
@@ -254,17 +254,9 @@ export function alertCadenceLabel(cadence?: JobAlertCadence | string | null) {
 
 function savedFeedMatchesRecommendation(feed: SavedFeed, recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
   const job = recommendation.job;
-  const text = [
-    job.title,
-    job.description,
-    job.requiredSkills,
-    job.preferredSkills,
-    job.location,
-    job.companyProfile?.name,
-  ].filter(Boolean).join(" ").toLowerCase();
   if (feed.acceptingOnly && !recommendation.isOpen) return false;
   if (feed.remote && !isRemoteCompatibleWorkLocation(job)) return false;
-  if (feed.query && !normalizedTextMatchesQuery(feed.query, text)) return false;
+  if (feed.query && !jobMatchesSearchQuery(feed.query, job)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
   if (feed.fit === "ready" && !recommendation.isReadyToApply) return false;
