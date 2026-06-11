@@ -270,6 +270,27 @@ test("saved feed alerts match canonical skill aliases without raw substring frag
   assert.equal(nextWordDb.notifications.length, 0);
 });
 
+test("direct-ready saved feed alerts require publish-ready company, title, and trimmed scope", async () => {
+  const readyDb = alertDb({ directReadyOnly: true });
+  await evaluateSavedFeedJobAlerts(readyDb, { job: job() });
+  assert.equal(readyDb.notifications.length, 1);
+
+  const placeholderCompanyDb = alertDb({ directReadyOnly: true });
+  await evaluateSavedFeedJobAlerts(placeholderCompanyDb, { job: job({ companyProfile: { name: "未設定の企業", verificationRequests: [] } }) });
+  assert.equal(placeholderCompanyDb.notifications.length, 0);
+  assert.equal(placeholderCompanyDb.matches.length, 0);
+
+  const missingTitleDb = alertDb({ directReadyOnly: true });
+  await evaluateSavedFeedJobAlerts(missingTitleDb, { job: job({ title: "" }) });
+  assert.equal(missingTitleDb.notifications.length, 0);
+  assert.equal(missingTitleDb.matches.length, 0);
+
+  const blankDescriptionDb = alertDb({ directReadyOnly: true });
+  await evaluateSavedFeedJobAlerts(blankDescriptionDb, { job: job({ description: "   " }) });
+  assert.equal(blankDescriptionDb.notifications.length, 0);
+  assert.equal(blankDescriptionDb.matches.length, 0);
+});
+
 function job(overrides = {}) {
   return {
     id: overrides.id ?? "job-1",
@@ -295,7 +316,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", failNotifications = false } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -322,7 +343,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         query,
         remote: true,
         acceptingOnly: true,
-        directReadyOnly: false,
+        directReadyOnly,
         fit: "skill",
         workload,
         rate,

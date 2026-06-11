@@ -137,7 +137,8 @@ export default async function JobsPage({
   const keywordFilteredJobs = keyword && workload !== "light" ? jobsResult.data.matches : filterJobsBySearchQuery(jobsResult.data.matches, keyword);
   const workloadFilteredJobs = workload === "light" ? filterLightWorkloadJobs(keywordFilteredJobs) : keywordFilteredJobs;
   const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(workloadFilteredJobs) : workloadFilteredJobs;
-  const jobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
+  const rateFilteredJobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
+  const jobs = directReady ? rateFilteredJobs.filter((job) => directContractChecklist(job).isReady) : rateFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
     !jobsUnavailable && session?.user?.role === "freelancer"
