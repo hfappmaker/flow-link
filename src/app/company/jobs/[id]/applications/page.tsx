@@ -5,7 +5,7 @@ import { requireCompanyUser } from "@/lib/page-guards";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
-import { applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
+import { applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime, jobStatusLabel } from "@/lib/utils";
 import {
   applicantKeywordCandidateWhere,
   applicantMatchesSearchQuery,
@@ -136,7 +136,7 @@ export default async function JobApplicationsPage({
       <TopNav sessionRole={user.role} />
       <div className="mx-auto max-w-6xl px-5 py-8">
         <PageHeader title="応募者一覧" description={job?.title} />
-        {job && (
+        {job && total > 0 && (
           <Card className="mt-6">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
               <form className="grid gap-3 md:grid-cols-[1fr_150px_150px_auto_auto]" action={`/company/jobs/${job.id}/applications`}>
@@ -227,7 +227,19 @@ export default async function JobApplicationsPage({
           {reviewedApplications.map(({ application, responseState, review }) => (
             <ApplicationCard application={application} key={application.id} responseState={responseState} review={review} />
           ))}
-          {job && reviewedApplications.length === 0 && (
+          {job && total === 0 && (
+            <EmptyState
+              title="応募はまだ届いていません。"
+              description={`現在の案件は${jobStatusLabel(job.status)} / ${job.applicationStatus === "open" ? "応募受付中" : "受付停止中"}です。応募前に判断しやすい条件になっているか確認し、必要なら案件一覧で他の募集状況も確認してください。`}
+              action={
+                <div className="flex flex-col justify-center gap-2 sm:flex-row">
+                  <Link className="btn btn-primary" href={`/company/jobs/${job.id}`}>案件条件を確認</Link>
+                  <Link className="btn btn-secondary" href="/company/jobs">案件一覧へ</Link>
+                </div>
+              }
+            />
+          )}
+          {job && total > 0 && reviewedApplications.length === 0 && (
             <EmptyState
               title="条件に合う応募者はいません。"
               description="ステータスや検索キーワードを変えて確認してください。"
