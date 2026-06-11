@@ -6,6 +6,11 @@ import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
 import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
+import {
+  COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT,
+  applicantKeywordCandidateWhere,
+  filterApplicantsBySearchQuery,
+} from "@/lib/company-applicant-search";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -37,20 +42,10 @@ export default async function JobApplicationsPage({
   const readyOnly = filters.ready === "interview";
   const selectedSort = filters.sort === "new" ? "new" : "review";
   const { user, companyUser } = await requireCompanyUser();
+  const keywordCandidateWhere = applicantKeywordCandidateWhere(keyword);
   const applicationWhere: Prisma.JobApplicationWhereInput = {
     ...(selectedStatus !== "all" ? { status: selectedStatus } : {}),
-    ...(keyword
-      ? {
-          OR: [
-            { freelancerProfile: { fullName: { contains: keyword, mode: "insensitive" } } },
-            { freelancerProfile: { desiredOccupation: { contains: keyword, mode: "insensitive" } } },
-            { freelancerProfile: { skills: { contains: keyword, mode: "insensitive" } } },
-            { freelancerProfile: { preferredLocation: { contains: keyword, mode: "insensitive" } } },
-            { proposalMessage: { contains: keyword, mode: "insensitive" } },
-            { proposedStart: { contains: keyword, mode: "insensitive" } },
-          ],
-        }
-      : {}),
+    ...(keywordCandidateWhere ?? {}),
   };
   const job = await prisma.jobPost.findFirst({
     where: { id, companyProfileId: companyUser.companyProfileId },
@@ -67,6 +62,7 @@ export default async function JobApplicationsPage({
           postInterviewOutcome: true,
         },
         orderBy: { appliedAt: "desc" },
+        ...(keyword ? { take: COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT } : {}),
       },
       _count: { select: { applications: true } },
     },
@@ -80,29 +76,34 @@ export default async function JobApplicationsPage({
     : [];
   const countByStatus = new Map(counts.map((item) => [item.status, item._count.status]));
   const total = job?._count.applications ?? 0;
+  const candidateApplications = job ? filterApplicantsBySearchQuery(job.applications, keyword) : [];
   const reviewedApplications =
-    job?.applications
-      .map((application) => ({
-        application,
-        responseState: buildApplicationResponseState(application),
-        review: buildApplicationReview({ ...application, jobPost: job }),
-      }))
-      .filter(({ review }) => !readyOnly || review.isInterviewReady)
-      .sort((a, b) => {
-        if (selectedSort === "review") {
-          return (
-            b.responseState.priorityBoost - a.responseState.priorityBoost ||
-            b.review.interviewReadinessPercent - a.review.interviewReadinessPercent ||
-            b.application.appliedAt.getTime() - a.application.appliedAt.getTime()
-          );
-        }
-        return b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
-      }) ?? [];
+    job
+      ? candidateApplications
+          .map((application) => ({
+            application,
+            responseState: buildApplicationResponseState(application),
+            review: buildApplicationReview({ ...application, jobPost: job }),
+          }))
+          .filter(({ review }) => !readyOnly || review.isInterviewReady)
+          .sort((a, b) => {
+            if (selectedSort === "review") {
+              return (
+                b.responseState.priorityBoost - a.responseState.priorityBoost ||
+                b.review.interviewReadinessPercent - a.review.interviewReadinessPercent ||
+                b.application.appliedAt.getTime() - a.application.appliedAt.getTime()
+              );
+            }
+            return b.application.appliedAt.getTime() - a.application.appliedAt.getTime();
+          })
+      : [];
   const appliedReviews =
-    job?.applications.map((application) => ({
-      responseState: buildApplicationResponseState(application),
-      review: buildApplicationReview({ ...application, jobPost: job }),
-    })) ?? [];
+    job
+      ? candidateApplications.map((application) => ({
+          responseState: buildApplicationResponseState(application),
+          review: buildApplicationReview({ ...application, jobPost: job }),
+        }))
+      : [];
   const interviewReadyCount = appliedReviews.filter(({ review }) => review.isInterviewReady).length;
   const needsCheckCount = appliedReviews.filter(({ review }) => review.nextChecks.length > 0).length;
   const responseDueCount = appliedReviews.filter(({ responseState }) => responseState.priorityBoost >= 15).length;
