@@ -589,7 +589,7 @@ export default async function InterviewPage({
                 </form>
               ) : (
                 <p className="mt-4 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-                  面談日時が確定したやりとりだけフィードバックできます。見送りのみ、または実際の相互作用がない応募は公開評価に使いません。
+                  面談日時が確定したやりとりだけフィードバックできます。面談なしの見送りや、完了したメッセージ交換・選考フォローがない応募は公開評価に使いません。
                 </p>
               )}
             </Card>
