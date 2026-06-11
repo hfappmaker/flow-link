@@ -1,7 +1,8 @@
 import { saveCompanyProfile, submitCompanyVerificationRequest } from "@/lib/actions";
 import { requireCompanyUser } from "@/lib/page-guards";
 import { buildTrustConfidence, COMPANY_VERIFICATION_RENEWAL_DAYS, formatDateTime, latestVerificationRequest, type CompanyVerificationKindText } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, TextField, TextArea, SelectField, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, TextField, TextArea, StatusBadge } from "@/components/ui";
+import { CompanyVerificationForm } from "./verification-form";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,12 @@ export default async function CompanyProfilePage({
         {params.verification === "submitted" && (
           <div className="mt-6 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
             確認リクエストを送信しました。確認中の項目は、フリーランス側で「確認リクエスト中」と表示されます。
+          </div>
+        )}
+        {params.verification === "missing-payment-policy-evidence" && (
+          <div className="mt-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="alert">
+            支払い・契約方針確認リクエストを送信するには、契約条件の根拠、請求・支払い方針の根拠、外部支払い・不審依頼への対応方針を入力してください。
+            フリーランスが契約・支払い期待値とFlow Link外の支払いリスクを応募前に判断できるようにするため必要です。
           </div>
         )}
         <Card className="mt-6">
@@ -91,57 +98,13 @@ export default async function CompanyProfilePage({
           <p className="mt-1 text-sm leading-6 text-stone-600">
             会社実在性と支払い・契約方針は別々に確認されます。支払い・契約方針の確認には、契約条件、請求・支払いの根拠、外部支払い依頼への対応方針が必要です。
           </p>
-          <form action={submitCompanyVerificationRequest} className="mt-4 grid gap-4">
-            <SelectField name="kind" label="確認したい項目" defaultValue="company_identity">
-              <option value="company_identity">会社情報・公開Web確認</option>
-              <option value="payment_policy">支払い・契約方針確認</option>
-            </SelectField>
-            <TextField
-              name="publicEvidenceUrl"
-              label="公開根拠URL"
-              defaultValue={company.websiteUrl}
-              required
-              placeholder="会社サイト、採用ページ、公開プロフィールなど"
-            />
-            <TextArea
-              name="contactEvidence"
-              label="連絡窓口の根拠"
-              defaultValue={company.contactTeam}
-              required
-              maxLength={1000}
-              placeholder="業務用メール、部署名、契約や面談条件を確認できる担当範囲"
-            />
-            <TextArea
-              name="contractEvidence"
-              label="契約条件の根拠"
-              maxLength={1000}
-              placeholder="契約主体、契約書ひな型の確認範囲、面談後に確定する条件"
-            />
-            <TextArea
-              name="paymentEvidence"
-              label="請求・支払い方針の根拠"
-              defaultValue={company.paymentPolicy}
-              maxLength={1000}
-              placeholder="締め日、支払い時期、検収、請求書の宛先、問い合わせ窓口"
-            />
-            <TextArea
-              name="offPlatformPolicy"
-              label="外部支払い・不審依頼への対応方針"
-              maxLength={1000}
-              placeholder="Flow Link外での前払い、立替、暗号資産、個人口座への誘導をしない方針など"
-            />
-            <TextArea
-              name="evidenceSummary"
-              label="提出内容の要約"
-              required
-              maxLength={1000}
-              placeholder="Flow Linkに確認してほしい範囲と、フリーランスへ表示してよい説明"
-            />
-            <div className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-              未入力の必須根拠がある場合は送信されません。確認結果は、確認範囲、理由コード、確認日、有効期限、更新要否として記録されます。
-            </div>
-            <button className="btn btn-primary" type="submit">確認リクエストを送信</button>
-          </form>
+          <CompanyVerificationForm
+            action={submitCompanyVerificationRequest}
+            defaultContactEvidence={company.contactTeam}
+            defaultKind={params.verification === "missing-payment-policy-evidence" ? "payment_policy" : "company_identity"}
+            defaultPaymentEvidence={company.paymentPolicy}
+            defaultPublicEvidenceUrl={company.websiteUrl}
+          />
         </Card>
         {company.verificationRequests.length > 0 && (
           <Card className="mt-6">
