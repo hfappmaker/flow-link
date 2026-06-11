@@ -43,7 +43,7 @@ export default async function NotificationsPage() {
             </Card>
           ))}
           {notifications.length === 0 && (
-            <EmptyState title="通知はまだありません。" description="応募結果や面談調整の更新が届くと、ここに表示されます。" />
+            <EmptyState title="通知はまだありません。" description="保存フィードに一致した新着案件、応募結果、面談調整の更新が届くとここに表示されます。" />
           )}
         </div>
       </div>
