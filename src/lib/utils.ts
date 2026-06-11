@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { clsx, type ClassValue } from "clsx";
 import { rateFitTone } from "./rates.ts";
+import { getJobPublishingReadiness } from "./readiness.ts";
 import { normalizeWorkLocation } from "./work-location.ts";
 import { workloadFitTone } from "./workload.ts";
 
@@ -349,6 +350,7 @@ export function formatOpenings(value: number | null | undefined) {
 }
 
 type DirectContractChecklistInput = {
+  title?: string | null;
   description?: string | null;
   requiredSkills?: string | null;
   rate?: string | null;
@@ -358,23 +360,46 @@ type DirectContractChecklistInput = {
   contractTerms?: string | null;
   location?: string | null;
   remotePolicy?: string | null;
+  companyProfile?: {
+    name?: string | null;
+  } | null;
 };
 
-type DirectContractChecklistField = keyof DirectContractChecklistInput;
+type DirectContractChecklistField = Exclude<keyof DirectContractChecklistInput, "companyProfile">;
+
+const BLANK_DIRECT_CONTRACT_FIELD_VALUES = ["", " ", "  ", "   ", "\t", "\n", "\r\n"];
 
 function directContractFieldPresentWhere(field: DirectContractChecklistField): Prisma.JobPostWhereInput {
-  if (field === "description") {
-    return { [field]: { not: "" } };
+  if (field === "description" || field === "title") {
+    return {
+      AND: [{ [field]: { not: "" } }, { NOT: [{ [field]: { in: BLANK_DIRECT_CONTRACT_FIELD_VALUES } }] }],
+    };
   }
 
   return {
-    AND: [{ [field]: { not: null } }, { [field]: { not: "" } }],
+    AND: [
+      { [field]: { not: null } },
+      { [field]: { not: "" } },
+      { NOT: [{ [field]: { in: BLANK_DIRECT_CONTRACT_FIELD_VALUES } }] },
+    ],
   };
 }
 
 export function directContractReadyJobWhere() {
   return {
     AND: [
+      {
+        companyProfile: {
+          is: {
+            AND: [
+              { name: { not: "" } },
+              { name: { not: "未設定の企業" } },
+              { NOT: [{ name: { in: BLANK_DIRECT_CONTRACT_FIELD_VALUES } }] },
+            ],
+          },
+        },
+      },
+      directContractFieldPresentWhere("title"),
       directContractFieldPresentWhere("description"),
       directContractFieldPresentWhere("requiredSkills"),
       directContractFieldPresentWhere("rate"),
@@ -390,47 +415,7 @@ export function directContractReadyJobWhere() {
 }
 
 export function directContractChecklist(job: DirectContractChecklistInput) {
-  const items = [
-    {
-      key: "scope",
-      label: "業務範囲",
-      detail: "業務内容と必須スキルで、任せたい役割が判断できる",
-      done: Boolean(job.description && job.requiredSkills),
-    },
-    {
-      key: "compensation",
-      label: "報酬・支払い",
-      detail: "単価と契約・支払い条件が提示されている",
-      done: Boolean(job.rate && job.contractTerms),
-    },
-    {
-      key: "workload",
-      label: "稼働条件",
-      detail: "稼働率と契約期間が応募前に確認できる",
-      done: Boolean(job.workload && job.contractPeriod),
-    },
-    {
-      key: "process",
-      label: "選考フロー",
-      detail: "面談回数や判断までの流れが明記されている",
-      done: Boolean(job.selectionFlow),
-    },
-    {
-      key: "place",
-      label: "働き方",
-      detail: "勤務地またはリモート条件が明記されている",
-      done: Boolean(job.location || job.remotePolicy),
-    },
-  ];
-  const completed = items.filter((item) => item.done).length;
-
-  return {
-    items,
-    completed,
-    total: items.length,
-    percent: Math.round((completed / items.length) * 100),
-    isReady: completed === items.length,
-  };
+  return getJobPublishingReadiness(job, job.companyProfile);
 }
 
 export const COMPANY_VERIFICATION_RENEWAL_DAYS = 180;
@@ -451,6 +436,7 @@ export type CompanyVerificationRequestInput = {
 };
 
 export type CompanyTrustInput = {
+  name?: string | null;
   description?: string | null;
   websiteUrl?: string | null;
   contactTeam?: string | null;

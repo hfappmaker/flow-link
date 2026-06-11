@@ -39,6 +39,7 @@ function job(overrides = {}) {
     applicationStatus: value("applicationStatus", "open"),
     createdAt: value("createdAt", "2026-06-01T00:00:00.000Z"),
     updatedAt: value("updatedAt", "2026-06-01T00:00:00.000Z"),
+    companyProfile: value("companyProfile", { name: "Flow Link株式会社" }),
   };
 }
 
@@ -56,9 +57,14 @@ function matchesWhere(candidate, where) {
   return Object.entries(where).every(([key, value]) => {
     if (key === "AND") return value.every((condition) => matchesWhere(candidate, condition));
     if (key === "OR") return value.some((condition) => matchesWhere(candidate, condition));
+    if (key === "NOT") return value.every((condition) => !matchesWhere(candidate, condition));
+    if (key === "companyProfile" && value?.is) return matchesWhere(candidate.companyProfile, value.is);
     if (typeof value === "object" && value !== null && Object.hasOwn(value, "not")) {
       if (value.not === "") return typeof candidate[key] === "string" && candidate[key] !== "";
       return candidate[key] !== value.not;
+    }
+    if (typeof value === "object" && value !== null && Object.hasOwn(value, "in")) {
+      return value.in.includes(candidate[key]);
     }
     return candidate[key] === value;
   });
@@ -170,9 +176,12 @@ test("ready-to-apply requires score and contract readiness thresholds", () => {
 test("public direct-ready query boundary matches direct contract checklist", () => {
   const candidates = [
     job({ id: "ready" }),
+    job({ id: "missing-company", companyProfile: { name: "未設定の企業" } }),
+    job({ id: "missing-title", title: "" }),
     job({ id: "missing-description", description: null }),
     job({ id: "browse-only-draft", description: null, requiredSkills: null, rate: null }),
     job({ id: "empty-description", description: "" }),
+    job({ id: "blank-description", description: "   " }),
   ];
 
   assert.deepEqual(
@@ -180,6 +189,42 @@ test("public direct-ready query boundary matches direct contract checklist", () 
     candidates.filter((candidate) => directContractChecklist(candidate).percent === 100).map(({ id }) => id),
   );
   assert.deepEqual(candidates.filter(matchesDirectContractReadyWhere).map(({ id }) => id), ["ready"]);
+  assert.deepEqual(candidates.map(({ id }) => id), [
+    "ready",
+    "missing-company",
+    "missing-title",
+    "missing-description",
+    "browse-only-draft",
+    "empty-description",
+    "blank-description",
+  ]);
+});
+
+test("public readiness uses publish readiness semantics for company, title, and trimmed fields", () => {
+  const ready = directContractChecklist(job());
+  assert.equal(ready.percent, 100);
+  assert.equal(ready.isReady, true);
+
+  const placeholderCompany = directContractChecklist(job({ companyProfile: { name: "未設定の企業" } }));
+  assert.equal(placeholderCompany.isReady, false);
+  assert.deepEqual(
+    placeholderCompany.missingRequired.map((item) => item.label),
+    ["企業名"],
+  );
+
+  const missingTitle = directContractChecklist(job({ title: "" }));
+  assert.equal(missingTitle.isReady, false);
+  assert.deepEqual(
+    missingTitle.missingRequired.map((item) => item.label),
+    ["案件名"],
+  );
+
+  const blankDescription = directContractChecklist(job({ description: "   " }));
+  assert.equal(blankDescription.isReady, false);
+  assert.deepEqual(
+    blankDescription.missingRequired.map((item) => item.label),
+    ["業務範囲"],
+  );
 });
 
 test("public direct-ready query is accepted by the Prisma client", async (t) => {
