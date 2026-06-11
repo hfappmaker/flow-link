@@ -8,6 +8,7 @@ import { buildJobRecommendation, type JobRecommendationJob } from "./job-recomme
 import { jobMatchesSearchQuery } from "./job-search.ts";
 import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter } from "./rates.ts";
 import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
+import { isLightWorkloadText } from "./workload.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
 
@@ -260,7 +261,7 @@ function savedFeedMatchesRecommendation(feed: SavedFeed, recommendation: ReturnT
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
   if (feed.fit === "ready" && !recommendation.isReadyToApply) return false;
-  if (feed.workload === "light" && !/(週2|週3|副業|0\.4|0\.5|40%|50%)/i.test(job.workload ?? "")) return false;
+  if (feed.workload === "light" && !isLightWorkloadText(job.workload)) return false;
   const rateThreshold = monthlyRateBandFromFilter(feed.rate);
   if (rateThreshold !== null && !isMonthlyRateAtLeastText(job.rate, rateThreshold)) return false;
   return recommendation.directScore >= 45 || recommendation.isSkillMatched || recommendation.isReadyToApply;

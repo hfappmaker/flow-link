@@ -129,6 +129,45 @@ test("remote saved feed alerts use shared work-location semantics", async () => 
   assert.equal(onsiteDb.matches.length, 0);
 });
 
+test("saved feed alerts use the same normalized light workload semantics as public filtering", async () => {
+  const { filterLightWorkloadJobs } = await import("../src/lib/workload.ts");
+  const accepted = [
+    "週2",
+    "週2〜3日",
+    "週1〜3日",
+    "3人日",
+    "週24時間",
+    "月96時間",
+    "0.4人月",
+    "0.5人月",
+    "0.6人月",
+    "40%",
+    "50%",
+    "60%稼働",
+    "副業可",
+    "複業可",
+  ];
+  const rejected = ["副業不可", "週3日以上の常駐相談", "週30時間以上", "週4日", "80%", "0.8人月"];
+
+  assert.deepEqual(
+    filterLightWorkloadJobs([...accepted, ...rejected].map((workload) => ({ workload }))).map((job) => job.workload),
+    accepted,
+  );
+
+  for (const workload of accepted) {
+    const db = alertDb({ workload: "light" });
+    await evaluateSavedFeedJobAlerts(db, { job: job({ workload }) });
+    assert.equal(db.notifications.length, 1, `${workload} should match light workload alerts`);
+  }
+
+  for (const workload of rejected) {
+    const db = alertDb({ workload: "light" });
+    await evaluateSavedFeedJobAlerts(db, { job: job({ workload }) });
+    assert.equal(db.notifications.length, 0, `${workload} should not match light workload alerts`);
+    assert.equal(db.matches.length, 0, `${workload} should not create an alert match`);
+  }
+});
+
 test("saved feed alerts match canonical skill aliases without raw substring fragments", async () => {
   const aliasDb = alertDb({ query: "TS", skills: "TS" });
   await evaluateSavedFeedJobAlerts(aliasDb, {
@@ -198,7 +237,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", query = "React", skills = "React, TypeScript" } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript" } = {}) {
   const state = {
     matches: [],
     notifications: [],
@@ -225,7 +264,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         acceptingOnly: true,
         directReadyOnly: false,
         fit: "skill",
-        workload: "",
+        workload,
         rate,
         sort: "direct",
         notificationCadence: cadence,

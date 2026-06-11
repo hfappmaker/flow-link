@@ -4,6 +4,7 @@ import { alertCadenceLabel } from "@/lib/job-alerts";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { monthlyRateBandFromFilter, monthlyRateBandLabel } from "@/lib/rates";
 import { formatDateTime, locationModeLabel, workPreferenceCompleteness } from "@/lib/utils";
+import { LIGHT_WORKLOAD_FILTER_LABEL } from "@/lib/workload";
 import { Shell, TopNav, PageHeader, Card, EmptyState, SelectField, StatusBadge, TextArea, TextField } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -262,7 +263,7 @@ function savedSearchSummary(search: SavedSearch) {
     search.directReadyOnly && "条件確認済み",
     search.fit === "skill" && "スキル一致",
     search.fit === "ready" && "応募へ進みやすい",
-    search.workload === "light" && "週2-3日",
+    search.workload === "light" && LIGHT_WORKLOAD_FILTER_LABEL,
     rateThreshold && monthlyRateBandLabel(rateThreshold),
     search.notificationCadence && `通知: ${alertCadenceLabel(search.notificationCadence)}`,
   ].filter(Boolean).join(" / ") || `働き方: ${locationModeLabel("flexible")}`;
