@@ -296,7 +296,15 @@ type SubmitInteractionFeedbackInput = {
   now?: Date;
 };
 
+export function parseInteractionFeedbackRating(value: unknown, errorMessage = "評価は1〜5の整数で入力してください。"): number {
+  const rating = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error(errorMessage);
+  return rating;
+}
+
 export async function submitInteractionFeedbackWorkflow(db: WorkflowDb, input: SubmitInteractionFeedbackInput) {
+  const followThroughRating = parseInteractionFeedbackRating(input.followThroughRating);
+  const collaborationRating = parseInteractionFeedbackRating(input.collaborationRating);
   const isCompanyAuthor = input.thread.jobApplication.jobPost.companyProfile.users.some(
     (companyUser) => companyUser.userId === input.authorUserId,
   );
@@ -336,16 +344,16 @@ export async function submitInteractionFeedbackWorkflow(db: WorkflowDb, input: S
       direction,
       targetCompanyProfileId: isFreelancerAuthor ? input.thread.jobApplication.jobPost.companyProfileId : null,
       targetFreelancerProfileId: isCompanyAuthor ? input.thread.jobApplication.freelancerProfileId : null,
-      followThroughRating: input.followThroughRating,
-      collaborationRating: input.collaborationRating,
+      followThroughRating,
+      collaborationRating,
       interactionCompleted: input.interactionCompleted,
       wouldWorkAgain: input.wouldWorkAgain,
       privateNote: input.privateNote,
       moderationStatus: input.moderationStatus,
     },
     update: {
-      followThroughRating: input.followThroughRating,
-      collaborationRating: input.collaborationRating,
+      followThroughRating,
+      collaborationRating,
       interactionCompleted: input.interactionCompleted,
       wouldWorkAgain: input.wouldWorkAgain,
       privateNote: input.privateNote,

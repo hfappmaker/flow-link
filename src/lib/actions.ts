@@ -44,6 +44,7 @@ import {
   screenApplicationWorkflow,
   saveCompanyJobPostWorkflow,
   sendInterviewMessageWorkflow,
+  parseInteractionFeedbackRating,
   submitInteractionFeedbackWorkflow,
 } from "@/lib/workflows";
 import { companyOutcomeStatusValues, freelancerOutcomeStatusValues } from "@/lib/post-interview-outcomes";
@@ -993,9 +994,7 @@ async function resolveSafetyReportContext({
 }
 
 function parseRating(value: FormDataEntryValue | null, errorMessage: string) {
-  const rating = Number(toText(value));
-  if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error(errorMessage);
-  return rating;
+  return parseInteractionFeedbackRating(toText(value), errorMessage);
 }
 
 function parseOptionalBoolean(value: FormDataEntryValue | null) {
