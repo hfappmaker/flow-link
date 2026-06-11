@@ -3,7 +3,6 @@
 import { put } from "@vercel/blob";
 import {
   ApplicationStatus,
-  CompanyVerificationKind,
   InteractionFeedbackModerationStatus,
   InterviewMessageType,
   JobPostStatus,
@@ -48,6 +47,7 @@ import {
   submitInteractionFeedbackWorkflow,
 } from "@/lib/workflows";
 import { companyOutcomeStatusValues, freelancerOutcomeStatusValues } from "@/lib/post-interview-outcomes";
+import { missingPaymentPolicyEvidence } from "@/lib/company-verification";
 
 async function currentUser() {
   const session = await auth();
@@ -379,8 +379,9 @@ export async function submitCompanyVerificationRequest(formData: FormData) {
   if (!publicEvidenceUrl || !contactEvidence || !evidenceSummary) {
     throw new Error("公開URL、連絡窓口の根拠、提出内容の要約を入力してください。");
   }
-  if (kind === CompanyVerificationKind.payment_policy && (!contractEvidence || !paymentEvidence || !offPlatformPolicy)) {
-    throw new Error("支払い・契約方針の確認には、契約条件、支払い根拠、外部支払い依頼への対応方針が必要です。");
+  const missingPaymentEvidence = missingPaymentPolicyEvidence(kind, { contractEvidence, paymentEvidence, offPlatformPolicy });
+  if (missingPaymentEvidence.length > 0) {
+    redirect("/company/profile?verification=missing-payment-policy-evidence");
   }
 
   await prisma.companyVerificationRequest.create({
