@@ -10,6 +10,13 @@ const {
   filterJobRecommendations,
   rankJobRecommendations,
 } = await import("../src/lib/job-recommendations.ts");
+const {
+  buildApplicationReview,
+  matchedSkills,
+  skillMatchPercent,
+  unmatchedSkills,
+  visiblePreferenceReasons,
+} = await import("../src/lib/utils.ts");
 
 function job(overrides = {}) {
   const value = (key, fallback) => Object.hasOwn(overrides, key) ? overrides[key] : fallback;
@@ -79,6 +86,71 @@ test("skill-match filtering keeps only open recommendations with matching requir
     filterJobRecommendations(recommendations, { fit: "skill" }).map((recommendation) => recommendation.job.id),
     ["match"],
   );
+});
+
+test("skill matching canonicalizes common engineering aliases and punctuation variants", () => {
+  const cases = [
+    ["Next.js, TypeScript", "NextJS, TS", ["Next.js", "TypeScript"], 100],
+    ["Node.js", "NodeJS", ["Node.js"], 100],
+    ["Vue.js", "Vue", ["Vue.js"], 100],
+    ["JavaScript", "JS", ["JavaScript"], 100],
+  ];
+
+  for (const [requiredSkills, freelancerSkills, expectedMatched, expectedPercent] of cases) {
+    assert.deepEqual(matchedSkills(requiredSkills, freelancerSkills), expectedMatched);
+    assert.equal(skillMatchPercent(requiredSkills, freelancerSkills), expectedPercent);
+    assert.deepEqual(unmatchedSkills(requiredSkills, freelancerSkills), []);
+  }
+});
+
+test("skill matching does not use substring or hierarchy as required-skill matches", () => {
+  assert.deepEqual(matchedSkills("React Native", "React"), []);
+  assert.deepEqual(unmatchedSkills("React Native", "React"), ["React Native"]);
+  assert.equal(skillMatchPercent("React Native", "React"), 0);
+  assert.deepEqual(matchedSkills("AWS Lambda", "AWS"), []);
+  assert.deepEqual(matchedSkills("JavaScript", "Java"), []);
+  assert.deepEqual(matchedSkills("React", "Interaction Design"), []);
+});
+
+test("recommendation, preference, and company review copy share canonical skill matching", () => {
+  const recommendation = buildJobRecommendation(job({ requiredSkills: "Next.js, TypeScript", preferredSkills: "Vue.js" }), {
+    freelancerReadinessPercent: 100,
+    freelancerSkills: "NextJS, TS",
+    workPreference: {
+      status: "active",
+      preferredSkills: "Vue",
+      lastConfirmedAt: new Date(),
+    },
+  });
+  assert.equal(recommendation.matchPercent, 100);
+  assert.deepEqual(recommendation.matched, ["Next.js", "TypeScript"]);
+  assert.deepEqual(recommendation.skillGaps, []);
+
+  const reasons = visiblePreferenceReasons({
+    requiredSkills: "Next.js",
+    preferredSkills: "Vue.js",
+    workPreference: {
+      status: "active",
+      preferredSkills: "Vue",
+      lastConfirmedAt: new Date(),
+    },
+  });
+  assert.equal(reasons.some((reason) => reason.label === "希望スキル一致" && reason.detail.includes("Vue.js")), true);
+
+  const review = buildApplicationReview({
+    status: "applied",
+    freelancerProfile: {
+      skills: "NextJS, TS",
+      documents: [{ id: "doc-1" }, { id: "doc-2" }],
+      careerHistory: { summary: "Frontend" },
+    },
+    jobPost: { requiredSkills: "Next.js, TypeScript" },
+    proposalMessage: "I can help.",
+    proposedStart: "2026-07-01",
+  });
+  assert.deepEqual(review.requiredSkillMatches, ["Next.js", "TypeScript"]);
+  assert.equal(review.matchPercent, 100);
+  assert.equal(review.nextChecks.includes("必須スキルの補足"), false);
 });
 
 test("saved-job readiness counts use the shared open score and contract thresholds", () => {

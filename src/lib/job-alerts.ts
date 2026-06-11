@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { buildJobRecommendation, type JobRecommendationJob } from "./job-recommendations.ts";
 import { isHighMonthlyRateText } from "./rates.ts";
+import { normalizedTextMatchesQuery } from "./utils.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
 
@@ -262,7 +263,7 @@ function savedFeedMatchesRecommendation(feed: SavedFeed, recommendation: ReturnT
   ].filter(Boolean).join(" ").toLowerCase();
   if (feed.acceptingOnly && !recommendation.isOpen) return false;
   if (feed.remote && !`${job.remotePolicy ?? ""} ${job.location ?? ""}`.toLowerCase().includes("リモート")) return false;
-  if (feed.query && !text.includes(feed.query.toLowerCase())) return false;
+  if (feed.query && !normalizedTextMatchesQuery(feed.query, text)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
   if (feed.fit === "ready" && !recommendation.isReadyToApply) return false;

@@ -78,6 +78,24 @@ export function skillPreview(value: string | null | undefined, limit = 3) {
   return parseSkills(value).slice(0, limit);
 }
 
+const SKILL_ALIAS_TO_CANONICAL_ID: Record<string, string> = {
+  aws: "aws",
+  awslambda: "aws-lambda",
+  ec2: "aws-ec2",
+  javascript: "javascript",
+  js: "javascript",
+  nextjs: "nextjs",
+  node: "nodejs",
+  nodejs: "nodejs",
+  react: "react",
+  reactnative: "react-native",
+  ts: "typescript",
+  typescript: "typescript",
+  vue: "vue",
+  vuejs: "vue",
+};
+
+// Skill fit is exact by canonical id: aliases match, but parent/child skills do not.
 export function parseSkills(value: string | null | undefined) {
   if (!value) return [];
   return Array.from(new Set(value
@@ -86,15 +104,92 @@ export function parseSkills(value: string | null | undefined) {
     .filter(Boolean)));
 }
 
+export function canonicalSkillId(skill: string | null | undefined) {
+  const key = normalizeSkillAliasKey(skill);
+  return key ? SKILL_ALIAS_TO_CANONICAL_ID[key] ?? key : "";
+}
+
+export function canonicalSkillIds(value: string | null | undefined) {
+  return new Set(parseSkills(value).map(canonicalSkillId).filter(Boolean));
+}
+
 export function matchedSkills(requiredSkills: string | null | undefined, freelancerSkills: string | null | undefined) {
-  const freelancerSkillSet = new Set(parseSkills(freelancerSkills).map((skill) => skill.toLowerCase()));
-  return parseSkills(requiredSkills).filter((skill) => freelancerSkillSet.has(skill.toLowerCase()));
+  const freelancerSkillSet = canonicalSkillIds(freelancerSkills);
+  return parseSkills(requiredSkills).filter((skill) => freelancerSkillSet.has(canonicalSkillId(skill)));
+}
+
+export function unmatchedSkills(requiredSkills: string | null | undefined, freelancerSkills: string | null | undefined) {
+  const freelancerSkillSet = canonicalSkillIds(freelancerSkills);
+  return parseSkills(requiredSkills).filter((skill) => !freelancerSkillSet.has(canonicalSkillId(skill)));
 }
 
 export function skillMatchPercent(requiredSkills: string | null | undefined, freelancerSkills: string | null | undefined) {
   const requiredSkillCount = parseSkills(requiredSkills).length;
   if (requiredSkillCount === 0) return null;
   return Math.round((matchedSkills(requiredSkills, freelancerSkills).length / requiredSkillCount) * 100);
+}
+
+export function normalizedTextMatchesQuery(query: string | null | undefined, text: string | null | undefined) {
+  const queryTokens = normalizedSearchTokens(query);
+  if (queryTokens.length === 0) return true;
+
+  const textTokens = new Set(normalizedSearchTokens(text));
+  if (queryTokens.every((token) => textTokens.has(token))) return true;
+
+  const querySkills = canonicalSkillIdsFromAliasTokens(queryTokens);
+  if (!querySkills || querySkills.size === 0) return false;
+
+  const textSkills = canonicalSkillIdsFromText(text);
+  return [...querySkills].every((skillId) => textSkills.has(skillId));
+}
+
+function normalizeSkillAliasKey(skill: string | null | undefined) {
+  return normalizeSearchText(skill).replace(/[^a-z0-9+#]/g, "");
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/([a-z0-9])\.([a-z0-9])/g, "$1$2");
+}
+
+function normalizedSearchTokens(value: string | null | undefined) {
+  return normalizeSearchText(value).match(/[a-z0-9+#]+|[一-龯ぁ-んァ-ヶー]+/g) ?? [];
+}
+
+function canonicalSkillIdsFromText(value: string | null | undefined) {
+  const tokens = normalizedSearchTokens(value);
+  const ids = new Set<string>();
+  for (let index = 0; index < tokens.length; index += 1) {
+    for (const length of [1, 2, 3]) {
+      const phraseKey = tokens.slice(index, index + length).join("");
+      const canonical = SKILL_ALIAS_TO_CANONICAL_ID[phraseKey];
+      if (canonical) ids.add(canonical);
+    }
+  }
+  return ids;
+}
+
+function canonicalSkillIdsFromAliasTokens(tokens: string[]) {
+  const ids = new Set<string>();
+  for (let index = 0; index < tokens.length;) {
+    let matched: string | null = null;
+    let matchedLength = 0;
+    for (let length = Math.min(3, tokens.length - index); length >= 1; length -= 1) {
+      const phraseKey = tokens.slice(index, index + length).join("");
+      const canonical = SKILL_ALIAS_TO_CANONICAL_ID[phraseKey];
+      if (canonical) {
+        matched = canonical;
+        matchedLength = length;
+        break;
+      }
+    }
+    if (!matched) return null;
+    ids.add(matched);
+    index += matchedLength;
+  }
+  return ids;
 }
 
 type ApplicationReviewInput = {
@@ -720,15 +815,14 @@ export function locationModeLabel(mode?: string | null) {
 }
 
 function includesAny(text: string, words: string[]) {
-  return words.some((word) => text.includes(word.toLowerCase()));
+  return words.some((word) => normalizedTextMatchesQuery(word, text));
 }
 
 function textFitTone(preference?: string | null, jobValue?: string | null): PreferenceReason["tone"] {
   if (!preference) return "neutral";
   if (!jobValue) return "neutral";
-  const preferenceTokens = parseSkills(preference).map((token) => token.toLowerCase());
-  const jobText = jobValue.toLowerCase();
-  if (preferenceTokens.length > 0 && preferenceTokens.some((token) => jobText.includes(token))) return "good";
+  const preferenceTokens = parseSkills(preference);
+  if (preferenceTokens.length > 0 && preferenceTokens.some((token) => normalizedTextMatchesQuery(token, jobValue))) return "good";
   if (hasNumericOverlap(preference, jobValue)) return "good";
   return "warn";
 }

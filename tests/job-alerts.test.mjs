@@ -90,6 +90,50 @@ test("high-rate saved feed alerts use normalized monthly lower bounds", async ()
   assert.equal(hourlyDb.notifications.length, 0);
 });
 
+test("saved feed alerts match canonical skill aliases without raw substring fragments", async () => {
+  const aliasDb = alertDb({ query: "TS", skills: "TS" });
+  await evaluateSavedFeedJobAlerts(aliasDb, {
+    job: job({
+      title: "Frontend platform engineer",
+      description: "Product work.",
+      requiredSkills: "TypeScript",
+      preferredSkills: "Next.js",
+    }),
+  });
+  assert.equal(aliasDb.notifications.length, 1);
+  assert.match(aliasDb.matches[0].fitReasons, /希望スキル一致|スキル一致/);
+
+  const spacedAliasDb = alertDb({ query: "Next JS", skills: "NextJS" });
+  await evaluateSavedFeedJobAlerts(spacedAliasDb, {
+    job: job({
+      title: "Frontend platform engineer",
+      description: "Product work.",
+      requiredSkills: "Next.js",
+      preferredSkills: null,
+    }),
+  });
+  assert.equal(spacedAliasDb.notifications.length, 1);
+
+  const fragmentDb = alertDb({ query: "act", skills: "React, TypeScript" });
+  await evaluateSavedFeedJobAlerts(fragmentDb, { job: job({ title: "React platform engineer" }) });
+  assert.equal(fragmentDb.notifications.length, 0);
+
+  const mixedQueryDb = alertDb({ query: "React backend", skills: "React, TypeScript" });
+  await evaluateSavedFeedJobAlerts(mixedQueryDb, { job: job({ title: "React platform engineer" }) });
+  assert.equal(mixedQueryDb.notifications.length, 0);
+
+  const nextWordDb = alertDb({ query: "Next JS", skills: "NextJS" });
+  await evaluateSavedFeedJobAlerts(nextWordDb, {
+    job: job({
+      title: "Next steps for frontend engineers",
+      description: "JavaScript product work.",
+      requiredSkills: "JavaScript",
+      preferredSkills: null,
+    }),
+  });
+  assert.equal(nextWordDb.notifications.length, 0);
+});
+
 function job(overrides = {}) {
   return {
     id: overrides.id ?? "job-1",
@@ -115,7 +159,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "" } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", query = "React", skills = "React, TypeScript" } = {}) {
   const state = {
     matches: [],
     notifications: [],
@@ -123,7 +167,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
   const freelancer = {
     id: "freelancer-1",
     userId: "user-1",
-    skills: "React, TypeScript",
+    skills,
     workPreference: {
       status: "active",
       targetRole: "React",
@@ -137,7 +181,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
       {
         id: "feed-1",
         name: cadence === JobAlertCadence.immediate ? "React即時" : "React日次",
-        query: "React",
+        query,
         remote: true,
         acceptingOnly: true,
         directReadyOnly: false,

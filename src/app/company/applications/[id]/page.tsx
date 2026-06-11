@@ -18,6 +18,7 @@ import {
   matchedSkills,
   parseSkills,
   skillMatchPercent,
+  unmatchedSkills,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
 } from "@/lib/utils";
@@ -50,8 +51,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   }, 6);
   const requiredSkills = parseSkills(application.jobPost.requiredSkills);
   const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
-  const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
-  const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
+  const requiredSkillGaps = unmatchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
   const hasRateSignal = Boolean(application.freelancerProfile.desiredRate || application.jobPost.rate);

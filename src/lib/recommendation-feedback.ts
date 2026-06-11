@@ -3,7 +3,7 @@ import {
   RecommendationFeedbackSentiment,
   type RecommendationFeedback,
 } from "@prisma/client";
-import { matchedSkills, parseSkills, type WorkPreferenceInput } from "./utils.ts";
+import { matchedSkills, normalizedTextMatchesQuery, parseSkills, type WorkPreferenceInput } from "./utils.ts";
 
 export const RECOMMENDATION_FEEDBACK_MIN_COMPANY_INSIGHT_COUNT = 3;
 
@@ -185,12 +185,10 @@ function similarityScore(
 }
 
 function hasTokenOverlap(left?: string | null, right?: string | null) {
-  const leftTokens = parseSkills(left).map((token) => token.toLowerCase());
-  const rightText = (right ?? "").toLowerCase();
-  return leftTokens.length > 0 && leftTokens.some((token) => rightText.includes(token));
+  const leftTokens = parseSkills(left);
+  return leftTokens.length > 0 && leftTokens.some((token) => normalizedTextMatchesQuery(token, right));
 }
 
 function includesAny(text: string, words: string[]) {
-  const normalized = text.toLowerCase();
-  return words.some((word) => normalized.includes(word.toLowerCase()));
+  return words.some((word) => normalizedTextMatchesQuery(word, text));
 }
