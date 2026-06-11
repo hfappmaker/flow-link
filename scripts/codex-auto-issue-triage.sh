@@ -61,6 +61,7 @@ Bug checklist:
 - Find user-visible failures, not only stack traces: 404/500, broken redirects, failed forms, DB/Blob/Auth/API errors, and Preview/local runtime errors.
 - Prefer Vercel Preview logs and Playwright/HTTP reproduction when available.
 - For Vercel errors, explain the likely user impact and affected route/action.
+- Name whether the failure blocks a freelancer, a company operator, or both, and what action is stopped.
 - Do not file a bug for mere copy, option design, or product preference unless it causes broken or unsafe behavior.
 EOF
 )
@@ -75,10 +76,12 @@ EOF
 Product checklist:
 - Prioritize gaps that affect acquisition, activation, trust, speed to useful match/application, fit clarity, or competitor switching.
 - Compare Flow Link with current competitor or adjacent-market behavior when network access is available; include source URLs.
+- Use docs/automation/agent-loop-competitive-lens.md as the baseline competitor and persona lens before choosing an issue.
 - Audit search, filters, recommendations, saved searches, alerts, rate/price behavior, trust labels, readiness gates, and marketplace matching.
 - Look for semantic correctness gaps: UI copy promises concrete behavior, but implementation uses free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
 - Look for option granularity gaps: controls whose choices are too narrow, arbitrary, or implementation-shaped, such as a single hard-coded threshold where users need practical bands.
 - For semantic or option issues, include the user-facing promise, actual implementation rule, incorrect pass/fail examples, and the durable model/parser/test boundary needed.
+- Do not create feature-parity issues unless the added or changed behavior clearly reduces decision time, ambiguity, mismatched applications, or trust risk for a target persona.
 - Treat applying and publishing readiness as marketplace product quality: prefer actionable readiness guidance before hard blocks, and hard-block only when missing data would harm the other side.
 EOF
 )
@@ -93,6 +96,8 @@ EOF
 UX checklist:
 - Focus on navigation, screen transitions, user flow, pending/loading feedback, form-submit feedback, copy clarity, input burden, and empty/loading/error states.
 - Treat missing feedback after clicking links, submitting forms, switching filters, or starting navigation as issue-worthy unless already covered.
+- Use the freelancer/company personas in docs/automation/agent-loop-competitive-lens.md to decide whether the current flow makes the next action obvious.
+- Treat feature overload as a UX issue when too many controls, labels, or competing actions make the next step unclear.
 - Avoid developer-facing terms such as MVC, MVP, direct matching, direct contract, core differentiation, or implementation jargon in user-facing flows.
 - Use Playwright for navigation, forms, pending/loading, and task-completion issues. Copy-only issues may use static inspection.
 - If behavior fails with 404/500 or a runtime error, classify it as bug instead.
@@ -110,6 +115,8 @@ Visual-design checklist:
 - Focus on layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, and component consistency.
 - Screenshots are mandatory evidence for normal visual-design issues. Capture desktop and mobile, normally 1280x900 and 375x812.
 - Include exact screenshot paths and concrete visual observations.
+- Evaluate whether visual hierarchy helps the target persona choose the next action without scanning every feature.
+- Prefer issues about clarifying, grouping, or de-emphasizing information over adding new visual elements.
 - Do not file purely aesthetic preferences unless they affect trust, clarity, conversion, repeated use, or professional polish.
 - If the problem is navigation behavior or copy comprehension, classify as UX. If it is a runtime failure, classify as bug.
 EOF
@@ -126,6 +133,7 @@ Maintainability checklist:
 - Focus on responsibility boundaries, type safety, duplicated logic, missing tests, fragile data flow, parser/type drift, and operational risk.
 - Tie every issue to a concrete future bug, operating cost, verification gap, or marketplace reliability risk.
 - Mention product/user impact, but do not create broad product feature issues from maintainability mode.
+- Explain which freelancer/company decision or workflow could become inconsistent if the maintainability risk remains.
 - Approximate string matching, duplicated ad hoc parsing, missing normalized fields, or missing semantic tests are maintainability risks when they can cause inconsistent behavior across search, alerts, trust, readiness, or recommendations.
 - Prefer static inspection, targeted tests, typecheck, lint, and build signals. Use Playwright only when the risk is visible-flow dependent.
 EOF
@@ -286,6 +294,17 @@ Strategic filter:
 - Prefer concrete gains in freelancer/company acquisition, activation, trust, speed to useful match/application, fit clarity, conversion, or core marketplace reliability.
 - Skip cosmetic, speculative, or internally interesting findings when competitive/user impact is weak.
 
+Primary personas:
+- Freelancer: quickly decides whether a job is worth applying to by checking rate, workload, remote policy, company trust, required skills, application readiness, and selection status.
+- Company operator: quickly decides whether a candidate is worth interviewing by checking skills, experience, documents, start timing, rate expectations, and response priority.
+- Shared rule: neither persona should need to understand implementation terms, internal product strategy, or a crowded control surface. The next action must be obvious.
+
+Persona and competitor lens:
+- Read docs/automation/agent-loop-competitive-lens.md before filing product, UX, or visual-design issues; use it as baseline context for other modes when relevant.
+- State the target persona and competitor behavior behind the issue. If the issue cannot name a persona pain or competitor switching reason, skip it.
+- Do not create issues just because a competitor has a feature. Create them only when Flow Link can reduce decision time, ambiguity, risk, or mismatched applications.
+- For new functionality, first consider whether removing, combining, staging, moving details to a secondary view, or saving conditions would solve the problem with less user confusion.
+
 Mode-specific checklist:
 $MODE_POLICY
 
@@ -314,6 +333,7 @@ Issue workflow:
 Issue body:
 ## Summary
 ## Evidence
+## Target persona
 ## Competitive relevance
 ## User impact
 ## Acceptance criteria
@@ -325,7 +345,9 @@ Issue body:
 
 Quality bar:
 - Write from the freelancer/company user's perspective.
+- User impact must name the target persona and the decision, action, or trust concern being improved.
 - In Competitive relevance, state which competitor user behavior this affects, why Flow Link becomes more attractive, and why now.
+- For additive features or controls, Acceptance criteria must show that the first-time user still knows the next action and that the UI is not more confusing.
 - Acceptance criteria must be specific enough for the worker to verify item by item.
 - End by saying whether you created an issue, updated an issue, reopened an issue, or skipped this run.
 PROMPT_EOF
