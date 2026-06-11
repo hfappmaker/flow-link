@@ -50,18 +50,18 @@ export function RegisterForm({
   const selected = roleOptions[role];
 
   return (
-    <form action={action} className="mt-5 grid gap-4">
+    <form action={action} className="mt-3 grid gap-3 sm:mt-5 sm:gap-4">
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
-      <fieldset className="grid gap-2">
+      <fieldset className="grid gap-1.5 sm:gap-2">
         <legend className="text-sm font-semibold text-stone-700">登録の目的</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
           {(Object.keys(roleOptions) as RegistrationRoleIntent[]).map((optionRole) => {
             const option = roleOptions[optionRole];
             const checked = role === optionRole;
             return (
               <label
                 className={cn(
-                  "grid cursor-pointer gap-2 rounded-md border bg-white p-3 text-sm transition",
+                  "grid cursor-pointer gap-1.5 rounded-md border bg-white p-2.5 text-sm transition sm:gap-2 sm:p-3",
                   checked ? "border-emerald-600 ring-2 ring-emerald-100" : "border-stone-200 hover:border-stone-300",
                 )}
                 key={optionRole}
@@ -77,15 +77,15 @@ export function RegisterForm({
                   />
                   {option.title}
                 </span>
-                <span className="text-xs leading-5 text-stone-600">{option.description}</span>
-                <span className="text-xs font-medium text-stone-500">種別: {option.label}</span>
+                <span className="hidden text-xs leading-5 text-stone-600 sm:block">{option.description}</span>
+                <span className="hidden text-xs font-medium text-stone-500 sm:block">種別: {option.label}</span>
               </label>
             );
           })}
         </div>
       </fieldset>
 
-      <p className="rounded border border-emerald-100 bg-emerald-50 p-3 text-sm leading-6 text-emerald-950">
+      <p className="rounded border border-emerald-100 bg-emerald-50 p-2.5 text-xs leading-5 text-emerald-950 sm:p-3 sm:text-sm sm:leading-6">
         {selected.helper}
       </p>
       <TextInput name="name" label={selected.nameLabel} required />
@@ -112,10 +112,10 @@ function TextInput({
   minLength?: number;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+    <label className="grid gap-1 text-sm font-medium text-stone-700 sm:gap-1.5">
       {label}
       <input
-        className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+        className="rounded border border-stone-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-emerald-700 sm:py-2"
         name={name}
         type={type}
         required={required}
