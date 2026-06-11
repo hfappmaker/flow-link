@@ -54,17 +54,21 @@ test("application readiness requires profile evidence and next-action fields", (
   const missing = getApplicationReadiness(readyProfile, {
     proposalMessage: "応募メッセージ".repeat(10),
     proposedStart: null,
+    rateExpectation: "",
+    workloadExpectation: null,
     contactPreference: "",
   });
   assert.equal(missing.isReady, false);
   assert.deepEqual(
     missing.missingRequired.map((item) => item.label),
-    ["稼働開始目安", "連絡希望"],
+    ["稼働開始目安", "応募時の希望単価", "応募時の希望稼働量", "連絡希望"],
   );
 
   const ready = getApplicationReadiness(readyProfile, {
     proposalMessage: "応募メッセージ".repeat(10),
     proposedStart: "7月第1週",
+    rateExpectation: "月100万円以上",
+    workloadExpectation: "週4日",
     contactPreference: "平日18時以降",
   });
   assert.equal(ready.isReady, true);

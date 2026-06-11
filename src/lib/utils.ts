@@ -221,10 +221,17 @@ type ApplicationReviewInput = {
   status?: string | null;
   proposalMessage?: string | null;
   proposedStart?: string | null;
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
   freelancerProfile: {
     skills?: string | null;
     availableFrom?: string | null;
     availability?: string | null;
+    desiredRate?: string | null;
+    workPreference?: {
+      targetRate?: string | null;
+      workload?: string | null;
+    } | null;
     careerHistory?: unknown | null;
     documents?: unknown[] | null;
   };
@@ -238,6 +245,7 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
   const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const missingSkillCount = Math.max(0, requiredSkills.length - requiredSkillMatches.length);
+  const conditionTerms = applicationConditionTerms(application);
   const reviewSignals = [
     { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
     { done: (application.freelancerProfile.documents?.length ?? 0) >= 2, nextCheck: "PDF書類" },
@@ -251,6 +259,8 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ),
       nextCheck: "開始条件",
     },
+    { done: conditionTerms.rate.source !== "missing", nextCheck: "希望単価" },
+    { done: conditionTerms.workload.source !== "missing", nextCheck: "希望稼働量" },
   ];
   const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
 
@@ -267,6 +277,12 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ...(!application.proposedStart && !application.freelancerProfile.availableFrom && !application.freelancerProfile.availability
         ? ["稼働開始時期と週あたりの稼働量を確認する"]
         : []),
+      ...(conditionTerms.rate.source === "missing"
+        ? ["応募者のこの案件での希望単価を確認する"]
+        : []),
+      ...(conditionTerms.workload.source === "missing"
+        ? ["応募者のこの案件での週あたり稼働量を確認する"]
+        : []),
       ...(!application.proposalMessage
         ? ["この案件で最初に任せたい業務への貢献イメージを確認する"]
         : []),
@@ -281,6 +297,50 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
         : []),
     ].slice(0, 4),
   };
+}
+
+type ApplicationConditionTermsInput = {
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
+  freelancerProfile: {
+    desiredRate?: string | null;
+    availability?: string | null;
+    workPreference?: {
+      targetRate?: string | null;
+      workload?: string | null;
+    } | null;
+  };
+};
+
+type ApplicationConditionTerm = {
+  value: string;
+  source: "application" | "profile" | "missing";
+  display: string;
+};
+
+export function applicationConditionTerms(application: ApplicationConditionTermsInput): {
+  rate: ApplicationConditionTerm;
+  workload: ApplicationConditionTerm;
+} {
+  const applicationRate = application.rateExpectation?.trim();
+  const profileRate = application.freelancerProfile.workPreference?.targetRate?.trim() || application.freelancerProfile.desiredRate?.trim();
+  const applicationWorkload = application.workloadExpectation?.trim();
+  const profileWorkload = application.freelancerProfile.workPreference?.workload?.trim() || application.freelancerProfile.availability?.trim();
+
+  return {
+    rate: conditionTerm(applicationRate, profileRate),
+    workload: conditionTerm(applicationWorkload, profileWorkload),
+  };
+}
+
+function conditionTerm(applicationValue?: string | null, profileValue?: string | null): ApplicationConditionTerm {
+  if (applicationValue) {
+    return { value: applicationValue, source: "application", display: applicationValue };
+  }
+  if (profileValue) {
+    return { value: profileValue, source: "profile", display: `${profileValue}（プロフィール）` };
+  }
+  return { value: "未設定", source: "missing", display: "未設定" };
 }
 
 export function formatOpenings(value: number | null | undefined) {
@@ -931,6 +991,8 @@ export function buildScreeningPassedHandoffMessage({
   freelancerName,
   jobTitle,
   proposedStart,
+  rateExpectation,
+  workloadExpectation,
   contactPreference,
   selectionFlow,
   contractTerms,
@@ -939,6 +1001,8 @@ export function buildScreeningPassedHandoffMessage({
   freelancerName: string;
   jobTitle: string;
   proposedStart?: string | null;
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
   contactPreference?: string | null;
   selectionFlow?: string | null;
   contractTerms?: string | null;
@@ -949,6 +1013,8 @@ export function buildScreeningPassedHandoffMessage({
     `${jobTitle}へのご応募ありがとうございます。書類確認が完了しましたので、${companyName}と面談調整を進めさせてください。`,
     "",
     `応募時の開始目安: ${proposedStart || "面談で確認"}`,
+    `応募時の希望単価: ${rateExpectation || "面談で確認"}`,
+    `応募時の希望稼働量: ${workloadExpectation || "面談で確認"}`,
     `応募時の連絡希望: ${contactPreference || "このチャットで調整"}`,
     `選考フロー: ${selectionFlow || "面談で確認"}`,
     `契約・支払い条件: ${contractTerms || "面談で確認"}`,

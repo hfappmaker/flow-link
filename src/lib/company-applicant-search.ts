@@ -10,6 +10,8 @@ export const COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT = 500;
 type SearchableApplicant = {
   proposalMessage?: string | null;
   proposedStart?: string | null;
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
   freelancerProfile: {
     fullName?: string | null;
     desiredOccupation?: string | null;
@@ -26,6 +28,8 @@ export function applicantKeywordText(application: SearchableApplicant) {
     application.freelancerProfile.preferredLocation,
     application.proposalMessage,
     application.proposedStart,
+    application.rateExpectation,
+    application.workloadExpectation,
   ].filter(Boolean).join(" ");
 }
 
@@ -50,6 +54,8 @@ export function applicantKeywordCandidateWhere(query: string | null | undefined)
       { freelancerProfile: { preferredLocation: { contains: term, mode: "insensitive" as const } } },
       { proposalMessage: { contains: term, mode: "insensitive" as const } },
       { proposedStart: { contains: term, mode: "insensitive" as const } },
+      { rateExpectation: { contains: term, mode: "insensitive" as const } },
+      { workloadExpectation: { contains: term, mode: "insensitive" as const } },
     ]),
   };
 }

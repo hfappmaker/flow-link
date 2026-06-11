@@ -79,6 +79,8 @@ export type FreelancerReadinessProfile = {
 export type ApplicationReadinessInput = {
   proposalMessage?: string | null;
   proposedStart?: string | null;
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
   contactPreference?: string | null;
 };
 
@@ -180,6 +182,20 @@ export function getApplicationReadiness(
       detail: "企業が面談前に開始時期を判断できる応募時点の見込み",
       severity: "required",
       done: Boolean(input.proposedStart?.trim()),
+    },
+    {
+      key: "rate-expectation",
+      label: "応募時の希望単価",
+      detail: "企業が面談前にこの案件での単価期待を判断できる応募時点の見込み",
+      severity: "required",
+      done: Boolean(input.rateExpectation?.trim()),
+    },
+    {
+      key: "workload-expectation",
+      label: "応募時の希望稼働量",
+      detail: "企業が面談前にこの案件での週あたり稼働量を判断できる応募時点の見込み",
+      severity: "required",
+      done: Boolean(input.workloadExpectation?.trim()),
     },
     {
       key: "contact-preference",

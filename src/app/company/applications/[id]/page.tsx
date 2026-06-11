@@ -12,6 +12,7 @@ import { getFreelancerReadiness } from "@/lib/readiness";
 import { getFreelancerReputationSummary } from "@/lib/reputation";
 import {
   applicationStatusLabel,
+  applicationConditionTerms,
   buildScreeningPassedHandoffMessage,
   formatDateTime,
   locationModeLabel,
@@ -53,8 +54,9 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const requiredSkillMatches = matchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const requiredSkillGaps = unmatchedSkills(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
+  const conditionTerms = applicationConditionTerms(application);
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
-  const hasRateSignal = Boolean(application.freelancerProfile.desiredRate || application.jobPost.rate);
+  const hasRateSignal = conditionTerms.rate.source !== "missing";
   const interviewDecisionItems = [
     {
       label: "必須スキル",
@@ -72,8 +74,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       done: hasStartSignal,
     },
     {
-      label: "単価情報",
-      value: application.freelancerProfile.desiredRate || application.jobPost.rate || "未設定",
+      label: "希望単価",
+      value: conditionTerms.rate.display,
       done: hasRateSignal,
     },
   ];
@@ -85,6 +87,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     hasCareerHistory: Boolean(application.freelancerProfile.careerHistory),
     hasProposal: Boolean(application.proposalMessage),
     proposedStart: application.proposedStart,
+    workloadExpectation: application.workloadExpectation,
     availability: application.freelancerProfile.availability,
     availableFrom: application.freelancerProfile.availableFrom,
     contactPreference: application.contactPreference,
@@ -105,6 +108,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     contactPreference: application.contactPreference,
     availability: application.freelancerProfile.availability,
     desiredRate: application.freelancerProfile.desiredRate,
+    rateExpectation: application.rateExpectation,
     jobRate: application.jobPost.rate,
     workload: application.jobPost.workload,
     contractPeriod: application.jobPost.contractPeriod,
@@ -122,9 +126,11 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     documentCount: application.freelancerProfile.documents.length,
     hasProposal: Boolean(application.proposalMessage),
     proposedStart: application.proposedStart,
+    workloadExpectation: application.workloadExpectation,
     contactPreference: application.contactPreference,
     availability: application.freelancerProfile.availability,
     desiredRate: application.freelancerProfile.desiredRate,
+    rateExpectation: application.rateExpectation,
     jobRate: application.jobPost.rate,
     workload: application.jobPost.workload,
     contractTerms: application.jobPost.contractTerms,
@@ -134,6 +140,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     freelancerName: application.freelancerProfile.fullName,
     jobTitle: application.jobPost.title,
     proposedStart: application.proposedStart,
+    rateExpectation: application.rateExpectation,
+    workloadExpectation: application.workloadExpectation,
     contactPreference: application.contactPreference,
     selectionFlow: application.jobPost.selectionFlow,
     contractTerms: application.jobPost.contractTerms,
@@ -143,6 +151,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     requiredSkillCount: requiredSkills.length,
     hasProposal: Boolean(application.proposalMessage),
     hasStartSignal,
+    hasApplicationTerms: conditionTerms.rate.source === "application" && conditionTerms.workload.source === "application",
     hasContactSignal: Boolean(application.contactPreference),
     hasSelectionFlow: Boolean(application.jobPost.selectionFlow),
     hasContractTerms: Boolean(application.jobPost.contractTerms),
@@ -166,8 +175,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <Info label="希望職種" value={application.freelancerProfile.desiredOccupation} />
                 <Info label="スキル" value={application.freelancerProfile.skills} />
                 <Info label="経験年数" value={application.freelancerProfile.yearsOfExperience?.toString()} />
-                <Info label="希望単価" value={application.freelancerProfile.desiredRate} />
-                <Info label="稼働条件" value={application.freelancerProfile.availability} />
+                <Info label="プロフィール希望単価" value={application.freelancerProfile.desiredRate} />
+                <Info label="プロフィール稼働条件" value={application.freelancerProfile.availability} />
                 <Info label="リモート希望" value={application.freelancerProfile.remotePreference} />
               </dl>
             </Card>
@@ -178,6 +187,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               </p>
               <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                 <SummaryInfo label="稼働開始目安" value={application.proposedStart} />
+                <SummaryInfo label="この案件での希望単価" value={conditionTerms.rate.display} />
+                <SummaryInfo label="この案件での希望稼働量" value={conditionTerms.workload.display} />
                 <SummaryInfo label="連絡希望" value={application.contactPreference} />
               </dl>
             </Card>
@@ -650,6 +661,8 @@ function buildInterviewPrepSheet({
   skillGaps,
   proposalMessage,
   proposedStart,
+  rateExpectation,
+  workloadExpectation,
   contactPreference,
   availability,
   desiredRate,
@@ -665,6 +678,8 @@ function buildInterviewPrepSheet({
   skillGaps: string[];
   proposalMessage?: string | null;
   proposedStart?: string | null;
+  rateExpectation?: string | null;
+  workloadExpectation?: string | null;
   contactPreference?: string | null;
   availability?: string | null;
   desiredRate?: string | null;
@@ -684,11 +699,13 @@ function buildInterviewPrepSheet({
     "面談で確認する点",
     `- スキルの確認: ${skillGaps.length > 0 ? skillGaps.slice(0, 6).join("、") : "必須スキルの不足項目なし"}`,
     `- 稼働開始目安: ${proposedStart || "応募者に確認"}`,
-    `- 稼働条件: ${availability || workload || "応募者に確認"}`,
+    `- 応募者の希望稼働量: ${workloadExpectation || availability || "応募者に確認"}`,
     `- 連絡希望: ${contactPreference || "面談チャットで確認"}`,
     "",
     "契約・支払い条件",
-    `- 単価: ${desiredRate || jobRate || "面談で確認"}`,
+    `- 応募者の希望単価: ${rateExpectation || desiredRate || "応募者に確認"}`,
+    `- 案件の提示単価: ${jobRate || "未設定"}`,
+    `- 案件の稼働量: ${workload || "未設定"}`,
     `- 契約期間: ${contractPeriod || "面談で確認"}`,
     `- 契約・支払い条件: ${contractTerms || "面談で確認"}`,
     "",
@@ -704,6 +721,7 @@ function buildApplicantTrustItems({
   hasCareerHistory,
   hasProposal,
   proposedStart,
+  workloadExpectation,
   availability,
   availableFrom,
   contactPreference,
@@ -717,6 +735,7 @@ function buildApplicantTrustItems({
   hasCareerHistory: boolean;
   hasProposal: boolean;
   proposedStart?: string | null;
+  workloadExpectation?: string | null;
   availability?: string | null;
   availableFrom?: string | null;
   contactPreference?: string | null;
@@ -725,7 +744,7 @@ function buildApplicantTrustItems({
   requiredSkillCount: number;
   appliedAt?: Date | string | null;
 }) {
-  const startSignal = proposedStart || availableFrom || availability;
+  const startSignal = proposedStart || availableFrom || workloadExpectation || availability;
   return [
     {
       label: "書類・職務経歴",
@@ -783,9 +802,11 @@ function buildScreeningRubric({
   documentCount,
   hasProposal,
   proposedStart,
+  workloadExpectation,
   contactPreference,
   availability,
   desiredRate,
+  rateExpectation,
   jobRate,
   workload,
   contractTerms,
@@ -800,15 +821,19 @@ function buildScreeningRubric({
   documentCount: number;
   hasProposal: boolean;
   proposedStart?: string | null;
+  workloadExpectation?: string | null;
   contactPreference?: string | null;
   availability?: string | null;
   desiredRate?: string | null;
+  rateExpectation?: string | null;
   jobRate?: string | null;
   workload?: string | null;
   contractTerms?: string | null;
 }) {
-  const hasStartCondition = Boolean(proposedStart || availability);
-  const hasRateCondition = Boolean(desiredRate || jobRate);
+  const candidateWorkload = workloadExpectation || availability;
+  const candidateRate = rateExpectation || desiredRate;
+  const hasStartCondition = Boolean(proposedStart || candidateWorkload);
+  const hasRateCondition = Boolean(candidateRate);
   const hasContractCondition = Boolean(workload && contractTerms);
   const items: RubricItem[] = [
     {
@@ -840,13 +865,13 @@ function buildScreeningRubric({
     {
       label: "稼働・連絡",
       grade: hasStartCondition && contactPreference ? "確認済み" : hasStartCondition || contactPreference ? "追加確認" : "未確認",
-      detail: `開始目安: ${proposedStart || availability || "未設定"} / 連絡希望: ${contactPreference || "未設定"}`,
+      detail: `開始目安: ${proposedStart || "未設定"} / 希望稼働量: ${candidateWorkload || "未設定"} / 連絡希望: ${contactPreference || "未設定"}`,
       questions: ["面談候補日時、開始時期、週あたりの稼働量を確認する"],
     },
     {
       label: "契約・支払い条件",
       grade: hasRateCondition && hasContractCondition ? "確認済み" : hasRateCondition || hasContractCondition ? "追加確認" : "未確認",
-      detail: `単価: ${desiredRate || jobRate || "未設定"} / 稼働量: ${workload || "未設定"} / 条件: ${contractTerms || "未設定"}`,
+      detail: `希望単価: ${candidateRate || "未設定"} / 案件単価: ${jobRate || "未設定"} / 案件稼働量: ${workload || "未設定"} / 条件: ${contractTerms || "未設定"}`,
       questions: ["契約期間、支払い条件、稼働開始後の確認サイクルを面談前に整理する"],
     },
   ];
@@ -874,6 +899,7 @@ function buildHandoffChecks({
   requiredSkillCount,
   hasProposal,
   hasStartSignal,
+  hasApplicationTerms,
   hasContactSignal,
   hasSelectionFlow,
   hasContractTerms,
@@ -882,6 +908,7 @@ function buildHandoffChecks({
   requiredSkillCount: number;
   hasProposal: boolean;
   hasStartSignal: boolean;
+  hasApplicationTerms: boolean;
   hasContactSignal: boolean;
   hasSelectionFlow: boolean;
   hasContractTerms: boolean;
@@ -901,8 +928,13 @@ function buildHandoffChecks({
       done: hasProposal,
     },
     {
+      label: "応募時の条件",
+      detail: "応募者がこの案件で提示した希望単価と希望稼働量を、面談前に確認します。",
+      done: hasApplicationTerms,
+    },
+    {
       label: "開始条件",
-      detail: "稼働開始目安や稼働条件を、面談で確認する前提として整理します。",
+      detail: "稼働開始目安を、面談で確認する前提として整理します。",
       done: hasStartSignal,
     },
     {

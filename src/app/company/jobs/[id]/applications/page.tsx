@@ -5,7 +5,7 @@ import { requireCompanyUser } from "@/lib/page-guards";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
-import { applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
+import { applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import {
   COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT,
   applicantKeywordCandidateWhere,
@@ -259,6 +259,7 @@ function HighlightedApplicationRow({
     application.freelancerProfile.availableFrom ||
     application.freelancerProfile.availability ||
     "未設定";
+  const conditionTerms = applicationConditionTerms(application);
   const skillSignal =
     review.requiredSkillMatches.length > 0
       ? review.requiredSkillMatches.slice(0, 3).join("、")
@@ -277,7 +278,7 @@ function HighlightedApplicationRow({
         </div>
         <h3 className="mt-2 font-semibold">{application.freelancerProfile.fullName}</h3>
         <p className="mt-1 text-sm text-stone-600">
-          {application.freelancerProfile.desiredOccupation ?? "希望職種未設定"} / 開始目安: {startSignal}
+          {application.freelancerProfile.desiredOccupation ?? "希望職種未設定"} / 開始目安: {startSignal} / 希望単価: {conditionTerms.rate.display}
         </p>
         <p className="mt-1 text-sm leading-6 text-stone-700">強みとして確認すること: {skillSignal}</p>
       </div>
@@ -303,7 +304,7 @@ function ApplicationCard({
     application.freelancerProfile.availability ||
     "未設定";
   const contactSignal = application.contactPreference || "面談判断後に調整";
-  const rateSignal = application.freelancerProfile.desiredRate || "未設定";
+  const conditionTerms = applicationConditionTerms(application);
   const nextReviewAction = buildApplicantReviewAction({
     status: application.status,
     isInterviewReady: review.isInterviewReady,
@@ -368,9 +369,14 @@ function ApplicationCard({
               tone={application.contactPreference ? "good" : "neutral"}
             />
             <ApplicantSignal
-              label="希望単価"
-              value={rateSignal}
-              tone={application.freelancerProfile.desiredRate ? "good" : "warn"}
+              label="応募時希望単価"
+              value={conditionTerms.rate.display}
+              tone={conditionTerms.rate.source === "application" ? "good" : conditionTerms.rate.source === "profile" ? "neutral" : "warn"}
+            />
+            <ApplicantSignal
+              label="応募時希望稼働量"
+              value={conditionTerms.workload.display}
+              tone={conditionTerms.workload.source === "application" ? "good" : conditionTerms.workload.source === "profile" ? "neutral" : "warn"}
             />
           </div>
           <div className="mt-3 flex flex-wrap gap-2">

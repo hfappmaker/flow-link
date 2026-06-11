@@ -449,6 +449,8 @@ model JobApplication {
   status                  JobApplicationStatus  @default(applied)
   proposalMessage         String?               @map("proposal_message")
   proposedStart           String?               @map("proposed_start")
+  rateExpectation         String?               @map("rate_expectation")
+  workloadExpectation     String?               @map("workload_expectation")
   contactPreference       String?               @map("contact_preference")
   appliedAt               DateTime              @default(now()) @map("applied_at")
   screenedAt              DateTime?             @map("screened_at")

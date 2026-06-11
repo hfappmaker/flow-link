@@ -32,6 +32,8 @@ type ApplyToJobInput = {
   jobPostId: string;
   proposalMessage: string;
   proposedStart: string | null;
+  rateExpectation: string | null;
+  workloadExpectation: string | null;
   contactPreference: string | null;
 };
 
@@ -68,6 +70,8 @@ export async function applyToJobWorkflow(db: WorkflowDb, input: ApplyToJobInput)
       freelancerProfileId: input.freelancerProfileId,
       proposalMessage: input.proposalMessage,
       proposedStart: input.proposedStart,
+      rateExpectation: input.rateExpectation,
+      workloadExpectation: input.workloadExpectation,
       contactPreference: input.contactPreference,
     },
   });
@@ -84,6 +88,8 @@ type ScreeningApplication = {
     contractTerms: string | null;
   };
   proposedStart: string | null;
+  rateExpectation: string | null;
+  workloadExpectation: string | null;
   contactPreference: string | null;
 };
 
@@ -152,6 +158,8 @@ export async function screenApplicationWorkflow(db: WorkflowDb, input: ScreenApp
               freelancerName: input.application.freelancerProfile.fullName,
               jobTitle: input.application.jobPost.title,
               proposedStart: input.application.proposedStart,
+              rateExpectation: input.application.rateExpectation,
+              workloadExpectation: input.application.workloadExpectation,
               contactPreference: input.application.contactPreference,
               selectionFlow: input.application.jobPost.selectionFlow,
               contractTerms: input.application.jobPost.contractTerms,

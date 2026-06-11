@@ -290,6 +290,8 @@ export default async function FreelancerApplicationsPage({
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {application.proposedStart && <StatusBadge>開始目安: {application.proposedStart}</StatusBadge>}
+                      {application.rateExpectation && <StatusBadge>希望単価: {application.rateExpectation}</StatusBadge>}
+                      {application.workloadExpectation && <StatusBadge>希望稼働量: {application.workloadExpectation}</StatusBadge>}
                       {application.contactPreference && <StatusBadge>連絡希望: {application.contactPreference}</StatusBadge>}
                       {application.interviewThread?.meetingUrl && <StatusBadge tone="good">会議URL共有済み</StatusBadge>}
                     </div>

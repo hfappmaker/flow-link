@@ -499,12 +499,19 @@ export async function applyToJob(formData: FormData) {
   const jobPostId = toText(formData.get("jobPostId"));
   const proposalMessage = toText(formData.get("proposalMessage"));
   const proposedStart = toOptionalText(formData.get("proposedStart"));
+  const rateExpectation = toOptionalText(formData.get("rateExpectation"));
+  const workloadExpectation = toOptionalText(formData.get("workloadExpectation"));
   const contactPreference = toOptionalText(formData.get("contactPreference"));
   if (proposalMessage.length < 40 || proposalMessage.length > 1200) {
     throw new Error("応募メッセージは40文字以上1200文字以内で入力してください。");
   }
-  if ((proposedStart?.length ?? 0) > 120 || (contactPreference?.length ?? 0) > 120) {
-    throw new Error("稼働開始目安と連絡希望は120文字以内で入力してください。");
+  if (
+    (proposedStart?.length ?? 0) > 120 ||
+    (rateExpectation?.length ?? 0) > 120 ||
+    (workloadExpectation?.length ?? 0) > 120 ||
+    (contactPreference?.length ?? 0) > 120
+  ) {
+    throw new Error("稼働開始目安、希望単価、希望稼働量、連絡希望は120文字以内で入力してください。");
   }
   const profileForReadiness = await prisma.freelancerProfile.findUnique({
     where: { id: profile.id },
@@ -513,6 +520,8 @@ export async function applyToJob(formData: FormData) {
   const applicationReadiness = getApplicationReadiness(profileForReadiness, {
     proposalMessage,
     proposedStart,
+    rateExpectation,
+    workloadExpectation,
     contactPreference,
   });
   if (!applicationReadiness.isReady) {
@@ -523,6 +532,8 @@ export async function applyToJob(formData: FormData) {
     jobPostId,
     proposalMessage,
     proposedStart,
+    rateExpectation,
+    workloadExpectation,
     contactPreference,
   });
 
