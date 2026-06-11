@@ -8,11 +8,13 @@ const {
   enqueueSavedFeedJobAlertDispatch,
   evaluateSavedFeedJobAlerts,
   normalizeAlertCadence,
+  SAVED_FEED_ALERT_DISPATCH_LEASE_MS,
   sendDueJobAlertDigests,
 } = await import("../src/lib/job-alerts.ts");
 
 const migrationSql = await readFile("prisma/migrations/20260609154000_add_saved_feed_job_alerts/migration.sql", "utf8");
 const dispatchMigrationSql = await readFile("prisma/migrations/20260611160000_add_job_alert_dispatches/migration.sql", "utf8");
+const dispatchLockIndexMigrationSql = await readFile("prisma/migrations/20260611182000_add_job_alert_dispatch_lock_index/migration.sql", "utf8");
 const schema = await readFile("prisma/schema.prisma", "utf8");
 
 test("saved feed alert migration adds delivery state and notification links", () => {
@@ -31,6 +33,8 @@ test("saved feed alert dispatch migration adds a per-job outbox", () => {
   assert.match(dispatchMigrationSql, /UNIQUE INDEX "job_alert_dispatches_job_post_id_key"/);
   assert.match(schema, /model JobAlertDispatch/);
   assert.match(schema, /jobPostId\s+String\s+@unique @map\("job_post_id"\)/);
+  assert.match(dispatchLockIndexMigrationSql, /CREATE INDEX "job_alert_dispatches_status_locked_at_idx"/);
+  assert.match(schema, /@@index\(\[status, lockedAt\]\)/);
 });
 
 test("alert cadence parser maps explicit and legacy text values", () => {
@@ -132,6 +136,56 @@ test("dispatch boundary records failures and retries idempotently", async () => 
 
   await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-09T02:00:00Z") });
   assert.equal(db.notifications.length, 1);
+});
+
+test("dispatch boundary skips non-stale processing locks", async () => {
+  const db = alertDb();
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+  db.dispatches[0].status = JobAlertDispatchStatus.processing;
+  db.dispatches[0].lockedAt = new Date("2026-06-09T00:10:00Z");
+
+  const result = await dispatchPendingSavedFeedJobAlerts(db, { now: new Date("2026-06-09T00:20:00Z") });
+
+  assert.deepEqual(result, { processed: 0, completed: 0, failed: 0 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.processing);
+  assert.equal(db.dispatches[0].attempts, 0);
+  assert.equal(db.notifications.length, 0);
+});
+
+test("dispatch boundary retries stale processing locks", async () => {
+  const db = alertDb();
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+  db.dispatches[0].status = JobAlertDispatchStatus.processing;
+  db.dispatches[0].lockedAt = new Date("2026-06-09T00:00:00Z");
+  db.dispatches[0].lastError = "worker exited during notification fanout";
+
+  const now = new Date("2026-06-09T00:16:00Z");
+  const result = await dispatchPendingSavedFeedJobAlerts(db, { now });
+
+  assert.deepEqual(result, { processed: 1, completed: 1, failed: 0 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.completed);
+  assert.equal(db.dispatches[0].attempts, 1);
+  assert.equal(db.dispatches[0].lockedAt, null);
+  assert.equal(db.dispatches[0].lastError, null);
+  assert.equal(db.notifications.length, 1);
+});
+
+test("dispatch boundary preserves diagnosis until a stale retry succeeds or fails", async () => {
+  const db = alertDb({ failNotifications: true });
+  await enqueueSavedFeedJobAlertDispatch(db, { jobPostId: "job-1" });
+  db.dispatches[0].status = JobAlertDispatchStatus.processing;
+  db.dispatches[0].lockedAt = new Date("2026-06-09T00:00:00Z");
+  db.dispatches[0].attempts = 2;
+  db.dispatches[0].lastError = "previous worker timed out";
+
+  const result = await dispatchPendingSavedFeedJobAlerts(db, {
+    now: new Date(new Date("2026-06-09T00:00:00Z").getTime() + SAVED_FEED_ALERT_DISPATCH_LEASE_MS + 1),
+  });
+
+  assert.deepEqual(result, { processed: 1, completed: 0, failed: 1 });
+  assert.equal(db.dispatches[0].status, JobAlertDispatchStatus.failed);
+  assert.equal(db.dispatches[0].attempts, 3);
+  assert.match(db.dispatches[0].lastError, /notification outage/);
 });
 
 test("saved feed alerts use selected monthly rate bands with normalized lower bounds", async () => {
@@ -418,19 +472,19 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
       findMany: async ({ where, orderBy, take }) => {
         void orderBy;
         return state.dispatches
-          .filter((dispatch) => where.status.in.includes(dispatch.status))
+          .filter((dispatch) => dispatchMatchesWhere(dispatch, where))
           .slice(0, take);
+      },
+      updateMany: async ({ where, data }) => {
+        const dispatches = state.dispatches.filter((dispatch) => dispatchMatchesWhere(dispatch, where));
+        for (const dispatch of dispatches) {
+          applyDispatchUpdate(dispatch, data);
+        }
+        return { count: dispatches.length };
       },
       update: async ({ where, data }) => {
         const dispatch = state.dispatches.find((item) => item.id === where.id);
-        Object.assign(dispatch, {
-          ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined && typeof value !== "object")),
-          attempts: data.attempts?.increment ? dispatch.attempts + data.attempts.increment : data.attempts ?? dispatch.attempts,
-          lockedAt: data.lockedAt ?? null,
-          processedAt: data.processedAt ?? dispatch.processedAt,
-          lastError: data.lastError ?? null,
-          updatedAt: new Date(),
-        });
+        applyDispatchUpdate(dispatch, data);
         return dispatch;
       },
     },
@@ -476,4 +530,35 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
           })),
     },
   };
+}
+
+function dispatchMatchesWhere(dispatch, where) {
+  if (where.id && dispatch.id !== where.id) return false;
+  if (where.status && !statusMatches(dispatch.status, where.status)) return false;
+  if (where.lockedAt && !dateMatches(dispatch.lockedAt, where.lockedAt)) return false;
+  if (where.OR && !where.OR.some((condition) => dispatchMatchesWhere(dispatch, condition))) return false;
+  return true;
+}
+
+function statusMatches(status, condition) {
+  if (typeof condition === "string") return status === condition;
+  if (condition.in) return condition.in.includes(status);
+  return true;
+}
+
+function dateMatches(value, condition) {
+  if (!value) return false;
+  if (condition.lte && value > condition.lte) return false;
+  return true;
+}
+
+function applyDispatchUpdate(dispatch, data) {
+  Object.assign(dispatch, {
+    ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined && typeof value !== "object")),
+    attempts: data.attempts?.increment ? dispatch.attempts + data.attempts.increment : data.attempts ?? dispatch.attempts,
+    lockedAt: Object.hasOwn(data, "lockedAt") ? data.lockedAt : dispatch.lockedAt,
+    processedAt: Object.hasOwn(data, "processedAt") ? data.processedAt : dispatch.processedAt,
+    lastError: Object.hasOwn(data, "lastError") ? data.lastError : dispatch.lastError,
+    updatedAt: new Date(),
+  });
 }
