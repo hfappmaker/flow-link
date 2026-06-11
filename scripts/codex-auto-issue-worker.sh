@@ -240,6 +240,9 @@ Issue rules:
 - If the issue has label needs:preview-write, Preview write-path checks are allowed only with disposable automation-prefixed data, recorded IDs/titles/emails, and verified cleanup before the run ends.
 - If the issue does not have label needs:preview-write, do not create or mutate Preview data.
 - Prefer local write-path verification when feasible.
+- Before committing, compare the implementation against every Acceptance criteria bullet in the selected issue body and any follow-up issue comments.
+- Do not mark the issue fixed merely because the main technical bug is addressed. User-facing copy, option coverage, saved-search or alert consistency, and verification criteria count as part of done when the issue names them.
+- If any acceptance criterion remains intentionally unsatisfied, either complete it in the same scoped change or leave the worktree clean and explain the blocker instead of committing a partial fix.
 
 Playwright verification policy:
 - If the issue has label area:bug, area:ux, or area:visual-design, Playwright browser verification is required by default before marking the issue fixed.
@@ -265,6 +268,7 @@ Verification:
 - For area:bug, area:ux, and area:visual-design, include the Playwright scenario, target URL, viewport(s), and result in your final message. If Playwright could not run, include the exact reason and fallback checks.
 - For area:visual-design, include the saved screenshot paths in your final message.
 - Include commands/checks run in your final message.
+- Include an acceptance-criteria checklist in your final message, with each item marked satisfied or blocked.
 
 Git:
 - If you make changes, commit them yourself on the current worktree branch with a concise Conventional Commit subject.
@@ -278,6 +282,7 @@ Final message:
 - Say whether the issue was fixed or blocked.
 - Include the commit SHA if fixed.
 - Include verification commands and any Preview/local checks.
+- Include the acceptance-criteria checklist.
 - Include one sentence explaining how the change supports the issue's competitive relevance when the issue body includes that section.
 PROMPT_EOF
 )

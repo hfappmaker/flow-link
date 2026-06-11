@@ -254,11 +254,15 @@ Semantic correctness policy:
 - Do not dismiss them just because the screen renders, seed data appears to work, or the happy path looks plausible.
 - Prefer issues where the user-facing label implies precise behavior, such as "80万円以上", "受付中のみ", "条件が揃った", "おすすめ", "マッチ", "確認済み", "未対応", "リモート可", "応募しやすい", "保存フィード", or "信頼".
 - For each semantic correctness issue, compare the user-facing promise, the actual implementation rule, examples that pass incorrectly, examples that fail incorrectly, and the durable model, parser, or test boundary that should replace the approximation.
+- Also look for user controls whose available choices are too narrow, arbitrary, or implementation-shaped for the user's decision. Examples include a single hard-coded threshold where users need multiple practical bands, one status option where several real workflow states exist, or shortcut chips that over-emphasize one arbitrary product assumption.
+- Treat option granularity as issue-worthy when the missing choices force users to manually scan, hide relevant results, make saved searches or alerts too coarse, or reveal internal simplification instead of matching freelancer/company intent.
 
 Heuristic implementation audit:
 - Search for contains checks, includes checks, regex-like string matching, hard-coded thresholds, enum-like strings, labels containing "以上", "以下", "のみ", "確認済み", "おすすめ", "マッチ", or filters backed by free-text fields.
+- Search for select controls, segmented controls, shortcut chips, and saved-search fields with only one non-empty option or one hard-coded threshold.
 - Audit jobs discovery, recommendations, saved searches, job alerts, readiness gates, trust labels, application eligibility, company/freelancer matching, and pricing/rate behavior.
 - Create an issue when a UI label suggests structured business logic but committed code uses approximate text matching or weak heuristics that can change what users see or decide.
+- Create an issue when the implementation has become semantically correct for one hard-coded choice but still fails the broader user need because the user cannot choose the right band/state/category.
 
 Maturity and stopping conditions:
 - The wrapper skips this run before Codex starts when open codex:ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds configured thresholds.
@@ -327,6 +331,7 @@ Classification:
 - Required-field policy, readiness gates, applying/publishing eligibility, and marketplace-quality validation usually belong to area:product.
 - Validation implementation gaps, parser/type drift, missing workflow tests, and duplicated validation logic usually belong to area:maintainability.
 - Wrong search/filter/recommendation results caused by a mismatch between user-facing labels and implementation semantics usually belong to area:product.
+- Missing or arbitrary filter/search option choices, such as a single hard-coded rate threshold, usually belong to area:product.
 - Incorrect trust, readiness, payment, rate, or eligibility behavior belongs to area:product when it changes marketplace decisions, and area:bug when it clearly produces broken or unsafe user-visible results.
 - Approximate string matching, duplicated ad hoc parsing, missing normalized fields, or missing semantic tests should be mentioned as maintainability risk even when the primary issue is product.
 - Business workflow or service-positioning questions belong to area:product.
