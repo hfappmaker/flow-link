@@ -29,33 +29,71 @@ export const postInterviewDeclineReasonLabels: Record<PostInterviewDeclineReason
   other: "その他",
 };
 
-export const companyOutcomeStatusValues = [
-  PostInterviewOutcomeStatus.waiting_company_decision,
-  PostInterviewOutcomeStatus.offer_sent,
-  PostInterviewOutcomeStatus.freelancer_considering,
-  PostInterviewOutcomeStatus.clarification_requested,
-  PostInterviewOutcomeStatus.accepted,
-  PostInterviewOutcomeStatus.declined_by_company,
-  PostInterviewOutcomeStatus.declined_by_freelancer,
-  PostInterviewOutcomeStatus.contract_preparing,
-  PostInterviewOutcomeStatus.contract_agreed,
-  PostInterviewOutcomeStatus.work_started,
-  PostInterviewOutcomeStatus.closed_no_hire,
-] as const satisfies readonly PostInterviewOutcomeStatus[];
+export type PostInterviewOutcomeRole = "company" | "freelancer";
 
-export const freelancerOutcomeStatusValues = [
-  PostInterviewOutcomeStatus.waiting_company_decision,
-  PostInterviewOutcomeStatus.offer_sent,
-  PostInterviewOutcomeStatus.freelancer_considering,
-  PostInterviewOutcomeStatus.clarification_requested,
-  PostInterviewOutcomeStatus.accepted,
-  PostInterviewOutcomeStatus.contract_preparing,
-  PostInterviewOutcomeStatus.contract_agreed,
-  PostInterviewOutcomeStatus.work_started,
-  PostInterviewOutcomeStatus.declined_by_company,
-  PostInterviewOutcomeStatus.declined_by_freelancer,
-  PostInterviewOutcomeStatus.closed_no_hire,
-] as const satisfies readonly PostInterviewOutcomeStatus[];
+type PostInterviewOutcomePolicyEntry = {
+  status: PostInterviewOutcomeStatus;
+  mode: "author" | "acknowledge";
+  requiredFields?: readonly ("startDateEvidence" | "declineReason")[];
+};
+
+const agreementRequiredFields = ["startDateEvidence"] as const;
+const declineRequiredFields = ["declineReason"] as const;
+
+export const postInterviewOutcomePolicy = {
+  company: [
+    { status: PostInterviewOutcomeStatus.waiting_company_decision, mode: "author" },
+    { status: PostInterviewOutcomeStatus.offer_sent, mode: "author" },
+    { status: PostInterviewOutcomeStatus.freelancer_considering, mode: "acknowledge" },
+    { status: PostInterviewOutcomeStatus.clarification_requested, mode: "acknowledge" },
+    { status: PostInterviewOutcomeStatus.accepted, mode: "acknowledge", requiredFields: agreementRequiredFields },
+    { status: PostInterviewOutcomeStatus.declined_by_company, mode: "author", requiredFields: declineRequiredFields },
+    { status: PostInterviewOutcomeStatus.contract_preparing, mode: "author" },
+    { status: PostInterviewOutcomeStatus.contract_agreed, mode: "author", requiredFields: agreementRequiredFields },
+    { status: PostInterviewOutcomeStatus.work_started, mode: "author", requiredFields: agreementRequiredFields },
+    { status: PostInterviewOutcomeStatus.closed_no_hire, mode: "author" },
+  ],
+  freelancer: [
+    { status: PostInterviewOutcomeStatus.freelancer_considering, mode: "author" },
+    { status: PostInterviewOutcomeStatus.clarification_requested, mode: "author" },
+    { status: PostInterviewOutcomeStatus.accepted, mode: "author", requiredFields: agreementRequiredFields },
+    { status: PostInterviewOutcomeStatus.declined_by_freelancer, mode: "author", requiredFields: declineRequiredFields },
+    { status: PostInterviewOutcomeStatus.contract_agreed, mode: "acknowledge", requiredFields: agreementRequiredFields },
+    { status: PostInterviewOutcomeStatus.work_started, mode: "acknowledge", requiredFields: agreementRequiredFields },
+  ],
+} as const satisfies Record<PostInterviewOutcomeRole, readonly PostInterviewOutcomePolicyEntry[]>;
+
+export const companyOutcomeStatusValues = postInterviewOutcomePolicy.company.map((entry) => entry.status);
+
+export const freelancerOutcomeStatusValues = postInterviewOutcomePolicy.freelancer.map((entry) => entry.status);
+
+export function getPostInterviewOutcomePolicyEntry(
+  role: PostInterviewOutcomeRole,
+  status: PostInterviewOutcomeStatus,
+): PostInterviewOutcomePolicyEntry | undefined {
+  return postInterviewOutcomePolicy[role].find((entry) => entry.status === status);
+}
+
+export function validatePostInterviewOutcomePolicy(
+  role: PostInterviewOutcomeRole,
+  input: {
+    status: PostInterviewOutcomeStatus;
+    proposedStartDate?: string | null;
+    agreedStartDate?: string | null;
+    declineReason?: PostInterviewDeclineReason | null;
+  },
+) {
+  const entry = getPostInterviewOutcomePolicyEntry(role, input.status);
+  if (!entry) {
+    throw new Error("この面談後ステータスは現在の権限では更新できません。");
+  }
+  if (entry.requiredFields?.includes("startDateEvidence") && !input.agreedStartDate && !input.proposedStartDate) {
+    throw new Error("承諾以降のステータスでは開始日または開始予定を入力してください。");
+  }
+  if (entry.requiredFields?.includes("declineReason") && !input.declineReason) {
+    throw new Error(role === "freelancer" ? "辞退理由を選択してください。" : "見送り理由を選択してください。");
+  }
+}
 
 export function outcomeTone(status?: PostInterviewOutcomeStatus | null) {
   if (!status || status === PostInterviewOutcomeStatus.waiting_company_decision) return "neutral";

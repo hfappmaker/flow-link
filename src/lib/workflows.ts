@@ -13,6 +13,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { getApplicationReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
+import { validatePostInterviewOutcomePolicy } from "./post-interview-outcomes.ts";
 import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
 type WorkflowDb = Pick<
@@ -441,15 +442,7 @@ export async function recordCompanyPostInterviewOutcomeWorkflow(
   db: WorkflowDb,
   input: CompanyPostInterviewOutcomeInput,
 ) {
-  if (
-    input.status === PostInterviewOutcomeStatus.accepted ||
-    input.status === PostInterviewOutcomeStatus.contract_agreed ||
-    input.status === PostInterviewOutcomeStatus.work_started
-  ) {
-    if (!input.agreedStartDate && !input.proposedStartDate) {
-      throw new Error("承諾以降のステータスでは開始日または開始予定を入力してください。");
-    }
-  }
+  validatePostInterviewOutcomePolicy("company", input);
 
   await db.$transaction(async (tx) => {
     await tx.postInterviewOutcome.upsert({
@@ -516,9 +509,7 @@ export async function recordFreelancerPostInterviewOutcomeWorkflow(
   db: WorkflowDb,
   input: FreelancerPostInterviewOutcomeInput,
 ) {
-  if (input.status === PostInterviewOutcomeStatus.declined_by_freelancer && !input.declineReason) {
-    throw new Error("辞退理由を選択してください。");
-  }
+  validatePostInterviewOutcomePolicy("freelancer", input);
 
   await db.postInterviewOutcome.upsert({
     where: { jobApplicationId: input.jobApplicationId },

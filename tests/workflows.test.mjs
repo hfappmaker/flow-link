@@ -24,6 +24,12 @@ const {
   submitInteractionFeedbackWorkflow,
 } = await import("../src/lib/workflows.ts");
 
+const {
+  companyOutcomeStatusValues,
+  freelancerOutcomeStatusValues,
+  postInterviewOutcomePolicy,
+} = await import("../src/lib/post-interview-outcomes.ts");
+
 function readyProfile() {
   return {
     id: "freelancer-profile-1",
@@ -329,6 +335,102 @@ test("company can pause applications after accepted or started outcome", async (
 
   const jobUpdate = db.calls.find(([name]) => name === "jobPost.update");
   assert.deepEqual(jobUpdate[1].data, { applicationStatus: ApplicationStatus.paused });
+});
+
+test("post-interview role options are derived from the shared policy", () => {
+  assert.deepEqual(
+    companyOutcomeStatusValues,
+    postInterviewOutcomePolicy.company.map((entry) => entry.status),
+  );
+  assert.deepEqual(
+    freelancerOutcomeStatusValues,
+    postInterviewOutcomePolicy.freelancer.map((entry) => entry.status),
+  );
+  assert.equal(companyOutcomeStatusValues.includes(PostInterviewOutcomeStatus.declined_by_freelancer), false);
+  assert.equal(freelancerOutcomeStatusValues.includes(PostInterviewOutcomeStatus.declined_by_company), false);
+  assert.equal(freelancerOutcomeStatusValues.includes(PostInterviewOutcomeStatus.offer_sent), false);
+});
+
+test("post-interview workflows reject statuses owned by the other side", async () => {
+  await assert.rejects(
+    () =>
+      recordCompanyPostInterviewOutcomeWorkflow(workflowDb(), {
+        jobApplicationId: "application-1",
+        jobPostId: "job-1",
+        status: PostInterviewOutcomeStatus.declined_by_freelancer,
+        proposedStartDate: null,
+        agreedStartDate: null,
+        agreedRate: null,
+        agreedWorkload: null,
+        contractPaymentNotes: null,
+        externalConfirmationNeeded: null,
+        responseDeadline: null,
+        declineReason: PostInterviewDeclineReason.contract_payment_concern,
+        privateOutcomeNote: null,
+        jobPostAction: "keep_open",
+      }),
+    /現在の権限では更新できません。/,
+  );
+
+  await assert.rejects(
+    () =>
+      recordFreelancerPostInterviewOutcomeWorkflow(workflowDb(), {
+        jobApplicationId: "application-1",
+        status: PostInterviewOutcomeStatus.declined_by_company,
+        declineReason: PostInterviewDeclineReason.role_mismatch,
+        agreedStartDate: null,
+        agreedRate: null,
+        agreedWorkload: null,
+        externalConfirmationNeeded: null,
+        privateOutcomeNote: null,
+      }),
+    /現在の権限では更新できません。/,
+  );
+});
+
+test("company decline requires a structured private reason", async () => {
+  await assert.rejects(
+    () =>
+      recordCompanyPostInterviewOutcomeWorkflow(workflowDb(), {
+        jobApplicationId: "application-1",
+        jobPostId: "job-1",
+        status: PostInterviewOutcomeStatus.declined_by_company,
+        proposedStartDate: null,
+        agreedStartDate: null,
+        agreedRate: null,
+        agreedWorkload: null,
+        contractPaymentNotes: null,
+        externalConfirmationNeeded: null,
+        responseDeadline: null,
+        declineReason: null,
+        privateOutcomeNote: null,
+        jobPostAction: "keep_open",
+      }),
+    /見送り理由を選択してください。/,
+  );
+});
+
+test("freelancer agreement milestones require start-date evidence", async () => {
+  for (const status of [
+    PostInterviewOutcomeStatus.accepted,
+    PostInterviewOutcomeStatus.contract_agreed,
+    PostInterviewOutcomeStatus.work_started,
+  ]) {
+    await assert.rejects(
+      () =>
+        recordFreelancerPostInterviewOutcomeWorkflow(workflowDb(), {
+          jobApplicationId: "application-1",
+          status,
+          declineReason: null,
+          agreedStartDate: null,
+          agreedRate: null,
+          agreedWorkload: null,
+          externalConfirmationNeeded: null,
+          privateOutcomeNote: null,
+        }),
+      /承諾以降のステータスでは開始日または開始予定を入力してください。/,
+    );
+  }
 });
 
 test("freelancer decline requires a structured private reason", async () => {
