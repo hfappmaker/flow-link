@@ -1,7 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useLinkStatus } from "next/link";
 import { useFormStatus } from "react-dom";
@@ -11,6 +11,20 @@ import { cn } from "@/lib/utils";
 type PendingKind = "route" | "submit";
 
 const HIDE_AFTER_MS = 12000;
+const ROUTE_MIN_VISIBLE_MS = 500;
+const ROUTE_PENDING_STORAGE_KEY = "flow-link-route-pending-until";
+
+function takeStoredRoutePendingUntil() {
+  if (typeof window === "undefined") return 0;
+
+  try {
+    const pendingUntil = Number(window.sessionStorage.getItem(ROUTE_PENDING_STORAGE_KEY) ?? 0);
+    window.sessionStorage.removeItem(ROUTE_PENDING_STORAGE_KEY);
+    return pendingUntil;
+  } catch {
+    return 0;
+  }
+}
 
 export function GlobalPendingFeedback() {
   const pathname = usePathname();
@@ -18,28 +32,65 @@ export function GlobalPendingFeedback() {
   const locationKey = `${pathname}?${searchParams.toString()}`;
   const [pendingKind, setPendingKind] = useState<PendingKind | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingKindRef = useRef<PendingKind | null>(null);
+  const shownAtRef = useRef(0);
 
-  useEffect(() => {
-    const resetTimer = setTimeout(() => setPendingKind(null), 0);
-    return () => clearTimeout(resetTimer);
-  }, [locationKey]);
-
-  useEffect(() => {
-    function clearHideTimer() {
-      if (hideTimer.current) {
-        clearTimeout(hideTimer.current);
-        hideTimer.current = null;
-      }
+  const clearHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
     }
+  }, []);
 
-    function show(kind: PendingKind) {
+  const hidePending = useCallback(() => {
+    clearHideTimer();
+    pendingKindRef.current = null;
+    setPendingKind(null);
+  }, [clearHideTimer]);
+
+  const showPending = useCallback(
+    (kind: PendingKind) => {
       clearHideTimer();
+      pendingKindRef.current = kind;
+      shownAtRef.current = Date.now();
       setPendingKind(kind);
-      hideTimer.current = setTimeout(() => {
-        setPendingKind(null);
-        hideTimer.current = null;
-      }, HIDE_AFTER_MS);
-    }
+      if (kind === "route") {
+        try {
+          window.sessionStorage.setItem(ROUTE_PENDING_STORAGE_KEY, String(shownAtRef.current + ROUTE_MIN_VISIBLE_MS));
+        } catch {
+          // Ignore storage failures; in-memory route feedback still works for client transitions.
+        }
+      }
+      hideTimer.current = setTimeout(hidePending, HIDE_AFTER_MS);
+    },
+    [clearHideTimer, hidePending],
+  );
+
+  useEffect(() => {
+    const pendingUntil = takeStoredRoutePendingUntil();
+    const remaining = pendingUntil - Date.now();
+    if (remaining <= 0) return;
+
+    const restoreTimer = setTimeout(() => {
+      clearHideTimer();
+      pendingKindRef.current = "route";
+      shownAtRef.current = pendingUntil - ROUTE_MIN_VISIBLE_MS;
+      setPendingKind("route");
+      hideTimer.current = setTimeout(hidePending, Math.max(pendingUntil - Date.now(), 0));
+    }, 0);
+
+    return () => clearTimeout(restoreTimer);
+  }, [clearHideTimer, hidePending]);
+
+  useEffect(() => {
+    if (pendingKindRef.current !== "route") return;
+
+    const elapsed = Date.now() - shownAtRef.current;
+    const resetTimer = setTimeout(hidePending, Math.max(ROUTE_MIN_VISIBLE_MS - elapsed, 0));
+    return () => clearTimeout(resetTimer);
+  }, [hidePending, locationKey]);
+
+  useEffect(() => {
 
     function handleClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -52,7 +103,7 @@ export function GlobalPendingFeedback() {
       const nextUrl = new URL(link.href, window.location.href);
       if (nextUrl.origin !== window.location.origin || nextUrl.href === window.location.href || nextUrl.hash) return;
 
-      show("route");
+      showPending("route");
     }
 
     function handleSubmit(event: SubmitEvent) {
@@ -61,7 +112,7 @@ export function GlobalPendingFeedback() {
       const form = event.target instanceof HTMLFormElement ? event.target : null;
       if (!form || !form.checkValidity()) return;
 
-      show("submit");
+      showPending("submit");
 
       const submitter = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
       const pendingLabel = submitter?.dataset.pendingLabel;
@@ -77,8 +128,11 @@ export function GlobalPendingFeedback() {
     }
 
     function handlePageShow() {
-      setPendingKind(null);
-      clearHideTimer();
+      try {
+        window.sessionStorage.removeItem(ROUTE_PENDING_STORAGE_KEY);
+      } catch {
+        // Ignore storage failures; the visible state is still controlled in memory.
+      }
     }
 
     document.addEventListener("click", handleClick, true);
@@ -91,7 +145,7 @@ export function GlobalPendingFeedback() {
       window.removeEventListener("pageshow", handlePageShow);
       clearHideTimer();
     };
-  }, []);
+  }, [clearHideTimer, hidePending, showPending]);
 
   const message = pendingKind === "submit" ? "送信内容を処理しています" : "画面を読み込んでいます";
 
