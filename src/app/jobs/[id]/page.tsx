@@ -14,6 +14,7 @@ import {
   formatOpenings,
   matchedSkills,
   parseSkills,
+  unmatchedSkills,
   visiblePreferenceReasons,
   type TrustConfidenceStatus,
 } from "@/lib/utils";
@@ -132,8 +133,7 @@ export default async function JobDetailPage({
   );
   const requiredSkills = parseSkills(job.requiredSkills);
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
-  const matchedSkillSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
-  const requiredSkillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
+  const requiredSkillGaps = freelancerProfile ? unmatchedSkills(job.requiredSkills, freelancerProfile.skills) : requiredSkills;
   const matchPercent = requiredSkills.length > 0 ? Math.round((requiredSkillMatches.length / requiredSkills.length) * 100) : null;
   const contractReadiness = getJobPublishingReadiness(job, job.companyProfile);
   const companyConfidence = buildTrustConfidence({ company: job.companyProfile, job });

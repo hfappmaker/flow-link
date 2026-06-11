@@ -21,6 +21,7 @@ import {
   parseSkills,
   skillMatchPercent,
   skillPreview,
+  unmatchedSkills,
   visiblePreferenceReasons,
   workPreferenceCompleteness,
   type TrustConfidenceStatus,
@@ -964,8 +965,7 @@ function JobCard({
   const requiredSkillCount = parseSkills(job.requiredSkills).length;
   const requiredSkillMatches = freelancerProfile ? matchedSkills(job.requiredSkills, freelancerProfile.skills) : [];
   const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
-  const requiredSkillMatchSet = new Set(requiredSkillMatches.map((skill) => skill.toLowerCase()));
-  const requiredSkillGaps = parseSkills(job.requiredSkills).filter((skill) => !requiredSkillMatchSet.has(skill.toLowerCase()));
+  const requiredSkillGaps = freelancerProfile ? unmatchedSkills(job.requiredSkills, freelancerProfile.skills) : parseSkills(job.requiredSkills);
   const nextStep = freelancerProfile
     ? buildJobCardNextStep({
         applied,

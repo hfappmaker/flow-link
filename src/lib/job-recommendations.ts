@@ -10,6 +10,7 @@ import {
   preferenceAwareMatchScore,
   skillMatchPercent,
   trustRecommendationAdjustment,
+  unmatchedSkills,
   visiblePreferenceReasons,
   type CompanyTrustInput,
   type JobTrustInput,
@@ -68,8 +69,7 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
   const savedJobIds = new Set(context.savedJobIds ?? []);
   const requiredSkills = parseSkills(job.requiredSkills);
   const matched = matchedSkills(job.requiredSkills, context.freelancerSkills);
-  const matchedSkillSet = new Set(matched.map((skill) => skill.toLowerCase()));
-  const skillGaps = requiredSkills.filter((skill) => !matchedSkillSet.has(skill.toLowerCase()));
+  const skillGaps = unmatchedSkills(job.requiredSkills, context.freelancerSkills);
   const matchPercent = skillMatchPercent(job.requiredSkills, context.freelancerSkills);
   const contractReadiness = directContractChecklist(job);
   const trustConfidence = job.companyProfile ? buildTrustConfidence({ company: job.companyProfile, job }) : null;
