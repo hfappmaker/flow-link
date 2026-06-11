@@ -186,6 +186,49 @@ test("company applicant search matches public work-preference condition labels",
   }
 });
 
+test("company applicant search does not match avoided work-preference conditions", () => {
+  const avoidedConditionOnlyApplication = application({
+    proposalMessage: "Queue review text.",
+    proposedStart: "",
+    rateExpectation: "",
+    workloadExpectation: "",
+    contactPreference: "",
+    fullName: "Aoi Tanaka",
+    desiredOccupation: "Frontend engineer",
+    skills: "React, TypeScript",
+    desiredRate: "",
+    availability: "",
+    availableFrom: "",
+    preferredLocation: "",
+    remotePreference: "",
+    careerHistory: { summary: "Frontend apps" },
+    workPreference: {
+      excludedConditions: "夜間中心, 短納期のみ, 常駐必須",
+    },
+  });
+  const matchingApplication = application({
+    id: "positive-night-work-match",
+    proposalMessage: "夜間中心の保守運用も対応できます",
+    workPreference: {
+      excludedConditions: "短納期のみ",
+    },
+  });
+
+  for (const query of ["夜間中心", "短納期", "常駐必須"]) {
+    assert.equal(
+      applicantMatchesSearchQuery(query, avoidedConditionOnlyApplication),
+      false,
+      `${query} should not match avoided conditions`,
+    );
+  }
+
+  assert.deepEqual(filterApplicantsBySearchQuery([avoidedConditionOnlyApplication], "夜間中心"), []);
+  assert.deepEqual(
+    filterApplicantsBySearchQuery([avoidedConditionOnlyApplication, matchingApplication], "夜間中心").map((item) => item.id),
+    [matchingApplication.id],
+  );
+});
+
 test("company applicant keyword candidate where includes the same career-history fields", () => {
   const whereJson = JSON.stringify(applicantKeywordCandidateWhere("決済"));
 
@@ -227,7 +270,10 @@ test("company applicant search excludes private freelancer work-preference notes
   assert.deepEqual(filterApplicantsBySearchQuery([privateNoteOnlyApplication], "GraphQL"), []);
 
   const whereJson = JSON.stringify(applicantKeywordCandidateWhere("GraphQL"));
-  assert.doesNotMatch(whereJson, /privateNotes|private_notes|notificationCadence|notification_cadence/);
+  assert.doesNotMatch(
+    whereJson,
+    /excludedConditions|excluded_conditions|privateNotes|private_notes|notificationCadence|notification_cadence/,
+  );
 });
 
 test("company applicant keyword candidates include aliases and broad text terms", () => {
