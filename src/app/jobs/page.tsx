@@ -62,7 +62,7 @@ export default async function JobsPage({
     accepting && "受付中のみ",
     directReady && "条件が揃った案件",
     workload === "light" && "週2-3日目安",
-    rate === "high" && "80万円以上目安",
+    rate === "high" && "月80万円以上",
     candidate === "fresh" && "未対応の候補",
   ].filter(Boolean);
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
@@ -365,7 +365,7 @@ export default async function JobsPage({
                   defaultValue={rate}
                 >
                   <option value="">すべて</option>
-                  <option value="high">月80万円以上目安</option>
+                  <option value="high">月80万円以上</option>
                 </select>
                 <span className="text-xs font-normal text-stone-500">時給・日給は月額換算せず除外</span>
               </label>
@@ -749,7 +749,7 @@ function ProfileDiscoveryShortcuts({
       active: activeWorkload === "light",
     },
     {
-      label: "月80万円以上目安",
+      label: "月80万円以上",
       href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct", candidate: activeCandidate }),
       active: activeRate === "high",
     },
