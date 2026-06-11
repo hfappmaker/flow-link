@@ -61,7 +61,7 @@ case "$MODE" in
     AREA_LABEL="area:product"
     MODE_TITLE="Product triage"
     LOCAL_APP_PORT="3012"
-    MODE_FOCUS="Find product gaps from competitor comparison, user value, positioning, business workflow, trust, matching quality, conversion, and whether the service solves the right user problem."
+    MODE_FOCUS="Find product gaps from competitor comparison, user value, positioning, business workflow, trust, matching quality, conversion, semantic correctness of search/filter/recommendation/rate/trust behavior, and whether the service solves the right user problem."
     BROWSER_POLICY="Playwright is optional for product triage. Use it when evaluating an existing user flow; otherwise competitor research, static inspection, and product reasoning are sufficient."
     ;;
   ux)
@@ -248,6 +248,18 @@ Validation and readiness policy:
 - Hard-block only when missing or invalid data would create bad marketplace behavior, such as unreviewable applications, untrustworthy job posts, unsafe payment expectations, duplicate submissions, broken contact paths, or unclear next actions.
 - For validation/readiness issues, state which action is gated, which fields are required or recommended, why the boundary improves marketplace quality, and what user-facing guidance appears when data is missing.
 
+Semantic correctness policy:
+- Look for features whose UI copy promises concrete behavior, but whose implementation only approximates it with free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
+- Treat these as issue-worthy when the mismatch can change user decisions, search results, recommendations, saved searches, alerts, trust labels, validation/readiness, pricing/rate filters, availability matching, application eligibility, or company/freelancer matching quality.
+- Do not dismiss them just because the screen renders, seed data appears to work, or the happy path looks plausible.
+- Prefer issues where the user-facing label implies precise behavior, such as "80万円以上", "受付中のみ", "条件が揃った", "おすすめ", "マッチ", "確認済み", "未対応", "リモート可", "応募しやすい", "保存フィード", or "信頼".
+- For each semantic correctness issue, compare the user-facing promise, the actual implementation rule, examples that pass incorrectly, examples that fail incorrectly, and the durable model, parser, or test boundary that should replace the approximation.
+
+Heuristic implementation audit:
+- Search for contains checks, includes checks, regex-like string matching, hard-coded thresholds, enum-like strings, labels containing "以上", "以下", "のみ", "確認済み", "おすすめ", "マッチ", or filters backed by free-text fields.
+- Audit jobs discovery, recommendations, saved searches, job alerts, readiness gates, trust labels, application eligibility, company/freelancer matching, and pricing/rate behavior.
+- Create an issue when a UI label suggests structured business logic but committed code uses approximate text matching or weak heuristics that can change what users see or decide.
+
 Maturity and stopping conditions:
 - The wrapper skips this run before Codex starts when open codex:ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds configured thresholds.
 - Even when the wrapper allows the run, do not create an issue if the main freelancer/company marketplace flows already appear competitively adequate for this mode and no high-leverage gap is found.
@@ -314,6 +326,9 @@ Classification:
 - Navigation that fails with 404/500, broken redirects, or runtime errors belongs to area:bug.
 - Required-field policy, readiness gates, applying/publishing eligibility, and marketplace-quality validation usually belong to area:product.
 - Validation implementation gaps, parser/type drift, missing workflow tests, and duplicated validation logic usually belong to area:maintainability.
+- Wrong search/filter/recommendation results caused by a mismatch between user-facing labels and implementation semantics usually belong to area:product.
+- Incorrect trust, readiness, payment, rate, or eligibility behavior belongs to area:product when it changes marketplace decisions, and area:bug when it clearly produces broken or unsafe user-visible results.
+- Approximate string matching, duplicated ad hoc parsing, missing normalized fields, or missing semantic tests should be mentioned as maintainability risk even when the primary issue is product.
 - Business workflow or service-positioning questions belong to area:product.
 - Navigation visual treatment, current-location indicators, and layout consistency belong to area:visual-design.
 
