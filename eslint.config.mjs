@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local automation artifacts can include copied worktrees and nested dependencies.
+    ".codex-automation/**",
   ]),
 ]);
 
