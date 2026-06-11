@@ -7,6 +7,7 @@ const {
 } = await import("../src/lib/job-alerts.ts");
 const {
   filterJobsBySearchQuery,
+  jobKeywordCandidateWhere,
   jobKeywordCandidateTerms,
   jobMatchesSearchQuery,
 } = await import("../src/lib/job-search.ts");
@@ -51,11 +52,65 @@ test("jobs keyword filtering and saved-feed alerts reject raw short skill fragme
   assert.equal(db.notifications.length, 0);
 });
 
+test("jobs keyword filtering and saved-feed alerts match visible condition-only terms", async () => {
+  const cases = [
+    { field: "rate", query: "月80万円", value: "月80万円" },
+    { field: "workload", query: "週3日", value: "週3日" },
+    { field: "remotePolicy", query: "フルリモート", value: "フルリモート" },
+    { field: "contractPeriod", query: "6ヶ月", value: "6ヶ月" },
+    { field: "selectionFlow", query: "面談1回", value: "面談1回" },
+    { field: "contractTerms", query: "翌月末払い", value: "翌月末払い" },
+  ];
+
+  for (const { field, query, value } of cases) {
+    const matchingJob = conditionOnlyJob({ id: `match-${field}`, [field]: value });
+    const nonMatchingJob = conditionOnlyJob({ id: `miss-${field}` });
+
+    assert.deepEqual(
+      filterJobsBySearchQuery([matchingJob, nonMatchingJob], query).map((item) => item.id),
+      [matchingJob.id],
+      `${query} should match /jobs filtering from ${field} only`,
+    );
+
+    const db = alertDb({ query, job: matchingJob });
+    await evaluateSavedFeedJobAlerts(db, { job: matchingJob });
+    assert.equal(db.notifications.length, 1, `${query} should match saved-feed alerts from ${field} only`);
+  }
+});
+
 test("keyword candidate terms include canonical aliases without dropping broad text", () => {
   assert.deepEqual(jobKeywordCandidateTerms("TS"), ["TS", "TypeScript"]);
   assert.deepEqual(jobKeywordCandidateTerms("Next JS"), ["Next JS", "Next", "JS", "Next.js", "NextJS"]);
   assert.deepEqual(jobKeywordCandidateTerms("NodeJS"), ["NodeJS", "Node.js"]);
   assert.deepEqual(jobKeywordCandidateTerms("frontend engineer"), ["frontend engineer", "frontend", "engineer"]);
+});
+
+test("keyword candidate query covers visible public condition fields", () => {
+  const fields = new Set(
+    jobKeywordCandidateWhere("月80万円")?.OR?.flatMap((clause) => Object.keys(clause)) ?? [],
+  );
+
+  for (const field of [
+    "title",
+    "description",
+    "requiredSkills",
+    "preferredSkills",
+    "rate",
+    "workload",
+    "contractPeriod",
+    "selectionFlow",
+    "contractTerms",
+    "location",
+    "remotePolicy",
+    "companyProfile",
+  ]) {
+    assert.equal(fields.has(field), true, `${field} should be in the keyword candidate boundary`);
+  }
+
+  assert.deepEqual(
+    jobKeywordCandidateWhere("2名")?.OR?.filter((clause) => "openings" in clause),
+    [{ openings: 2 }],
+  );
 });
 
 test("jobs semantic search pages beyond the first capped candidate batch", async () => {
@@ -105,27 +160,54 @@ test("jobs semantic search reports truncation at the bounded candidate ceiling",
 
 function job(overrides = {}) {
   return {
-    id: overrides.id ?? "job-1",
-    title: overrides.title ?? "Backend platform engineer",
-    description: overrides.description ?? "Product platform work.",
-    requiredSkills: overrides.requiredSkills ?? "React, TypeScript",
-    preferredSkills: overrides.preferredSkills ?? null,
-    rate: overrides.rate ?? "80万円",
-    workload: overrides.workload ?? "週3日",
-    contractPeriod: overrides.contractPeriod ?? "3ヶ月",
-    selectionFlow: overrides.selectionFlow ?? "面談1回",
-    contractTerms: overrides.contractTerms ?? "月末締め翌月末払い",
-    location: overrides.location ?? null,
-    remotePolicy: overrides.remotePolicy ?? "リモート可",
-    status: overrides.status ?? "published",
-    applicationStatus: overrides.applicationStatus ?? "open",
-    createdAt: overrides.createdAt ?? new Date("2026-06-09T00:00:00Z"),
-    updatedAt: overrides.updatedAt ?? new Date("2026-06-09T00:00:00Z"),
-    companyProfile: overrides.companyProfile ?? {
+    id: overrideValue(overrides, "id", "job-1"),
+    title: overrideValue(overrides, "title", "Backend platform engineer"),
+    description: overrideValue(overrides, "description", "Product platform work."),
+    requiredSkills: overrideValue(overrides, "requiredSkills", "React, TypeScript"),
+    preferredSkills: overrideValue(overrides, "preferredSkills", null),
+    rate: overrideValue(overrides, "rate", "80万円"),
+    workload: overrideValue(overrides, "workload", "週3日"),
+    contractPeriod: overrideValue(overrides, "contractPeriod", "3ヶ月"),
+    selectionFlow: overrideValue(overrides, "selectionFlow", "面談1回"),
+    contractTerms: overrideValue(overrides, "contractTerms", "月末締め翌月末払い"),
+    location: overrideValue(overrides, "location", null),
+    remotePolicy: overrideValue(overrides, "remotePolicy", "リモート可"),
+    openings: overrideValue(overrides, "openings", null),
+    status: overrideValue(overrides, "status", "published"),
+    applicationStatus: overrideValue(overrides, "applicationStatus", "open"),
+    createdAt: overrideValue(overrides, "createdAt", new Date("2026-06-09T00:00:00Z")),
+    updatedAt: overrideValue(overrides, "updatedAt", new Date("2026-06-09T00:00:00Z")),
+    companyProfile: overrideValue(overrides, "companyProfile", {
+      name: "Acme",
+      verificationRequests: [],
+    }),
+  };
+}
+
+function overrideValue(overrides, key, defaultValue) {
+  return Object.hasOwn(overrides, key) ? overrides[key] : defaultValue;
+}
+
+function conditionOnlyJob(overrides = {}) {
+  return job({
+    title: "Platform engineer",
+    description: "Product platform work.",
+    requiredSkills: "React, TypeScript",
+    preferredSkills: null,
+    rate: null,
+    workload: null,
+    contractPeriod: null,
+    selectionFlow: null,
+    contractTerms: null,
+    location: null,
+    remotePolicy: "リモート可",
+    openings: null,
+    companyProfile: {
       name: "Acme",
       verificationRequests: [],
     },
-  };
+    ...overrides,
+  });
 }
 
 function alertDb({ query = "React", job: matchingJob = job() } = {}) {
