@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { clsx, type ClassValue } from "clsx";
 import { rateFitTone } from "./rates.ts";
 import { normalizeWorkLocation } from "./work-location.ts";
@@ -274,6 +275,31 @@ type DirectContractChecklistInput = {
   location?: string | null;
   remotePolicy?: string | null;
 };
+
+type DirectContractChecklistField = keyof DirectContractChecklistInput;
+
+function directContractFieldPresentWhere(field: DirectContractChecklistField): Prisma.JobPostWhereInput {
+  return {
+    AND: [{ [field]: { not: null } }, { [field]: { not: "" } }],
+  };
+}
+
+export function directContractReadyJobWhere() {
+  return {
+    AND: [
+      directContractFieldPresentWhere("description"),
+      directContractFieldPresentWhere("requiredSkills"),
+      directContractFieldPresentWhere("rate"),
+      directContractFieldPresentWhere("workload"),
+      directContractFieldPresentWhere("contractPeriod"),
+      directContractFieldPresentWhere("selectionFlow"),
+      directContractFieldPresentWhere("contractTerms"),
+      {
+        OR: [directContractFieldPresentWhere("location"), directContractFieldPresentWhere("remotePolicy")],
+      },
+    ],
+  } satisfies Prisma.JobPostWhereInput;
+}
 
 export function directContractChecklist(job: DirectContractChecklistInput) {
   const items = [
