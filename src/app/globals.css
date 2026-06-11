@@ -88,7 +88,7 @@ body {
 }
 
 .top-nav-inner {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .top-nav-brand,
