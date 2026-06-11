@@ -33,6 +33,7 @@ const applicationInclude = {
     include: {
       careerHistory: true,
       documents: true,
+      workPreference: true,
     },
   },
   postInterviewOutcome: true,

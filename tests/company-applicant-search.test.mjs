@@ -100,6 +100,92 @@ test("company applicant search matches career-history-only evidence", () => {
   }
 });
 
+test("company applicant search matches displayed profile fallback condition signals", () => {
+  const cases = [
+    { query: "2026-07-01", overrides: { availableFrom: "2026-07-01" } },
+    { query: "週3日", overrides: { availability: "週3日" } },
+    { query: "月90万円", overrides: { desiredRate: "月90万円" } },
+    { query: "フルリモート", overrides: { remotePreference: "フルリモート" } },
+  ];
+
+  for (const { query, overrides } of cases) {
+    const matchingApplication = application({
+      id: `profile-condition-match-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      ...overrides,
+    });
+    const nonMatchingApplication = application({
+      id: `profile-condition-miss-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      availableFrom: "2026-08-01",
+      availability: "週5日",
+      desiredRate: "月70万円",
+      remotePreference: "一部出社可",
+    });
+
+    assert.equal(applicantMatchesSearchQuery(query, matchingApplication), true, `${query} should match profile fallback conditions`);
+    assert.deepEqual(
+      filterApplicantsBySearchQuery([matchingApplication, nonMatchingApplication], query).map((item) => item.id),
+      [matchingApplication.id],
+      `${query} should keep only the profile fallback condition match`,
+    );
+  }
+});
+
+test("company applicant search matches public work-preference condition labels", () => {
+  const cases = [
+    { query: "月110万円", workPreference: { targetRate: "月110万円以上" } },
+    { query: "週2日", workPreference: { workload: "週2日から週3日" } },
+    { query: "関西", workPreference: { preferredLocation: "関西または全国リモート" } },
+    { query: "2026年8月", workPreference: { availableFrom: "2026年8月から" } },
+    { query: "リモート中心", workPreference: { locationMode: "remote" } },
+  ];
+
+  for (const { query, workPreference } of cases) {
+    const matchingApplication = application({
+      id: `work-preference-match-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      desiredRate: "",
+      availability: "",
+      availableFrom: "",
+      remotePreference: "",
+      preferredLocation: "",
+      workPreference,
+    });
+    const nonMatchingApplication = application({
+      id: `work-preference-miss-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      desiredRate: "",
+      availability: "",
+      availableFrom: "",
+      remotePreference: "",
+      preferredLocation: "",
+      workPreference: {
+        targetRate: "月70万円",
+        workload: "週5日",
+        preferredLocation: "東京",
+        availableFrom: "2026年10月",
+        locationMode: "onsite",
+      },
+    });
+
+    assert.equal(applicantMatchesSearchQuery(query, matchingApplication), true, `${query} should match public work preference`);
+    assert.deepEqual(
+      filterApplicantsBySearchQuery([matchingApplication, nonMatchingApplication], query).map((item) => item.id),
+      [matchingApplication.id],
+      `${query} should keep only the public work-preference match`,
+    );
+  }
+});
+
 test("company applicant keyword candidate where includes the same career-history fields", () => {
   const whereJson = JSON.stringify(applicantKeywordCandidateWhere("決済"));
 
@@ -108,19 +194,40 @@ test("company applicant keyword candidate where includes the same career-history
   }
 });
 
+test("company applicant keyword candidate where includes safe profile and work-preference condition fields", () => {
+  const whereJson = JSON.stringify(applicantKeywordCandidateWhere("月90万円"));
+
+  for (const field of [
+    "desiredRate",
+    "availability",
+    "availableFrom",
+    "remotePreference",
+    "targetRate",
+    "workload",
+    "preferredLocation",
+  ]) {
+    assert.match(whereJson, new RegExp(`"${field}"`));
+  }
+
+  assert.match(JSON.stringify(applicantKeywordCandidateWhere("リモート中心")), /"locationMode".*"remote"/);
+});
+
 test("company applicant search excludes private freelancer work-preference notes", () => {
   const privateNoteOnlyApplication = application({
     proposalMessage: "Queue review text.",
     skills: "Product management",
     careerHistory: { summary: "Customer support operations" },
-    workPreference: { privateNotes: "GraphQL案件だけ検討したい" },
+    workPreference: {
+      privateNotes: "GraphQL案件だけ検討したい",
+      notificationCadence: "GraphQL通知",
+    },
   });
 
   assert.equal(applicantMatchesSearchQuery("GraphQL", privateNoteOnlyApplication), false);
   assert.deepEqual(filterApplicantsBySearchQuery([privateNoteOnlyApplication], "GraphQL"), []);
 
   const whereJson = JSON.stringify(applicantKeywordCandidateWhere("GraphQL"));
-  assert.doesNotMatch(whereJson, /privateNotes|private_notes|workPreference/);
+  assert.doesNotMatch(whereJson, /privateNotes|private_notes|notificationCadence|notification_cadence/);
 });
 
 test("company applicant keyword candidates include aliases and broad text terms", () => {
@@ -223,6 +330,7 @@ function application(overrides = {}) {
     proposedStart: overrides.proposedStart ?? "2026-07-01",
     rateExpectation: field(overrides, "rateExpectation", "月100万円以上"),
     workloadExpectation: field(overrides, "workloadExpectation", "週4日"),
+    contactPreference: field(overrides, "contactPreference", "メール希望"),
     freelancerProfile: {
       fullName: overrides.fullName ?? "Aoi Tanaka",
       desiredOccupation: overrides.desiredOccupation ?? "Frontend engineer",
@@ -230,6 +338,8 @@ function application(overrides = {}) {
       preferredLocation: overrides.preferredLocation ?? "Tokyo remote",
       desiredRate: field(overrides, "desiredRate", "月90万円"),
       availability: field(overrides, "availability", "週3日"),
+      availableFrom: field(overrides, "availableFrom", "2026-07-01"),
+      remotePreference: field(overrides, "remotePreference", "フルリモート"),
       documents: overrides.documents ?? [{ id: "doc-1" }, { id: "doc-2" }],
       careerHistory: overrides.careerHistory ?? { summary: "Frontend apps" },
       workPreference: overrides.workPreference,
