@@ -11,6 +11,7 @@ const {
   SAVED_FEED_ALERT_DISPATCH_LEASE_MS,
   sendDueJobAlertDigests,
 } = await import("../src/lib/job-alerts.ts");
+const { rankJobRecommendations } = await import("../src/lib/job-recommendations.ts");
 
 const migrationSql = await readFile("prisma/migrations/20260609154000_add_saved_feed_job_alerts/migration.sql", "utf8");
 const dispatchMigrationSql = await readFile("prisma/migrations/20260611160000_add_job_alert_dispatches/migration.sql", "utf8");
@@ -345,6 +346,74 @@ test("direct-ready saved feed alerts require publish-ready company, title, and t
   assert.equal(blankDescriptionDb.matches.length, 0);
 });
 
+test("ready saved feed alerts use freelancer readiness for borderline condition-ready jobs", async () => {
+  const borderlineJob = job({ requiredSkills: "React, Go", preferredSkills: null });
+  const db = alertDb({ fit: "ready", skills: "React" });
+
+  const publicReadyResults = rankJobRecommendations([borderlineJob], {
+    freelancerReadinessPercent: 100,
+    freelancerSkills: "React",
+    workPreference: db.freelancer.workPreference,
+  }, {
+    fit: "ready",
+  });
+  await evaluateSavedFeedJobAlerts(db, { job: borderlineJob });
+
+  assert.equal(publicReadyResults.length, 1);
+  assert.equal(db.notifications.length, 1);
+  assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
+});
+
+test("ready saved feed alerts do not imply ready-to-apply when freelancer readiness is incomplete", async () => {
+  const db = alertDb({ fit: "ready", readiness: "missing_documents" });
+
+  await evaluateSavedFeedJobAlerts(db, { job: job() });
+
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches.length, 0);
+});
+
+test("ready saved feed alerts do not let perfect skill match bypass freelancer readiness", async () => {
+  const db = alertDb({ fit: "ready", readiness: "missing_career" });
+
+  await evaluateSavedFeedJobAlerts(db, { job: job({ requiredSkills: "React, TypeScript" }) });
+
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches.length, 0);
+});
+
+test("ready saved feed alerts keep saved, applied, dismissed, and handled suppression ahead of notification", async () => {
+  const savedDb = alertDb({ fit: "ready", savedJobIds: ["job-1"] });
+  await evaluateSavedFeedJobAlerts(savedDb, { job: job({ requiredSkills: "React, Go" }) });
+  assert.equal(savedDb.notifications.length, 0);
+  assert.equal(savedDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(savedDb.matches[0].suppressionReason, /保存済み/);
+
+  const appliedDb = alertDb({ fit: "ready", appliedJobIds: ["job-1"] });
+  await evaluateSavedFeedJobAlerts(appliedDb, { job: job({ requiredSkills: "React, Go" }) });
+  assert.equal(appliedDb.notifications.length, 0);
+  assert.equal(appliedDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(appliedDb.matches[0].suppressionReason, /応募済み/);
+
+  const dismissedDb = alertDb({
+    fit: "ready",
+    feedback: [{ jobPostId: "job-1", reason: "not_relevant", sentiment: RecommendationFeedbackSentiment.negative, hideSimilar: false, visibleReasons: null }],
+  });
+  await evaluateSavedFeedJobAlerts(dismissedDb, { job: job({ companyProfile: null }) });
+  assert.equal(dismissedDb.notifications.length, 0);
+  assert.equal(dismissedDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(dismissedDb.matches[0].suppressionReason, /フィードバック済み/);
+
+  const handledDb = alertDb({
+    fit: "ready",
+    feedback: [{ jobPostId: "job-1", reason: "already_handled", sentiment: RecommendationFeedbackSentiment.neutral, hideSimilar: false, visibleReasons: null }],
+  });
+  await evaluateSavedFeedJobAlerts(handledDb, { job: job({ companyProfile: null }) });
+  assert.equal(handledDb.notifications.length, 0);
+  assert.equal(handledDb.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(handledDb.matches[0].suppressionReason, /対応済み/);
+});
+
 function job(overrides = {}) {
   return {
     id: overrides.id ?? "job-1",
@@ -363,14 +432,16 @@ function job(overrides = {}) {
     applicationStatus: overrides.applicationStatus ?? "open",
     createdAt: overrides.createdAt ?? new Date("2026-06-09T00:00:00Z"),
     updatedAt: overrides.updatedAt ?? new Date("2026-06-09T00:00:00Z"),
-    companyProfile: overrides.companyProfile ?? {
-      name: "Acme",
-      verificationRequests: [],
-    },
+    companyProfile: Object.hasOwn(overrides, "companyProfile")
+      ? overrides.companyProfile
+      : {
+          name: "Acme",
+          verificationRequests: [],
+        },
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false, fit = "skill", readiness = "complete" } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -380,6 +451,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
   const freelancer = {
     id: "freelancer-1",
     userId: "user-1",
+    ...freelancerReadinessFields(readiness),
     skills,
     workPreference: {
       status: "active",
@@ -398,7 +470,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         remote: true,
         acceptingOnly: true,
         directReadyOnly,
-        fit: "skill",
+        fit,
         workload,
         rate,
         sort: "direct",
@@ -422,6 +494,9 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
     },
     get notifications() {
       return state.notifications;
+    },
+    get freelancer() {
+      return freelancer;
     },
     freelancerProfile: {
       findMany: async () => [freelancer],
@@ -530,6 +605,26 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
           })),
     },
   };
+}
+
+function freelancerReadinessFields(readiness) {
+  const fields = {
+    fullName: "山田 太郎",
+    desiredOccupation: "フロントエンドエンジニア",
+    availability: "週3日",
+    availableFrom: "2026-07",
+    careerHistory: {
+      summary: "ReactとTypeScriptの業務システム開発を担当。",
+      workExperiences: "SaaS開発、設計、実装、運用。",
+    },
+    documents: [
+      { documentType: "resume" },
+      { documentType: "career_history" },
+    ],
+  };
+  if (readiness === "missing_documents") return { ...fields, documents: [] };
+  if (readiness === "missing_career") return { ...fields, careerHistory: null };
+  return fields;
 }
 
 function dispatchMatchesWhere(dispatch, where) {
