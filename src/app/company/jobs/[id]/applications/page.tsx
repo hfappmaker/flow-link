@@ -7,10 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
 import { applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime } from "@/lib/utils";
 import {
-  COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT,
   applicantKeywordCandidateWhere,
-  filterApplicantsBySearchQuery,
+  applicantMatchesSearchQuery,
 } from "@/lib/company-applicant-search";
+import { collectSemanticCandidateMatches, emptySemanticCandidateSearchResult } from "@/lib/semantic-candidate-search";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,16 @@ const statusTabs: Array<{ label: string; value: JobApplicationStatus | "all" }> 
   { label: "OK", value: JobApplicationStatus.screening_passed },
   { label: "NG", value: JobApplicationStatus.screening_rejected },
 ];
+
+const applicationInclude = {
+  freelancerProfile: {
+    include: {
+      careerHistory: true,
+      documents: true,
+    },
+  },
+  postInterviewOutcome: true,
+} satisfies Prisma.JobApplicationInclude;
 
 export default async function JobApplicationsPage({
   params,
@@ -50,23 +60,32 @@ export default async function JobApplicationsPage({
   const job = await prisma.jobPost.findFirst({
     where: { id, companyProfileId: companyUser.companyProfileId },
     include: {
-      applications: {
-        where: applicationWhere,
-        include: {
-          freelancerProfile: {
-            include: {
-              careerHistory: true,
-              documents: true,
-            },
-          },
-          postInterviewOutcome: true,
-        },
-        orderBy: { appliedAt: "desc" },
-        ...(keyword ? { take: COMPANY_APPLICANT_KEYWORD_CANDIDATE_LIMIT } : {}),
-      },
       _count: { select: { applications: true } },
     },
   });
+  const applicationsSearchResult =
+    job && keyword
+      ? await collectSemanticCandidateMatches({
+          fetchCandidates: ({ skip, take }) =>
+            prisma.jobApplication.findMany({
+              where: { jobPostId: job.id, ...applicationWhere },
+              include: applicationInclude,
+              orderBy: { appliedAt: "desc" },
+              skip,
+              take,
+            }),
+          matchesCandidate: (application) => applicantMatchesSearchQuery(keyword, application),
+        })
+      : {
+          ...emptySemanticCandidateSearchResult<ApplicationWithProfile>(),
+          matches: job
+            ? await prisma.jobApplication.findMany({
+                where: { jobPostId: job.id, ...applicationWhere },
+                include: applicationInclude,
+                orderBy: { appliedAt: "desc" },
+              })
+            : [],
+        };
   const counts = job
     ? await prisma.jobApplication.groupBy({
         by: ["status"],
@@ -76,7 +95,8 @@ export default async function JobApplicationsPage({
     : [];
   const countByStatus = new Map(counts.map((item) => [item.status, item._count.status]));
   const total = job?._count.applications ?? 0;
-  const candidateApplications = job ? filterApplicantsBySearchQuery(job.applications, keyword) : [];
+  const candidateApplications = applicationsSearchResult.matches;
+  const hasMoreKeywordCandidateMatches = applicationsSearchResult.hasMoreCandidateMatches;
   const reviewedApplications =
     job
       ? candidateApplications
@@ -155,7 +175,9 @@ export default async function JobApplicationsPage({
                 <SubmitButton className="btn btn-primary self-end" pendingLabel="検索中">検索</SubmitButton>
                 <Link className="btn btn-secondary self-end" href={`/company/jobs/${job.id}/applications`}>クリア</Link>
               </form>
-              <div className="flex items-end text-sm text-stone-600">表示 {reviewedApplications.length} / 全応募 {total} 件</div>
+              <div className="flex items-end text-sm text-stone-600">
+                表示 {reviewedApplications.length} / 全応募 {total} 件{hasMoreKeywordCandidateMatches ? " / さらに一致候補がある可能性があります" : ""}
+              </div>
             </div>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
               <ReviewSignal label="面談候補" value={`${interviewReadyCount}件`} tone={interviewReadyCount > 0 ? "good" : "neutral"} />
@@ -219,22 +241,7 @@ export default async function JobApplicationsPage({
   );
 }
 
-type JobWithApplications = Prisma.JobPostGetPayload<{
-  include: {
-    applications: {
-      include: {
-        freelancerProfile: {
-          include: {
-            careerHistory: true;
-            documents: true;
-          };
-        };
-        postInterviewOutcome: true;
-      };
-    };
-  };
-}>;
-type ApplicationWithProfile = JobWithApplications["applications"][number];
+type ApplicationWithProfile = Prisma.JobApplicationGetPayload<{ include: typeof applicationInclude }>;
 
 type ApplicationReview = {
   requiredSkillMatches: string[];

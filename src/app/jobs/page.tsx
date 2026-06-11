@@ -25,7 +25,7 @@ import {
   type DiscoveryIntentCounts,
   type JobRecommendation,
 } from "@/lib/job-recommendations";
-import { JOBS_KEYWORD_CANDIDATE_LIMIT, filterJobsBySearchQuery, jobKeywordCandidateWhere } from "@/lib/job-search";
+import { filterJobsBySearchQuery, jobKeywordCandidateWhere, jobMatchesSearchQuery } from "@/lib/job-search";
 import {
   buildTrustConfidence,
   directContractChecklist,
@@ -42,6 +42,7 @@ import {
 } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton, icons } from "@/components/ui";
 import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
+import { collectSemanticCandidateMatches, emptySemanticCandidateSearchResult } from "@/lib/semantic-candidate-search";
 
 export const dynamic = "force-dynamic";
 
@@ -95,26 +96,45 @@ export default async function JobsPage({
     ...(accepting ? { applicationStatus: "open" } : {}),
     ...(andFilters.length > 0 ? { AND: andFilters } : {}),
   };
-  const jobsResult = await publicDbReadResult(
-    () =>
-      prisma.jobPost.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        ...(keyword && workload !== "light" ? { take: JOBS_KEYWORD_CANDIDATE_LIMIT } : {}),
-        include: {
-          companyProfile: {
-            include: {
-              verificationRequests: {
-                orderBy: { createdAt: "desc" },
-                take: 4,
-              },
-            },
-          },
+  const jobInclude = {
+    companyProfile: {
+      include: {
+        verificationRequests: {
+          orderBy: { createdAt: "desc" },
+          take: 4,
         },
-      }),
-    [],
-  );
-  const keywordFilteredJobs = filterJobsBySearchQuery(jobsResult.data, keyword);
+      },
+    },
+  } satisfies Prisma.JobPostInclude;
+  const jobsResult =
+    keyword && workload !== "light"
+      ? await publicDbReadResult(
+          () =>
+            collectSemanticCandidateMatches({
+              fetchCandidates: ({ skip, take }) =>
+                prisma.jobPost.findMany({
+                  where,
+                  orderBy: { createdAt: "desc" },
+                  skip,
+                  take,
+                  include: jobInclude,
+                }),
+              matchesCandidate: (job) => jobMatchesSearchQuery(keyword, job),
+            }),
+          emptySemanticCandidateSearchResult<Prisma.JobPostGetPayload<{ include: typeof jobInclude }>>(),
+        )
+      : await publicDbReadResult(
+          async () => ({
+            ...emptySemanticCandidateSearchResult<Prisma.JobPostGetPayload<{ include: typeof jobInclude }>>(),
+            matches: await prisma.jobPost.findMany({
+              where,
+              orderBy: { createdAt: "desc" },
+              include: jobInclude,
+            }),
+          }),
+          emptySemanticCandidateSearchResult<Prisma.JobPostGetPayload<{ include: typeof jobInclude }>>(),
+        );
+  const keywordFilteredJobs = keyword && workload !== "light" ? jobsResult.data.matches : filterJobsBySearchQuery(jobsResult.data.matches, keyword);
   const workloadFilteredJobs = workload === "light" ? filterLightWorkloadJobs(keywordFilteredJobs) : keywordFilteredJobs;
   const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(workloadFilteredJobs) : workloadFilteredJobs;
   const jobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
@@ -165,6 +185,7 @@ export default async function JobsPage({
     fit === "ready" && "応募へ進みやすい",
   ].filter(Boolean);
   const hasActiveFilters = activeFilterLabels.length > 0;
+  const hasMoreKeywordCandidateMatches = jobsResult.data.hasMoreCandidateMatches;
   const showMarketplaceUnavailableState = jobsUnavailable;
   const showMarketplaceEmptyState = !showMarketplaceUnavailableState && jobs.length === 0 && !hasActiveFilters;
   const showDiscoveryControls = !showMarketplaceUnavailableState && !showMarketplaceEmptyState;
@@ -243,7 +264,7 @@ export default async function JobsPage({
       ? "公開案件はまだありません。"
       : `${rankedJobs.length}件の案件を表示中${activeFilterLabels.length > 0 ? ` / ${activeFilterLabels.join(" / ")}` : ""} / ${
           sort === "direct" ? "応募しやすい順" : "新着順"
-        }`;
+        }${hasMoreKeywordCandidateMatches ? " / さらに一致候補がある可能性があります" : ""}`;
   const priorityJobs = sortJobRecommendations(rankedJobs, "direct").slice(0, 3);
   const freshCandidateCount = freelancerProfile
     ? allRecommendedJobs.filter((recommendation) => recommendation.isFreshCandidate).length
