@@ -5,6 +5,7 @@ import { removeSavedJob, saveCurrentJobSearch, saveJobForReview } from "@/lib/ac
 import { alertCadenceLabel } from "@/lib/job-alerts";
 import { prisma } from "@/lib/prisma";
 import { publicDbRead, publicDbReadResult } from "@/lib/public-db";
+import { isHighMonthlyRateText } from "@/lib/rates";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import {
   buildDiscoveryIntentCounts,
@@ -99,16 +100,6 @@ export default async function JobsPage({
       ],
     });
   }
-  if (rate === "high") {
-    andFilters.push({
-      OR: [
-        { rate: { contains: "80", mode: "insensitive" } },
-        { rate: { contains: "90", mode: "insensitive" } },
-        { rate: { contains: "100", mode: "insensitive" } },
-        { rate: { contains: "高単価", mode: "insensitive" } },
-      ],
-    });
-  }
   const where: Prisma.JobPostWhereInput = {
     status: "published",
     ...(accepting ? { applicationStatus: "open" } : {}),
@@ -140,7 +131,7 @@ export default async function JobsPage({
       }),
     [],
   );
-  const jobs = jobsResult.data;
+  const jobs = rate === "high" ? jobsResult.data.filter((job) => isHighMonthlyRateText(job.rate)) : jobsResult.data;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =
     !jobsUnavailable && session?.user?.role === "freelancer"
@@ -386,8 +377,9 @@ export default async function JobsPage({
                   defaultValue={rate}
                 >
                   <option value="">すべて</option>
-                  <option value="high">80万円以上目安</option>
+                  <option value="high">月80万円以上目安</option>
                 </select>
+                <span className="text-xs font-normal text-stone-500">時給・日給は月額換算せず除外</span>
               </label>
               {freelancerProfile && (
                 <label className="grid gap-1.5 text-sm font-medium text-stone-700">
@@ -769,7 +761,7 @@ function ProfileDiscoveryShortcuts({
       active: activeWorkload === "light",
     },
     {
-      label: "80万円以上目安",
+      label: "月80万円以上目安",
       href: jobsHref({ q: keyword, remote, accepting: true, rate: "high", sort: "direct", candidate: activeCandidate }),
       active: activeRate === "high",
     },
