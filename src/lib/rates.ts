@@ -1,4 +1,5 @@
 export const HIGH_MONTHLY_RATE_THRESHOLD_MAN_YEN = 80;
+export const MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN = [60, 80, 100, 120] as const;
 
 export type NormalizedRate = {
   kind: "monthly" | "hourly" | "daily" | "unknown";
@@ -47,8 +48,29 @@ export function normalizeRateText(value: string | null | undefined): NormalizedR
 }
 
 export function isHighMonthlyRateText(value: string | null | undefined, thresholdManYen = HIGH_MONTHLY_RATE_THRESHOLD_MAN_YEN) {
+  return isMonthlyRateAtLeastText(value, thresholdManYen);
+}
+
+export function isMonthlyRateAtLeastText(value: string | null | undefined, thresholdManYen: number) {
   const rate = normalizeRateText(value);
   return rate.kind === "monthly" && rate.lowerMonthlyManYen !== null && rate.lowerMonthlyManYen >= thresholdManYen;
+}
+
+export function monthlyRateBandFromFilter(value: string | null | undefined) {
+  if (value === "high") return HIGH_MONTHLY_RATE_THRESHOLD_MAN_YEN;
+  const threshold = Number(value);
+  return MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN.includes(threshold as (typeof MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN)[number])
+    ? threshold
+    : null;
+}
+
+export function monthlyRateBandFilterValue(value: string | null | undefined) {
+  const threshold = monthlyRateBandFromFilter(value);
+  return threshold === null ? null : String(threshold);
+}
+
+export function monthlyRateBandLabel(thresholdManYen: number) {
+  return `月${thresholdManYen}万円以上`;
 }
 
 export function rateFitTone(
