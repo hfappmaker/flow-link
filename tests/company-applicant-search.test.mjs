@@ -7,6 +7,12 @@ const {
   filterApplicantsBySearchQuery,
 } = await import("../src/lib/company-applicant-search.ts");
 const {
+  SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE,
+  SEMANTIC_SEARCH_MAX_CANDIDATES,
+  SEMANTIC_SEARCH_MATCH_LIMIT,
+  collectSemanticCandidateMatches,
+} = await import("../src/lib/semantic-candidate-search.ts");
+const {
   applicationConditionTerms,
   buildApplicationReview,
   skillMatchPercent,
@@ -51,6 +57,49 @@ test("company applicant keyword candidates include aliases and broad text terms"
   assert.deepEqual(applicantKeywordCandidateTerms("Next JS"), ["Next JS", "Next", "JS", "Next.js", "NextJS"]);
   assert.deepEqual(applicantKeywordCandidateTerms("NodeJS"), ["NodeJS", "Node.js"]);
   assert.deepEqual(applicantKeywordCandidateTerms("frontend Tokyo"), ["frontend Tokyo", "frontend", "Tokyo"]);
+});
+
+test("company applicant search pages beyond the first capped candidate batch", async () => {
+  const nonMatches = Array.from({ length: SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE + 25 }, (_, index) =>
+    application({
+      id: `miss-${index}`,
+      proposalMessage: "Product operations and tests.",
+      skills: "Go, GraphQL",
+    }),
+  );
+  const matchingApplication = application({ id: "match-beyond-first-page", skills: "TypeScript, React" });
+  const candidates = [...nonMatches, matchingApplication];
+
+  const result = await collectSemanticCandidateMatches({
+    fetchCandidates: async ({ skip, take }) => candidates.slice(skip, skip + take),
+    matchesCandidate: (candidate) => applicantMatchesSearchQuery("TS", candidate),
+  });
+
+  assert.equal(result.inspectedCandidateCount, candidates.length);
+  assert.equal(result.maxCandidateCount, SEMANTIC_SEARCH_MAX_CANDIDATES);
+  assert.equal(result.matchLimit, SEMANTIC_SEARCH_MATCH_LIMIT);
+  assert.equal(result.hasMoreCandidateMatches, false);
+  assert.deepEqual(result.matches.map((item) => item.id), [matchingApplication.id]);
+});
+
+test("company applicant search reports truncation at the bounded candidate ceiling", async () => {
+  const candidates = Array.from({ length: SEMANTIC_SEARCH_MAX_CANDIDATES }, (_, index) =>
+    application({
+      id: `miss-${index}`,
+      proposalMessage: "Product operations and tests.",
+      skills: "Go, GraphQL",
+    }),
+  );
+
+  const result = await collectSemanticCandidateMatches({
+    fetchCandidates: async ({ skip, take }) => candidates.slice(skip, skip + take),
+    matchesCandidate: (candidate) => applicantMatchesSearchQuery("TS", candidate),
+  });
+
+  assert.equal(result.inspectedCandidateCount, SEMANTIC_SEARCH_MAX_CANDIDATES);
+  assert.equal(result.pagesFetched, SEMANTIC_SEARCH_MAX_CANDIDATES / SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE);
+  assert.equal(result.hasMoreCandidateMatches, true);
+  assert.deepEqual(result.matches, []);
 });
 
 test("company review uses application-specific condition expectations before profile fallback", () => {

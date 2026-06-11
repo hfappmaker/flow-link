@@ -10,6 +10,12 @@ const {
   jobKeywordCandidateTerms,
   jobMatchesSearchQuery,
 } = await import("../src/lib/job-search.ts");
+const {
+  SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE,
+  SEMANTIC_SEARCH_MAX_CANDIDATES,
+  SEMANTIC_SEARCH_MATCH_LIMIT,
+  collectSemanticCandidateMatches,
+} = await import("../src/lib/semantic-candidate-search.ts");
 
 test("jobs keyword filtering and saved-feed alerts agree on canonical skill aliases", async () => {
   const cases = [
@@ -50,6 +56,51 @@ test("keyword candidate terms include canonical aliases without dropping broad t
   assert.deepEqual(jobKeywordCandidateTerms("Next JS"), ["Next JS", "Next", "JS", "Next.js", "NextJS"]);
   assert.deepEqual(jobKeywordCandidateTerms("NodeJS"), ["NodeJS", "Node.js"]);
   assert.deepEqual(jobKeywordCandidateTerms("frontend engineer"), ["frontend engineer", "frontend", "engineer"]);
+});
+
+test("jobs semantic search pages beyond the first capped candidate batch", async () => {
+  const nonMatches = Array.from({ length: SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE + 25 }, (_, index) =>
+    job({
+      id: `miss-${index}`,
+      description: "Product operations and tests.",
+      requiredSkills: "Go",
+      preferredSkills: "GraphQL",
+    }),
+  );
+  const matchingJob = job({ id: "match-beyond-first-page", requiredSkills: "TypeScript", preferredSkills: "Next.js" });
+  const candidates = [...nonMatches, matchingJob];
+
+  const result = await collectSemanticCandidateMatches({
+    fetchCandidates: async ({ skip, take }) => candidates.slice(skip, skip + take),
+    matchesCandidate: (candidate) => jobMatchesSearchQuery("TS", candidate),
+  });
+
+  assert.equal(result.inspectedCandidateCount, candidates.length);
+  assert.equal(result.maxCandidateCount, SEMANTIC_SEARCH_MAX_CANDIDATES);
+  assert.equal(result.matchLimit, SEMANTIC_SEARCH_MATCH_LIMIT);
+  assert.equal(result.hasMoreCandidateMatches, false);
+  assert.deepEqual(result.matches.map((item) => item.id), [matchingJob.id]);
+});
+
+test("jobs semantic search reports truncation at the bounded candidate ceiling", async () => {
+  const candidates = Array.from({ length: SEMANTIC_SEARCH_MAX_CANDIDATES }, (_, index) =>
+    job({
+      id: `miss-${index}`,
+      description: "Product operations and tests.",
+      requiredSkills: "Go",
+      preferredSkills: "GraphQL",
+    }),
+  );
+
+  const result = await collectSemanticCandidateMatches({
+    fetchCandidates: async ({ skip, take }) => candidates.slice(skip, skip + take),
+    matchesCandidate: (candidate) => jobMatchesSearchQuery("TS", candidate),
+  });
+
+  assert.equal(result.inspectedCandidateCount, SEMANTIC_SEARCH_MAX_CANDIDATES);
+  assert.equal(result.pagesFetched, SEMANTIC_SEARCH_MAX_CANDIDATES / SEMANTIC_SEARCH_CANDIDATE_PAGE_SIZE);
+  assert.equal(result.hasMoreCandidateMatches, true);
+  assert.deepEqual(result.matches, []);
 });
 
 function job(overrides = {}) {
