@@ -12,6 +12,8 @@ const {
 } = await import("../src/lib/job-recommendations.ts");
 const {
   buildApplicationReview,
+  directContractChecklist,
+  directContractReadyJobWhere,
   matchedSkills,
   skillMatchPercent,
   unmatchedSkills,
@@ -44,6 +46,22 @@ const readyContext = {
   freelancerSkills: "TypeScript, React",
 };
 
+function matchesDirectContractReadyWhere(candidate) {
+  const where = directContractReadyJobWhere();
+  return matchesWhere(candidate, where);
+}
+
+function matchesWhere(candidate, where) {
+  return Object.entries(where).every(([key, value]) => {
+    if (key === "AND") return value.every((condition) => matchesWhere(candidate, condition));
+    if (key === "OR") return value.some((condition) => matchesWhere(candidate, condition));
+    if (typeof value === "object" && value !== null && Object.hasOwn(value, "not")) {
+      return candidate[key] !== value.not;
+    }
+    return candidate[key] === value;
+  });
+}
+
 test("fresh candidate detection uses both applied and saved job ids", () => {
   assert.equal(buildJobRecommendation(job({ id: "fresh" }), readyContext).isFreshCandidate, true);
   assert.equal(
@@ -73,6 +91,21 @@ test("ready-to-apply requires score and contract readiness thresholds", () => {
   assert.equal(weakContract.directScore >= READY_TO_APPLY_SCORE_THRESHOLD, true);
   assert.equal(weakContract.contractReadinessPercent < READY_TO_APPLY_CONTRACT_THRESHOLD, true);
   assert.equal(weakContract.isReadyToApply, false);
+});
+
+test("public direct-ready query boundary matches direct contract checklist", () => {
+  const candidates = [
+    job({ id: "ready" }),
+    job({ id: "missing-description", description: null }),
+    job({ id: "browse-only-draft", description: null, requiredSkills: null, rate: null }),
+    job({ id: "empty-description", description: "" }),
+  ];
+
+  assert.deepEqual(
+    candidates.filter(matchesDirectContractReadyWhere).map(({ id }) => id),
+    candidates.filter((candidate) => directContractChecklist(candidate).percent === 100).map(({ id }) => id),
+  );
+  assert.deepEqual(candidates.filter(matchesDirectContractReadyWhere).map(({ id }) => id), ["ready"]);
 });
 
 test("skill-match filtering keeps only open recommendations with matching required skills", () => {

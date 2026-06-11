@@ -17,6 +17,7 @@ import {
 } from "@/lib/job-recommendations";
 import {
   buildTrustConfidence,
+  directContractReadyJobWhere,
   formatOpenings,
   matchedSkills,
   parseSkills,
@@ -67,15 +68,7 @@ export default async function JobsPage({
   const session = process.env.AUTH_SECRET ? await auth().catch(() => null) : null;
   const andFilters: Prisma.JobPostWhereInput[] = [];
   if (directReady) {
-    andFilters.push({
-      requiredSkills: { not: null },
-      rate: { not: null },
-      workload: { not: null },
-      contractPeriod: { not: null },
-      selectionFlow: { not: null },
-      contractTerms: { not: null },
-      OR: [{ location: { not: null } }, { remotePolicy: { not: null } }],
-    });
+    andFilters.push(directContractReadyJobWhere());
   }
   if (keyword) {
     andFilters.push({
