@@ -279,6 +279,10 @@ type DirectContractChecklistInput = {
 type DirectContractChecklistField = keyof DirectContractChecklistInput;
 
 function directContractFieldPresentWhere(field: DirectContractChecklistField): Prisma.JobPostWhereInput {
+  if (field === "description") {
+    return { [field]: { not: "" } };
+  }
+
   return {
     AND: [{ [field]: { not: null } }, { [field]: { not: "" } }],
   };

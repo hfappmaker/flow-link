@@ -56,6 +56,7 @@ function matchesWhere(candidate, where) {
     if (key === "AND") return value.every((condition) => matchesWhere(candidate, condition));
     if (key === "OR") return value.some((condition) => matchesWhere(candidate, condition));
     if (typeof value === "object" && value !== null && Object.hasOwn(value, "not")) {
+      if (value.not === "") return typeof candidate[key] === "string" && candidate[key] !== "";
       return candidate[key] !== value.not;
     }
     return candidate[key] === value;
@@ -106,6 +107,28 @@ test("public direct-ready query boundary matches direct contract checklist", () 
     candidates.filter((candidate) => directContractChecklist(candidate).percent === 100).map(({ id }) => id),
   );
   assert.deepEqual(candidates.filter(matchesDirectContractReadyWhere).map(({ id }) => id), ["ready"]);
+});
+
+test("public direct-ready query is accepted by the Prisma client", async (t) => {
+  const { Prisma, PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+
+  try {
+    await prisma.jobPost.count({
+      where: {
+        status: "published",
+        AND: [directContractReadyJobWhere()],
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientInitializationError) {
+      t.skip("database unavailable for Prisma query validation");
+      return;
+    }
+    throw error;
+  } finally {
+    await prisma.$disconnect();
+  }
 });
 
 test("skill-match filtering keeps only open recommendations with matching required skills", () => {
