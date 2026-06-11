@@ -22,7 +22,7 @@ test(
       const consoleErrors = [];
       const routes = ["/", "/jobs", "/register", "/login"];
 
-      for (const width of [375, 320]) {
+      for (const width of [375, 320, 1280]) {
         const page = await browser.newPage({ viewport: { width, height: 812 } });
         page.on("console", (message) => {
           if (message.type() === "error" && !message.text().includes("/_next/webpack-hmr")) {
@@ -63,6 +63,12 @@ test(
               `${route} ${label} link should not clip right at ${width}px: ${JSON.stringify(box)}`,
             );
           }
+
+          const activeLabel = activeLabelsByRoute[route];
+          if (activeLabel) {
+            const activeLink = header.getByRole("link", { name: activeLabel, exact: true });
+            await assertActiveLink(activeLink, `${route} should keep the current-location cue on ${activeLabel} at ${width}px`);
+          }
         }
 
         await page.close();
@@ -75,6 +81,16 @@ test(
     }
   },
 );
+
+const activeLabelsByRoute = {
+  "/jobs": "案件",
+  "/register": "登録",
+  "/login": "ログイン",
+};
+
+async function assertActiveLink(locator, message) {
+  await assert.equal(await locator.getAttribute("aria-current"), "page", message);
+}
 
 async function startServer(base) {
   const url = new URL(base);
