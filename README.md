@@ -44,6 +44,35 @@ npm run prisma:generate
 npm run prisma:migrate
 ```
 
+## Codex Issue Automation
+
+Local Codex automation is organized around GitHub Issues instead of direct
+unscoped edits.
+
+- Issue triage scripts create or update at most one `codex` issue per run:
+  `bug`, `product`, `ux`, `visual-design`, and `maintainability`.
+- The worker script handles one `codex:ready` issue at a time in a dedicated git
+  worktree, opens a PR, merges it, and removes the remote branch after merge.
+- `bug`, `ux`, and `visual-design` issues require Playwright verification by
+  default. Visual-design issues also require desktop and mobile screenshots.
+- Product, UX, and visual-design triage must use the persona and competitor
+  lens in `docs/automation/agent-loop-competitive-lens.md`.
+- Product issues should include current competitor specification evidence and
+  at least one user-voice source when network access is available. The loop
+  should not rely only on search snippets, memory, or generic affiliate claims.
+- New functionality must pass a simplicity check: adding controls or surfaced
+  information is only valid when it reduces decision time, ambiguity, risk, or
+  mismatched applications more than it increases user choice burden.
+
+Useful local commands:
+
+```bash
+bash scripts/start-codex-issue-loops-cron.sh
+bash scripts/stop-codex-issue-loops-cron.sh
+DRY_RUN=1 MATURITY_GATE_ENABLED=0 bash scripts/codex-auto-issue-triage.sh --mode product --dry-run
+DRY_RUN=1 bash scripts/codex-auto-issue-worker.sh --dry-run
+```
+
 ## MVP Scope
 
 - アカウント登録/ログイン
