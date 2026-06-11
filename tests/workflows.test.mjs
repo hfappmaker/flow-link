@@ -132,6 +132,8 @@ const applicationInput = {
   jobPostId: "job-1",
   proposalMessage: "応募メッセージ".repeat(10),
   proposedStart: "来月",
+  rateExpectation: "月100万円以上",
+  workloadExpectation: "週4日",
   contactPreference: "メール",
 };
 
@@ -160,6 +162,24 @@ test("application gate requires proposal start and contact before creating an ap
   assert.equal(db.calls.length, 0);
 });
 
+test("application workflow snapshots application-specific rate and workload expectations", async () => {
+  const db = workflowDb();
+
+  await applyToJobWorkflow(db, applicationInput);
+
+  const creates = db.calls.filter(([name]) => name === "jobApplication.create");
+  assert.equal(creates.length, 1);
+  assert.deepEqual(creates[0][1].data, {
+    jobPostId: "job-1",
+    freelancerProfileId: "freelancer-profile-1",
+    proposalMessage: applicationInput.proposalMessage,
+    proposedStart: "来月",
+    rateExpectation: "月100万円以上",
+    workloadExpectation: "週4日",
+    contactPreference: "メール",
+  });
+});
+
 test("closed or paused jobs cannot receive applications", async () => {
   for (const job of [
     { status: JobPostStatus.closed, applicationStatus: ApplicationStatus.open },
@@ -176,6 +196,8 @@ test("screening pass creates or reuses one interview thread and only writes an i
     freelancerProfile: { userId: "freelancer-user-1", fullName: "山田 太郎" },
     jobPost: { title: "PM案件", selectionFlow: "1回面談", contractTerms: "月末締め" },
     proposedStart: "来月",
+    rateExpectation: "月100万円以上",
+    workloadExpectation: "週4日",
     contactPreference: "メール",
   };
   const companyUser = {

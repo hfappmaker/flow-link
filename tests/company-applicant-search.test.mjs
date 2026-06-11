@@ -7,6 +7,7 @@ const {
   filterApplicantsBySearchQuery,
 } = await import("../src/lib/company-applicant-search.ts");
 const {
+  applicationConditionTerms,
   buildApplicationReview,
   skillMatchPercent,
 } = await import("../src/lib/utils.ts");
@@ -52,19 +53,69 @@ test("company applicant keyword candidates include aliases and broad text terms"
   assert.deepEqual(applicantKeywordCandidateTerms("frontend Tokyo"), ["frontend Tokyo", "frontend", "Tokyo"]);
 });
 
+test("company review uses application-specific condition expectations before profile fallback", () => {
+  const applicationSpecific = application({
+    rateExpectation: "月120万円以上",
+    workloadExpectation: "週5日",
+    desiredRate: "月90万円",
+    availability: "週3日",
+  });
+  assert.deepEqual(applicationConditionTerms(applicationSpecific), {
+    rate: { value: "月120万円以上", source: "application", display: "月120万円以上" },
+    workload: { value: "週5日", source: "application", display: "週5日" },
+  });
+
+  const profileFallback = application({
+    rateExpectation: "",
+    workloadExpectation: null,
+    desiredRate: "月90万円",
+    availability: "週3日",
+  });
+  assert.deepEqual(applicationConditionTerms(profileFallback), {
+    rate: { value: "月90万円", source: "profile", display: "月90万円（プロフィール）" },
+    workload: { value: "週3日", source: "profile", display: "週3日（プロフィール）" },
+  });
+
+  const missingCandidateTerms = application({
+    rateExpectation: "",
+    workloadExpectation: "",
+    desiredRate: "",
+    availability: "",
+  });
+  assert.deepEqual(applicationConditionTerms(missingCandidateTerms), {
+    rate: { value: "未設定", source: "missing", display: "未設定" },
+    workload: { value: "未設定", source: "missing", display: "未設定" },
+  });
+
+  const review = buildApplicationReview({
+    ...missingCandidateTerms,
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月100万円", workload: "週5日" },
+  });
+  assert.deepEqual(review.nextChecks, ["希望単価", "希望稼働量"]);
+  assert.match(review.reviewQuestions.join("\n"), /応募者のこの案件での希望単価/);
+});
+
 function application(overrides = {}) {
   return {
     id: overrides.id ?? "application-1",
     status: overrides.status ?? "applied",
     proposalMessage: overrides.proposalMessage ?? "Platform delivery experience.",
     proposedStart: overrides.proposedStart ?? "2026-07-01",
+    rateExpectation: field(overrides, "rateExpectation", "月100万円以上"),
+    workloadExpectation: field(overrides, "workloadExpectation", "週4日"),
     freelancerProfile: {
       fullName: overrides.fullName ?? "Aoi Tanaka",
       desiredOccupation: overrides.desiredOccupation ?? "Frontend engineer",
       skills: overrides.skills ?? "React, TypeScript",
       preferredLocation: overrides.preferredLocation ?? "Tokyo remote",
+      desiredRate: field(overrides, "desiredRate", "月90万円"),
+      availability: field(overrides, "availability", "週3日"),
       documents: overrides.documents ?? [{ id: "doc-1" }, { id: "doc-2" }],
       careerHistory: overrides.careerHistory ?? { summary: "Frontend apps" },
     },
   };
+}
+
+function field(overrides, key, fallback) {
+  return Object.hasOwn(overrides, key) ? overrides[key] : fallback;
 }

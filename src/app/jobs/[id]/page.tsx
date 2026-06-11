@@ -158,6 +158,10 @@ export default async function JobDetailPage({
         contactSignal: freelancerProfile.remotePreference,
       })
     : "";
+  const defaultRateExpectation =
+    freelancerProfile?.workPreference?.targetRate || freelancerProfile?.desiredRate || job.rate || "";
+  const defaultWorkloadExpectation =
+    freelancerProfile?.workPreference?.workload || freelancerProfile?.availability || job.workload || "";
   const jobCallbackUrl = `/jobs/${job.id}`;
   const jobRegisterHref = `/register?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
   const jobLoginHref = `/login?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
@@ -403,13 +407,33 @@ export default async function JobDetailPage({
                   <TextField
                     name="proposedStart"
                     label="稼働開始目安"
+                    defaultValue={freelancerProfile?.workPreference?.availableFrom || freelancerProfile?.availableFrom || ""}
                     required
                     maxLength={120}
                     placeholder="例: 7月第1週から / 契約後2週間で開始可"
                   />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <TextField
+                      name="rateExpectation"
+                      label="この案件での希望単価"
+                      defaultValue={defaultRateExpectation}
+                      required
+                      maxLength={120}
+                      placeholder="例: 月100万円以上 / 時給8000円から"
+                    />
+                    <TextField
+                      name="workloadExpectation"
+                      label="この案件での希望稼働量"
+                      defaultValue={defaultWorkloadExpectation}
+                      required
+                      maxLength={120}
+                      placeholder="例: 週4日、月128時間まで"
+                    />
+                  </div>
                   <TextField
                     name="contactPreference"
                     label="連絡希望"
+                    defaultValue={freelancerProfile?.remotePreference || ""}
                     required
                     maxLength={120}
                     placeholder="例: 平日18時以降のオンライン面談を希望"
