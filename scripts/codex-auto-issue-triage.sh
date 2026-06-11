@@ -56,6 +56,14 @@ case "$MODE" in
     LOCAL_APP_PORT="3011"
     MODE_FOCUS="Find real runtime errors and broken flows from Vercel Preview logs, local checks, DB/Blob/API failures, form failures, redirects, and browser-visible errors. Navigation that fails with 404/500 belongs here."
     BROWSER_POLICY="Playwright browser verification is required by default for bug triage. Reproduce or inspect the user-visible failure with Playwright against localhost or Preview before creating an issue. If Playwright cannot run, use HTTP/log checks as a fallback and state the exact browser launch or environment blocker in the issue Evidence and Verification plan."
+    MODE_POLICY=$(cat <<'EOF'
+Bug checklist:
+- Find user-visible failures, not only stack traces: 404/500, broken redirects, failed forms, DB/Blob/Auth/API errors, and Preview/local runtime errors.
+- Prefer Vercel Preview logs and Playwright/HTTP reproduction when available.
+- For Vercel errors, explain the likely user impact and affected route/action.
+- Do not file a bug for mere copy, option design, or product preference unless it causes broken or unsafe behavior.
+EOF
+)
     ;;
   product)
     AREA_LABEL="area:product"
@@ -63,6 +71,17 @@ case "$MODE" in
     LOCAL_APP_PORT="3012"
     MODE_FOCUS="Find product gaps from competitor comparison, user value, positioning, business workflow, trust, matching quality, conversion, semantic correctness of search/filter/recommendation/rate/trust behavior, and whether the service solves the right user problem."
     BROWSER_POLICY="Playwright is optional for product triage. Use it when evaluating an existing user flow; otherwise competitor research, static inspection, and product reasoning are sufficient."
+    MODE_POLICY=$(cat <<'EOF'
+Product checklist:
+- Prioritize gaps that affect acquisition, activation, trust, speed to useful match/application, fit clarity, or competitor switching.
+- Compare Flow Link with current competitor or adjacent-market behavior when network access is available; include source URLs.
+- Audit search, filters, recommendations, saved searches, alerts, rate/price behavior, trust labels, readiness gates, and marketplace matching.
+- Look for semantic correctness gaps: UI copy promises concrete behavior, but implementation uses free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
+- Look for option granularity gaps: controls whose choices are too narrow, arbitrary, or implementation-shaped, such as a single hard-coded threshold where users need practical bands.
+- For semantic or option issues, include the user-facing promise, actual implementation rule, incorrect pass/fail examples, and the durable model/parser/test boundary needed.
+- Treat applying and publishing readiness as marketplace product quality: prefer actionable readiness guidance before hard blocks, and hard-block only when missing data would harm the other side.
+EOF
+)
     ;;
   ux)
     AREA_LABEL="area:ux"
@@ -70,6 +89,15 @@ case "$MODE" in
     LOCAL_APP_PORT="3013"
     MODE_FOCUS="Find issues in navigation, screen transitions, user flow, missing pending/loading feedback, confusing copy, input burden, empty/loading/error states, and developer-facing terms that freelancers or companies should not need to understand."
     BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, missing route-transition or form-submit pending feedback, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
+    MODE_POLICY=$(cat <<'EOF'
+UX checklist:
+- Focus on navigation, screen transitions, user flow, pending/loading feedback, form-submit feedback, copy clarity, input burden, and empty/loading/error states.
+- Treat missing feedback after clicking links, submitting forms, switching filters, or starting navigation as issue-worthy unless already covered.
+- Avoid developer-facing terms such as MVC, MVP, direct matching, direct contract, core differentiation, or implementation jargon in user-facing flows.
+- Use Playwright for navigation, forms, pending/loading, and task-completion issues. Copy-only issues may use static inspection.
+- If behavior fails with 404/500 or a runtime error, classify it as bug instead.
+EOF
+)
     ;;
   visual-design)
     AREA_LABEL="area:visual-design"
@@ -77,6 +105,15 @@ case "$MODE" in
     LOCAL_APP_PORT="3014"
     MODE_FOCUS="Find visual design issues in layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, component consistency, and whether screens look professionally composed."
     BROWSER_POLICY="Playwright browser verification and screenshots are required for visual-design triage. Capture at least desktop and mobile screenshots before creating an issue, normally 1280x900 and 375x812. Save screenshots under .codex-automation/screenshots/ with stable names that include the mode, route, viewport, and timestamp. Include screenshot paths and visual observations in the issue Evidence section. If screenshots or browser launch fail, do not create a visual-design issue unless the issue is still critical; state the exact blocker in Evidence and Verification plan."
+    MODE_POLICY=$(cat <<'EOF'
+Visual-design checklist:
+- Focus on layout, spacing, hierarchy, scanability, responsive behavior, current-location indicators, and component consistency.
+- Screenshots are mandatory evidence for normal visual-design issues. Capture desktop and mobile, normally 1280x900 and 375x812.
+- Include exact screenshot paths and concrete visual observations.
+- Do not file purely aesthetic preferences unless they affect trust, clarity, conversion, repeated use, or professional polish.
+- If the problem is navigation behavior or copy comprehension, classify as UX. If it is a runtime failure, classify as bug.
+EOF
+)
     ;;
   maintainability)
     AREA_LABEL="area:maintainability"
@@ -84,6 +121,15 @@ case "$MODE" in
     LOCAL_APP_PORT="3015"
     MODE_FOCUS="Find maintainability risks in code structure, responsibility boundaries, type safety, duplicated logic, missing tests, fragile data flow, unsafe assumptions, and operational risk."
     BROWSER_POLICY="Playwright is not required for maintainability triage unless the maintainability concern is tied to a visible flow. Prefer static inspection, typecheck, lint, tests, and build signals."
+    MODE_POLICY=$(cat <<'EOF'
+Maintainability checklist:
+- Focus on responsibility boundaries, type safety, duplicated logic, missing tests, fragile data flow, parser/type drift, and operational risk.
+- Tie every issue to a concrete future bug, operating cost, verification gap, or marketplace reliability risk.
+- Mention product/user impact, but do not create broad product feature issues from maintainability mode.
+- Approximate string matching, duplicated ad hoc parsing, missing normalized fields, or missing semantic tests are maintainability risks when they can cause inconsistent behavior across search, alerts, trust, readiness, or recommendations.
+- Prefer static inspection, targeted tests, typecheck, lint, and build signals. Use Playwright only when the risk is visible-flow dependent.
+EOF
+)
     ;;
   *)
     echo "Missing or invalid --mode: $MODE" >&2
@@ -235,109 +281,37 @@ Mode:
 - $MODE
 - $MODE_FOCUS
 
-Strategic goal:
-- Flow Link's automation exists to help win users from competitor services such as レバテック, Findy Freelance, and adjacent freelance/job marketplace services.
-- Do not create an issue unless it clearly improves at least one of: freelancer acquisition or activation, company acquisition or activation, trust and perceived reliability, speed from registration to useful match/application, clarity of job/company/freelancer fit, reduction of friction compared with competitor workflows, or reliability of the core marketplace flow.
-- Prefer issues that create a concrete reason for a freelancer or company already using a competitor to try, trust, or switch to Flow Link.
-- Skip cosmetic, speculative, or internally interesting issues when their competitive relevance is weak.
+Strategic filter:
+- Create an issue only when it clearly improves Flow Link's ability to win users from レバテック, Findy Freelance, or adjacent freelance/job marketplaces.
+- Prefer concrete gains in freelancer/company acquisition, activation, trust, speed to useful match/application, fit clarity, conversion, or core marketplace reliability.
+- Skip cosmetic, speculative, or internally interesting findings when competitive/user impact is weak.
 
-Validation and readiness policy:
-- Treat validation/readiness as product quality, not only technical input checking.
-- Check whether required fields match the user's next valuable action: lightweight registration, freelancer readiness before applying, company/job readiness before publishing, trust/payment readiness before freelancers decide, and post-application workflow readiness before either side must act.
-- Prefer actionable readiness guidance over hard blocking when users can still browse, learn, or draft.
-- Hard-block only when missing or invalid data would create bad marketplace behavior, such as unreviewable applications, untrustworthy job posts, unsafe payment expectations, duplicate submissions, broken contact paths, or unclear next actions.
-- For validation/readiness issues, state which action is gated, which fields are required or recommended, why the boundary improves marketplace quality, and what user-facing guidance appears when data is missing.
+Mode-specific checklist:
+$MODE_POLICY
 
-Semantic correctness policy:
-- Look for features whose UI copy promises concrete behavior, but whose implementation only approximates it with free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
-- Treat these as issue-worthy when the mismatch can change user decisions, search results, recommendations, saved searches, alerts, trust labels, validation/readiness, pricing/rate filters, availability matching, application eligibility, or company/freelancer matching quality.
-- Do not dismiss them just because the screen renders, seed data appears to work, or the happy path looks plausible.
-- Prefer issues where the user-facing label implies precise behavior, such as "80万円以上", "受付中のみ", "条件が揃った", "おすすめ", "マッチ", "確認済み", "未対応", "リモート可", "応募しやすい", "保存フィード", or "信頼".
-- For each semantic correctness issue, compare the user-facing promise, the actual implementation rule, examples that pass incorrectly, examples that fail incorrectly, and the durable model, parser, or test boundary that should replace the approximation.
-- Also look for user controls whose available choices are too narrow, arbitrary, or implementation-shaped for the user's decision. Examples include a single hard-coded threshold where users need multiple practical bands, one status option where several real workflow states exist, or shortcut chips that over-emphasize one arbitrary product assumption.
-- Treat option granularity as issue-worthy when the missing choices force users to manually scan, hide relevant results, make saved searches or alerts too coarse, or reveal internal simplification instead of matching freelancer/company intent.
+Operational rules:
+- Do not edit files, commit, push, format, or generate tracked files.
+- Create or update at most one GitHub issue; creating no issue is a valid successful outcome.
+- The wrapper already skips runs when open ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds thresholds.
+- Inspect recent .codex-automation/issue-triage-logs/ and .codex-automation/issue-worker-logs/ before filing.
+- Search existing issues for duplicates by labels and fingerprint. If an open duplicate exists, comment instead of creating another issue.
+- If a similar issue was closed or fixed, verify the current behavior still fails before reopening or filing a follow-up.
+- If the working tree was dirty at start, treat local observations as provisional and say so in Evidence. Never base an issue only on uncommitted local changes.
 
-Heuristic implementation audit:
-- Search for contains checks, includes checks, regex-like string matching, hard-coded thresholds, enum-like strings, labels containing "以上", "以下", "のみ", "確認済み", "おすすめ", "マッチ", or filters backed by free-text fields.
-- Search for select controls, segmented controls, shortcut chips, and saved-search fields with only one non-empty option or one hard-coded threshold.
-- Audit jobs discovery, recommendations, saved searches, job alerts, readiness gates, trust labels, application eligibility, company/freelancer matching, and pricing/rate behavior.
-- Create an issue when a UI label suggests structured business logic but committed code uses approximate text matching or weak heuristics that can change what users see or decide.
-- Create an issue when the implementation has become semantically correct for one hard-coded choice but still fails the broader user need because the user cannot choose the right band/state/category.
-
-Maturity and stopping conditions:
-- The wrapper skips this run before Codex starts when open codex:ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds configured thresholds.
-- Even when the wrapper allows the run, do not create an issue if the main freelancer/company marketplace flows already appear competitively adequate for this mode and no high-leverage gap is found.
-- Treat "no issue created" as a valid successful outcome when further changes would be low-impact iteration rather than a credible reason for competitor users to try or switch to Flow Link.
-
-Hard rules:
-- Do not edit repository files.
-- Do not commit.
-- Do not push.
-- Do not run formatters or code generators that modify tracked files.
-- You may read files, run read-only checks, inspect logs, use network access, and use the gh CLI to create or update GitHub issues.
-- Create or update at most one GitHub issue in this run.
-- If no worthwhile issue exists, create no issue and explain why.
-
-Log review policy:
-- Before creating an issue, inspect recent automation logs that may explain whether this has already been found, blocked, fixed, or skipped:
-  - .codex-automation/issue-triage-logs/
-  - .codex-automation/issue-worker-logs/
-- Search recent logs for related route names, user actions, error messages, fingerprints, issue numbers, PR numbers, and mode labels.
-- If a similar issue was blocked, update that issue or create a follow-up only when the blocker is resolved, the failure is different, or new evidence changes the decision.
-- If a similar issue was already fixed or merged, verify that the current behavior still fails before creating a new issue.
-- For bug issues, inspect Vercel, local server, Playwright console, browser network, Prisma, Blob, and Auth logs when available. Describe the user-visible failure, not only raw stack traces.
-- For UX and visual-design issues verified with Playwright, include relevant browser console/network observations or explicitly state that none were observed.
-- Mention the relevant logs inspected in the issue Evidence or Environment section.
-
-Dirty working tree policy:
-- This triage run may execute when the local working tree has uncommitted changes.
-- If the working tree is dirty, treat local code and browser observations as provisional.
-- If the working tree is dirty and local HEAD is behind or different from origin/develop, the wrapper skips the run before Codex starts so issues are not created from stale code.
-- Do not create an issue based only on uncommitted local changes.
-- Prefer evidence from Vercel logs, Preview, GitHub issues, committed code, or behavior that still applies to the intended develop branch.
-- If dirty-tree observations are included, explicitly say so in the issue Evidence section.
-- Never edit, format, revert, stage, commit, or push local changes from triage.
-
-Browser verification policy:
+Browser and environment:
 - $BROWSER_POLICY
-- Prefer Playwright with Chromium in headless mode and sandbox disabled when needed, for example: chromium.launch({ headless: true, chromiumSandbox: false, args: ["--no-sandbox", "--disable-setuid-sandbox"] }).
-- Prefer read-only browser checks. Do not write to Preview unless the issue truly needs it; if Preview write-path verification is needed, label the issue needs:preview-write and define cleanup requirements.
-- Include the browser target, viewport(s), observed result, and any fallback reason in the issue body.
-- For visual-design mode, screenshots are mandatory evidence. Store them in .codex-automation/screenshots/ and mention the exact paths in the issue body.
-- This automation runs in the local devcontainer using the locally authenticated Codex CLI session.
-- Prefer local app checks when the issue can be reproduced with local data.
-- Use localhost port $LOCAL_APP_PORT for this $MODE triage run when starting the app for browser checks, for example HOSTNAME=127.0.0.1 PORT=$LOCAL_APP_PORT npm run dev.
-- If port $LOCAL_APP_PORT is already in use, choose the next available port in the same range and record the actual port in the issue Environment section.
-- Do not stop another automation's dev server unless it was started by this same run and is no longer needed.
-- For bug mode, Preview URL read-only checks are strongly preferred when a Preview URL is discoverable from Vercel or GitHub deployment metadata. If Vercel Protection is enabled and VERCEL_AUTOMATION_BYPASS_SECRET is available, use the x-vercel-protection-bypass header and x-vercel-set-bypass-cookie=true. If the secret is missing and Preview is protected, record that as Preview-protection evidence instead of failing the run.
+- Use Playwright Chromium headless with sandbox disabled when browser verification is needed.
+- Prefer local checks on port $LOCAL_APP_PORT. If unavailable, use the next available port and record it.
+- Do not stop another automation's dev server unless this run started it.
+- Prefer read-only checks. Do not write to Preview unless the issue needs it; then add needs:preview-write and define cleanup.
 
-Repository workflow:
-- Use gh CLI in this repository.
-- Before creating a new issue, search open issues with labels "codex" and "$AREA_LABEL".
-- Deduplicate by fingerprint. Issue bodies must contain an HTML marker:
-  <!-- codex:fingerprint=$MODE:<stable-kebab-case-summary> -->
-- If an open issue with the same fingerprint exists, add a comment with any new evidence instead of creating a duplicate.
+Issue workflow:
+- Use gh CLI.
+- Required labels: codex, $AREA_LABEL, codex:ready, and exactly one of risk:low/risk:medium/risk:high.
+- Add codex:approved only if a human has approved a high-risk issue later; do not add it during triage.
+- Add fingerprint marker: <!-- codex:fingerprint=$MODE:<stable-kebab-case-summary> -->
 
-Labels:
-- Every automated issue must include: codex, $AREA_LABEL, codex:ready.
-- Add exactly one risk label: risk:low, risk:medium, or risk:high.
-- If Preview write-path verification is needed, add needs:preview-write and explain the required cleanup.
-- risk:high issues will not be implemented by the worker unless codex:approved is later added.
-
-Classification:
-- Screen transitions and user flow problems usually belong to area:ux.
-- Missing feedback after clicking links, submitting forms, switching filters, or starting any user-visible navigation belongs to area:ux unless it causes a runtime error.
-- Navigation that fails with 404/500, broken redirects, or runtime errors belongs to area:bug.
-- Required-field policy, readiness gates, applying/publishing eligibility, and marketplace-quality validation usually belong to area:product.
-- Validation implementation gaps, parser/type drift, missing workflow tests, and duplicated validation logic usually belong to area:maintainability.
-- Wrong search/filter/recommendation results caused by a mismatch between user-facing labels and implementation semantics usually belong to area:product.
-- Missing or arbitrary filter/search option choices, such as a single hard-coded rate threshold, usually belong to area:product.
-- Incorrect trust, readiness, payment, rate, or eligibility behavior belongs to area:product when it changes marketplace decisions, and area:bug when it clearly produces broken or unsafe user-visible results.
-- Approximate string matching, duplicated ad hoc parsing, missing normalized fields, or missing semantic tests should be mentioned as maintainability risk even when the primary issue is product.
-- Business workflow or service-positioning questions belong to area:product.
-- Navigation visual treatment, current-location indicators, and layout consistency belong to area:visual-design.
-
-Issue body format:
+Issue body:
 ## Summary
 ## Evidence
 ## Competitive relevance
@@ -350,16 +324,10 @@ Issue body format:
 ## Verification plan
 
 Quality bar:
-- Write issues from the freelancer/company user's perspective.
-- In the Competitive relevance section, state which competitor user behavior this could affect, why this would make Flow Link more attractive, and why it is worth doing now.
-- Treat clear pending feedback for route transitions and form submissions as a baseline marketplace UX requirement. If a user can click and wait without knowing whether anything is happening, create or update an area:ux issue unless an equivalent issue already exists.
-- Treat applying and publishing readiness as baseline marketplace quality. If users can apply or publish with too little information for the other side to evaluate trust, fit, timing, or payment expectations, create or update an area:product issue unless an equivalent issue already exists.
-- Avoid developer-facing UI terms such as MVC, MVP, direct matching, direct contract, direct match, core differentiation, or implementation jargon unless the issue is explicitly about source code maintainability.
-- For product mode, use current public competitor or adjacent-market information when network access is available, and include source URLs in the issue body.
-- For bug mode, treat Vercel Preview logs as strong signals but describe the likely user-visible failure, not just the stack trace.
-- For maintainability mode, tie code risk to a concrete future bug, operating cost, or verification gap.
-
-End by summarizing whether you created an issue, updated an issue, or skipped this run.
+- Write from the freelancer/company user's perspective.
+- In Competitive relevance, state which competitor user behavior this affects, why Flow Link becomes more attractive, and why now.
+- Acceptance criteria must be specific enough for the worker to verify item by item.
+- End by saying whether you created an issue, updated an issue, reopened an issue, or skipped this run.
 PROMPT_EOF
 )
 
