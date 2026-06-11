@@ -14,9 +14,9 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   return (
     <Shell>
       <TopNav activeSection="register" loginCallbackUrl={callbackUrl} registerCallbackUrl={callbackUrl} />
-      <div className="mx-auto grid max-w-md px-5 pb-12 pt-8 sm:pt-12 lg:pt-16">
-        <Card className="w-full">
-          <h1 className="text-2xl font-semibold">アカウント登録</h1>
+      <div className="mx-auto grid max-w-md px-4 pb-8 pt-4 sm:px-5 sm:pb-12 sm:pt-12 lg:pt-16">
+        <Card className="w-full max-[480px]:p-4">
+          <h1 className="text-xl font-semibold sm:text-2xl">アカウント登録</h1>
           {duplicateEmail && (
             <p className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               このメールアドレスはすでに登録されています。
