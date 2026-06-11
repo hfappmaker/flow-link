@@ -61,6 +61,13 @@ enum JobAlertMatchStatus {
   suppressed
 }
 
+enum JobAlertDispatchStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
 enum InterviewThreadStatus {
   open
   scheduled
@@ -402,6 +409,7 @@ model JobPost {
   safetyReports     CompanySafetyReport[]
   recommendationFeedback RecommendationFeedback[]
   alertMatches      JobAlertMatch[]
+  alertDispatch      JobAlertDispatch?
 
   @@map("job_posts")
 }
@@ -522,6 +530,22 @@ model JobAlertMatch {
   @@index([freelancerProfileId, status, cadence])
   @@index([jobPostId])
   @@map("job_alert_matches")
+}
+
+model JobAlertDispatch {
+  id          String                 @id @default(cuid())
+  jobPostId   String                 @unique @map("job_post_id")
+  status      JobAlertDispatchStatus @default(pending)
+  attempts    Int                    @default(0)
+  lastError   String?                @map("last_error")
+  lockedAt    DateTime?              @map("locked_at")
+  processedAt DateTime?              @map("processed_at")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  jobPost     JobPost                @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("job_alert_dispatches")
 }
 
 model InterviewThread {

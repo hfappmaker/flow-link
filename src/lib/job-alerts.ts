@@ -1,4 +1,5 @@
 import {
+  JobAlertDispatchStatus,
   JobAlertCadence,
   JobAlertMatchStatus,
   RecommendationFeedbackSentiment,
@@ -16,6 +17,8 @@ type AlertDb = Pick<
   Prisma.TransactionClient,
   "freelancerProfile" | "jobAlertMatch" | "jobApplication" | "jobPost" | "notification" | "recommendationFeedback" | "savedJob"
 >;
+
+type AlertDispatchDb = AlertDb & Pick<Prisma.TransactionClient, "jobAlertDispatch">;
 
 type SavedFeed = {
   id: string;
@@ -48,7 +51,7 @@ type AlertJob = JobRecommendationJob & {
 
 export async function evaluateSavedFeedJobAlerts(
   db: AlertDb,
-  input: { jobPostId: string; now?: Date } | { job: AlertJob; now?: Date },
+  input: ({ jobPostId: string; now?: Date } | { job: AlertJob; now?: Date }) & { sendDueDigests?: boolean },
 ) {
   const now = input.now ?? new Date();
   const job =
@@ -179,9 +182,85 @@ export async function evaluateSavedFeedJobAlerts(
     }
   }
 
+  if (input.sendDueDigests === false) return { created, notified, suppressed };
+
   const daily = await sendDueJobAlertDigests(db, { cadence: JobAlertCadence.daily, now });
   const weekly = await sendDueJobAlertDigests(db, { cadence: JobAlertCadence.weekly, now });
   return { created, notified: notified + daily.notified + weekly.notified, suppressed };
+}
+
+export function shouldDispatchSavedFeedJobAlerts(job: { status?: string | null; applicationStatus?: string | null }) {
+  return job.status === "published" && job.applicationStatus === "open";
+}
+
+export async function enqueueSavedFeedJobAlertDispatch(
+  db: Pick<Prisma.TransactionClient, "jobAlertDispatch">,
+  { jobPostId }: { jobPostId: string },
+) {
+  return db.jobAlertDispatch.upsert({
+    where: { jobPostId },
+    create: { jobPostId },
+    update: {
+      status: JobAlertDispatchStatus.pending,
+      lockedAt: null,
+      processedAt: null,
+      lastError: null,
+    },
+  });
+}
+
+export async function dispatchPendingSavedFeedJobAlerts(
+  db: AlertDispatchDb,
+  { limit = 10, now = new Date() }: { limit?: number; now?: Date } = {},
+) {
+  const tasks = await db.jobAlertDispatch.findMany({
+    where: { status: { in: [JobAlertDispatchStatus.pending, JobAlertDispatchStatus.failed] } },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+
+  let completed = 0;
+  let failed = 0;
+  for (const task of tasks) {
+    await db.jobAlertDispatch.update({
+      where: { id: task.id },
+      data: {
+        status: JobAlertDispatchStatus.processing,
+        lockedAt: now,
+        attempts: { increment: 1 },
+      },
+    });
+
+    try {
+      await evaluateSavedFeedJobAlerts(db, {
+        jobPostId: task.jobPostId,
+        now,
+        sendDueDigests: false,
+      });
+      await db.jobAlertDispatch.update({
+        where: { id: task.id },
+        data: {
+          status: JobAlertDispatchStatus.completed,
+          processedAt: now,
+          lockedAt: null,
+          lastError: null,
+        },
+      });
+      completed += 1;
+    } catch (error) {
+      await db.jobAlertDispatch.update({
+        where: { id: task.id },
+        data: {
+          status: JobAlertDispatchStatus.failed,
+          lockedAt: null,
+          lastError: error instanceof Error ? error.message : String(error),
+        },
+      });
+      failed += 1;
+    }
+  }
+
+  return { processed: tasks.length, completed, failed };
 }
 
 export async function sendDueJobAlertDigests(

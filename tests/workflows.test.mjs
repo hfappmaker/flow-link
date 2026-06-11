@@ -20,6 +20,7 @@ const {
   resolveCompanySafetyReportWorkflow,
   reviewCompanyVerificationWorkflow,
   screenApplicationWorkflow,
+  saveCompanyJobPostWorkflow,
   sendInterviewMessageWorkflow,
   submitInteractionFeedbackWorkflow,
 } = await import("../src/lib/workflows.ts");
@@ -50,7 +51,17 @@ function workflowDb(overrides = {}) {
       update: async (args) => calls.push(["jobApplication.update", args]),
     },
     jobPost: {
-      update: async (args) => calls.push(["jobPost.update", args]),
+      create: async (args) => {
+        calls.push(["jobPost.create", args]);
+        return { id: overrides.savedJobId ?? "job-1", ...args.data };
+      },
+      update: async (args) => {
+        calls.push(["jobPost.update", args]);
+        return { id: args.where.id, ...args.data };
+      },
+    },
+    jobAlertDispatch: {
+      upsert: async (args) => calls.push(["jobAlertDispatch.upsert", args]),
     },
     notification: {
       create: async (args) => calls.push(["notification.create", args]),
@@ -142,6 +153,89 @@ const applicationInput = {
   workloadExpectation: "週4日",
   contactPreference: "メール",
 };
+
+const companyJobInput = {
+  companyProfileId: "company-profile-1",
+  companyProfile: {
+    name: "Flow Link株式会社",
+  },
+  data: {
+    companyProfileId: "company-profile-1",
+    title: "React platform engineer",
+    description: "React and TypeScript product work.",
+    requiredSkills: "React, TypeScript",
+    preferredSkills: null,
+    rate: "月80万円",
+    workload: "週3日",
+    contractPeriod: "3ヶ月",
+    selectionFlow: "面談1回",
+    contractTerms: "月末締め翌月末払い",
+    location: "東京",
+    remotePolicy: "リモート可",
+    openings: 1,
+    status: JobPostStatus.published,
+    applicationStatus: ApplicationStatus.open,
+  },
+};
+
+test("company job save enqueues saved-feed alert work without running fanout inline", async () => {
+  const db = workflowDb();
+
+  const result = await saveCompanyJobPostWorkflow(db, companyJobInput);
+
+  assert.equal(result.savedJob.id, "job-1");
+  assert.equal(result.heldAsDraft, false);
+  assert.equal(db.calls.filter(([name]) => name === "jobPost.create").length, 1);
+  assert.deepEqual(db.calls.filter(([name]) => name === "jobAlertDispatch.upsert")[0][1], {
+    where: { jobPostId: "job-1" },
+    create: { jobPostId: "job-1" },
+    update: {
+      status: "pending",
+      lockedAt: null,
+      processedAt: null,
+      lastError: null,
+    },
+  });
+  assert.equal(db.calls.filter(([name]) => name === "freelancerProfile.findMany").length, 0);
+  assert.equal(db.calls.filter(([name]) => name === "notification.create").length, 0);
+});
+
+test("company job save does not enqueue alerts for draft, private, closed, or paused jobs", async () => {
+  for (const data of [
+    { status: JobPostStatus.draft, applicationStatus: ApplicationStatus.open },
+    { status: JobPostStatus.private, applicationStatus: ApplicationStatus.open },
+    { status: JobPostStatus.closed, applicationStatus: ApplicationStatus.open },
+    { status: JobPostStatus.published, applicationStatus: ApplicationStatus.paused },
+  ]) {
+    const db = workflowDb();
+    await saveCompanyJobPostWorkflow(db, {
+      ...companyJobInput,
+      data: {
+        ...companyJobInput.data,
+        ...data,
+      },
+    });
+    assert.equal(db.calls.filter(([name]) => name === "jobAlertDispatch.upsert").length, 0);
+  }
+});
+
+test("company job save holds incomplete publish attempts as drafts without alert work", async () => {
+  const db = workflowDb();
+
+  const result = await saveCompanyJobPostWorkflow(db, {
+    ...companyJobInput,
+    companyProfile: { name: "未設定の企業" },
+    data: {
+      ...companyJobInput.data,
+      contractTerms: null,
+    },
+  });
+
+  assert.equal(result.heldAsDraft, true);
+  assert.equal(result.savedJob.status, JobPostStatus.draft);
+  assert.equal(result.savedJob.applicationStatus, ApplicationStatus.paused);
+  assert.equal(db.calls.filter(([name]) => name === "jobAlertDispatch.upsert").length, 0);
+});
 
 test("unready freelancer cannot apply", async () => {
   const db = workflowDb({
