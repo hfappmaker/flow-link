@@ -20,6 +20,7 @@ import {
   type DiscoveryIntentCounts,
   type JobRecommendation,
 } from "@/lib/job-recommendations";
+import { JOBS_KEYWORD_CANDIDATE_LIMIT, filterJobsBySearchQuery, jobKeywordCandidateWhere } from "@/lib/job-search";
 import {
   buildTrustConfidence,
   directContractReadyJobWhere,
@@ -77,16 +78,8 @@ export default async function JobsPage({
     andFilters.push(directContractReadyJobWhere());
   }
   if (keyword) {
-    andFilters.push({
-      OR: [
-        { title: { contains: keyword, mode: "insensitive" } },
-        { description: { contains: keyword, mode: "insensitive" } },
-        { requiredSkills: { contains: keyword, mode: "insensitive" } },
-        { preferredSkills: { contains: keyword, mode: "insensitive" } },
-        { location: { contains: keyword, mode: "insensitive" } },
-        { companyProfile: { name: { contains: keyword, mode: "insensitive" } } },
-      ],
-    });
+    const keywordCandidateWhere = jobKeywordCandidateWhere(keyword);
+    if (keywordCandidateWhere) andFilters.push(keywordCandidateWhere);
   }
   if (workload === "light") {
     andFilters.push({
@@ -111,6 +104,7 @@ export default async function JobsPage({
       prisma.jobPost.findMany({
         where,
         orderBy: { createdAt: "desc" },
+        ...(keyword ? { take: JOBS_KEYWORD_CANDIDATE_LIMIT } : {}),
         include: {
           companyProfile: {
             include: {
@@ -124,7 +118,8 @@ export default async function JobsPage({
       }),
     [],
   );
-  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(jobsResult.data) : jobsResult.data;
+  const keywordFilteredJobs = filterJobsBySearchQuery(jobsResult.data, keyword);
+  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(keywordFilteredJobs) : keywordFilteredJobs;
   const jobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
   const freelancerProfile =

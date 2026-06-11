@@ -97,6 +97,19 @@ const SKILL_ALIAS_TO_CANONICAL_ID: Record<string, string> = {
   vuejs: "vue",
 };
 
+const CANONICAL_SKILL_SEARCH_TERMS: Record<string, string[]> = {
+  "aws": ["AWS"],
+  "aws-ec2": ["EC2"],
+  "aws-lambda": ["AWS Lambda"],
+  "javascript": ["JavaScript", "JS"],
+  "nextjs": ["Next.js", "NextJS"],
+  "nodejs": ["Node.js", "NodeJS"],
+  "react": ["React"],
+  "react-native": ["React Native"],
+  "typescript": ["TypeScript", "TS"],
+  "vue": ["Vue", "Vue.js", "VueJS"],
+};
+
 // Skill fit is exact by canonical id: aliases match, but parent/child skills do not.
 export function parseSkills(value: string | null | undefined) {
   if (!value) return [];
@@ -158,6 +171,16 @@ function normalizeSearchText(value: string | null | undefined) {
 
 function normalizedSearchTokens(value: string | null | undefined) {
   return normalizeSearchText(value).match(/[a-z0-9+#]+|[一-龯ぁ-んァ-ヶー]+/g) ?? [];
+}
+
+export function canonicalSkillIdsFromSearchQuery(query: string | null | undefined) {
+  const tokens = normalizedSearchTokens(query);
+  if (tokens.length === 0) return new Set<string>();
+  return canonicalSkillIdsFromAliasTokens(tokens) ?? new Set<string>();
+}
+
+export function canonicalSkillSearchTerms(skillId: string) {
+  return CANONICAL_SKILL_SEARCH_TERMS[skillId] ?? [];
 }
 
 function canonicalSkillIdsFromText(value: string | null | undefined) {
