@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
+import { rateFitTone } from "./rates.ts";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -629,7 +630,7 @@ export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
     );
   }
 
-  const rateTone = textFitTone(preference.targetRate, job.rate);
+  const rateTone = rateFitTone(preference.targetRate, job.rate);
   if (preference.targetRate) {
     reasons.push({
       label: rateTone === "good" ? "単価条件に近い" : rateTone === "warn" ? "単価ミスマッチ" : "単価要確認",

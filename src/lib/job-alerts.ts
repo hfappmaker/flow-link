@@ -5,6 +5,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { buildJobRecommendation, type JobRecommendationJob } from "./job-recommendations.ts";
+import { isHighMonthlyRateText } from "./rates.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
 
@@ -266,7 +267,7 @@ function savedFeedMatchesRecommendation(feed: SavedFeed, recommendation: ReturnT
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
   if (feed.fit === "ready" && !recommendation.isReadyToApply) return false;
   if (feed.workload === "light" && !/(週2|週3|副業|0\.4|0\.5|40%|50%)/i.test(job.workload ?? "")) return false;
-  if (feed.rate === "high" && !/(80|90|100|高単価)/i.test(job.rate ?? "")) return false;
+  if (feed.rate === "high" && !isHighMonthlyRateText(job.rate)) return false;
   return recommendation.directScore >= 45 || recommendation.isSkillMatched || recommendation.isReadyToApply;
 }
 

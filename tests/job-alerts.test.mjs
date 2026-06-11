@@ -76,6 +76,20 @@ test("daily digest matches wait until the digest window is due", async () => {
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
 });
 
+test("high-rate saved feed alerts use normalized monthly lower bounds", async () => {
+  const highDb = alertDb({ rate: "high" });
+  await evaluateSavedFeedJobAlerts(highDb, { job: job({ rate: "月額120万円" }) });
+  assert.equal(highDb.notifications.length, 1);
+
+  const rangeDb = alertDb({ rate: "high" });
+  await evaluateSavedFeedJobAlerts(rangeDb, { job: job({ rate: "75〜95万円" }) });
+  assert.equal(rangeDb.notifications.length, 0);
+
+  const hourlyDb = alertDb({ rate: "high" });
+  await evaluateSavedFeedJobAlerts(hourlyDb, { job: job({ rate: "時給8,000円" }) });
+  assert.equal(hourlyDb.notifications.length, 0);
+});
+
 function job(overrides = {}) {
   return {
     id: overrides.id ?? "job-1",
@@ -101,7 +115,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [] } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "" } = {}) {
   const state = {
     matches: [],
     notifications: [],
@@ -129,7 +143,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         directReadyOnly: false,
         fit: "skill",
         workload: "",
-        rate: "",
+        rate,
         sort: "direct",
         notificationCadence: cadence,
       },
