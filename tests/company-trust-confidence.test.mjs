@@ -58,3 +58,57 @@ test("company trust confidence marks old Flow Link reviews as stale", () => {
   assert.equal(confidence.tone, "warn");
   assert.equal(trustRecommendationAdjustment(confidence), -10);
 });
+
+test("company trust confidence keeps confirmed payment request valid before injected expiry time", () => {
+  const confidence = buildTrustConfidence({
+    now: new Date("2026-06-08T00:00:00.000Z"),
+    company: {
+      verificationRequests: [
+        {
+          kind: "payment_policy",
+          status: "confirmed",
+          reviewedAt: "2026-06-01T00:00:00.000Z",
+          expiresAt: "2026-06-09T00:00:00.000Z",
+          createdAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    },
+    job: {
+      contractTerms: "月末締め翌月末払い",
+      rate: "80万円",
+      workload: "週3日",
+      contractPeriod: "3ヶ月",
+    },
+  });
+
+  assert.equal(confidence.paymentStatus, "confirmed");
+  assert.notEqual(confidence.label, "更新確認が必要");
+  assert.equal(trustRecommendationAdjustment(confidence), -8);
+});
+
+test("company trust confidence marks confirmed payment request stale at injected expiry time", () => {
+  const confidence = buildTrustConfidence({
+    now: new Date("2026-06-09T00:00:00.000Z"),
+    company: {
+      verificationRequests: [
+        {
+          kind: "payment_policy",
+          status: "confirmed",
+          reviewedAt: "2026-06-01T00:00:00.000Z",
+          expiresAt: "2026-06-09T00:00:00.000Z",
+          createdAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    },
+    job: {
+      contractTerms: "月末締め翌月末払い",
+      rate: "80万円",
+      workload: "週3日",
+      contractPeriod: "3ヶ月",
+    },
+  });
+
+  assert.equal(confidence.paymentStatus, "stale");
+  assert.equal(confidence.label, "更新確認が必要");
+  assert.equal(trustRecommendationAdjustment(confidence), -10);
+});
