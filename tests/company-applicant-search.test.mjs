@@ -14,6 +14,7 @@ const {
   collectSemanticCandidateMatches,
 } = await import("../src/lib/semantic-candidate-search.ts");
 const {
+  applicationConditionFit,
   applicationConditionTerms,
   buildApplicationReview,
   skillMatchPercent,
@@ -366,6 +367,104 @@ test("company review uses application-specific condition expectations before pro
   });
   assert.deepEqual(review.nextChecks, ["希望単価", "希望稼働量"]);
   assert.match(review.reviewQuestions.join("\n"), /応募者のこの案件での希望単価/);
+});
+
+test("company review marks compatible application rate and workload as interview-ready", () => {
+  const review = buildApplicationReview({
+    ...application({
+      rateExpectation: "月80万円以上",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "月80万円以上",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.equal(fit.rate.readiness, "ready");
+  assert.equal(fit.workload.readiness, "ready");
+  assert.equal(review.interviewReadinessPercent, 100);
+  assert.equal(review.isInterviewReady, true);
+  assert.deepEqual(review.nextChecks, []);
+});
+
+test("company review flags applicant rate above the posted job rate before interview-ready", () => {
+  const review = buildApplicationReview({
+    ...application({
+      rateExpectation: "月120万円以上",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "月120万円以上",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.equal(fit.rate.readiness, "mismatch");
+  assert.equal(fit.rate.label, "要すり合わせ");
+  assert.notEqual(review.interviewReadinessPercent, 100);
+  assert.equal(review.isInterviewReady, false);
+  assert.deepEqual(review.nextChecks, ["希望単価のすり合わせ"]);
+  assert.match(review.reviewQuestions.join("\n"), /希望単価/);
+});
+
+test("company review flags light applicant workload against weekly-five jobs before interview-ready", () => {
+  const review = buildApplicationReview({
+    ...application({
+      rateExpectation: "月80万円以上",
+      workloadExpectation: "週2〜3日",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "月80万円以上",
+      workloadExpectation: "週2〜3日",
+    }),
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.equal(fit.workload.readiness, "mismatch");
+  assert.equal(fit.workload.label, "要すり合わせ");
+  assert.notEqual(review.interviewReadinessPercent, 100);
+  assert.equal(review.isInterviewReady, false);
+  assert.deepEqual(review.nextChecks, ["希望稼働量のすり合わせ"]);
+  assert.match(review.reviewQuestions.join("\n"), /希望稼働量/);
+});
+
+test("company review keeps unparseable condition text reviewable without hard-blocking", () => {
+  const review = buildApplicationReview({
+    ...application({
+      rateExpectation: "応相談",
+      workloadExpectation: "平日日中で調整",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "応相談",
+      workloadExpectation: "平日日中で調整",
+    }),
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.equal(fit.rate.readiness, "review");
+  assert.equal(fit.rate.label, "要確認");
+  assert.equal(fit.workload.readiness, "review");
+  assert.equal(fit.workload.label, "要確認");
+  assert.equal(review.interviewReadinessPercent, 100);
+  assert.equal(review.isInterviewReady, true);
+  assert.deepEqual(review.nextChecks, []);
+  assert.match(review.reviewQuestions.join("\n"), /希望単価と案件単価の前提/);
+  assert.match(review.reviewQuestions.join("\n"), /希望稼働量と案件稼働量の前提/);
 });
 
 function application(overrides = {}) {

@@ -239,6 +239,8 @@ type ApplicationReviewInput = {
   };
   jobPost: {
     requiredSkills?: string | null;
+    rate?: string | null;
+    workload?: string | null;
   };
 };
 
@@ -248,6 +250,7 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
   const matchPercent = skillMatchPercent(application.jobPost.requiredSkills, application.freelancerProfile.skills);
   const missingSkillCount = Math.max(0, requiredSkills.length - requiredSkillMatches.length);
   const conditionTerms = applicationConditionTerms(application);
+  const conditionFit = applicationConditionFit(application);
   const reviewSignals = [
     { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
     { done: (application.freelancerProfile.documents?.length ?? 0) >= 2, nextCheck: "PDF書類" },
@@ -261,16 +264,17 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ),
       nextCheck: "開始条件",
     },
-    { done: conditionTerms.rate.source !== "missing", nextCheck: "希望単価" },
-    { done: conditionTerms.workload.source !== "missing", nextCheck: "希望稼働量" },
+    { done: conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch", nextCheck: conditionFit.rate.nextCheck },
+    { done: conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch", nextCheck: conditionFit.workload.nextCheck },
   ];
   const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
+  const hasConditionMismatch = conditionFit.rate.readiness === "mismatch" || conditionFit.workload.readiness === "mismatch";
 
   return {
     requiredSkillMatches,
     matchPercent,
     interviewReadinessPercent,
-    isInterviewReady: interviewReadinessPercent >= 80 && application.status === "applied",
+    isInterviewReady: !hasConditionMismatch && interviewReadinessPercent >= 80 && application.status === "applied",
     nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
     reviewQuestions: [
       ...(missingSkillCount > 0
@@ -282,9 +286,19 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ...(conditionTerms.rate.source === "missing"
         ? ["応募者のこの案件での希望単価を確認する"]
         : []),
+      ...(conditionFit.rate.readiness === "mismatch"
+        ? ["応募者の希望単価が案件単価に収まるか、条件調整の余地を確認する"]
+        : conditionFit.rate.readiness === "review"
+          ? ["応募者の希望単価と案件単価の前提を面談前に確認する"]
+          : []),
       ...(conditionTerms.workload.source === "missing"
         ? ["応募者のこの案件での週あたり稼働量を確認する"]
         : []),
+      ...(conditionFit.workload.readiness === "mismatch"
+        ? ["応募者の希望稼働量で案件を進められるか、稼働日数をすり合わせる"]
+        : conditionFit.workload.readiness === "review"
+          ? ["応募者の希望稼働量と案件稼働量の前提を面談前に確認する"]
+          : []),
       ...(!application.proposalMessage
         ? ["この案件で最初に任せたい業務への貢献イメージを確認する"]
         : []),
@@ -319,6 +333,105 @@ type ApplicationConditionTerm = {
   source: "application" | "profile" | "missing";
   display: string;
 };
+
+type ApplicationConditionFitInput = ApplicationConditionTermsInput & {
+  jobPost: {
+    rate?: string | null;
+    workload?: string | null;
+  };
+};
+
+type ApplicationConditionFit = {
+  term: ApplicationConditionTerm;
+  tone: "good" | "neutral" | "warn";
+  readiness: "ready" | "review" | "mismatch" | "missing";
+  label: string;
+  nextCheck: string;
+};
+
+export function applicationConditionFit(application: ApplicationConditionFitInput): {
+  rate: ApplicationConditionFit;
+  workload: ApplicationConditionFit;
+} {
+  const terms = applicationConditionTerms(application);
+  return {
+    rate: conditionFit({
+      term: terms.rate,
+      tone: terms.rate.source === "missing" ? "warn" : rateFitTone(terms.rate.value, application.jobPost.rate),
+      missingLabel: "未設定",
+      readyLabel: "適合",
+      reviewLabel: "要確認",
+      mismatchLabel: "要すり合わせ",
+      missingNextCheck: "希望単価",
+      mismatchNextCheck: "希望単価のすり合わせ",
+    }),
+    workload: conditionFit({
+      term: terms.workload,
+      tone: terms.workload.source === "missing" ? "warn" : workloadFitTone(terms.workload.value, application.jobPost.workload),
+      missingLabel: "未設定",
+      readyLabel: "適合",
+      reviewLabel: "要確認",
+      mismatchLabel: "要すり合わせ",
+      missingNextCheck: "希望稼働量",
+      mismatchNextCheck: "希望稼働量のすり合わせ",
+    }),
+  };
+}
+
+function conditionFit({
+  term,
+  tone,
+  missingLabel,
+  readyLabel,
+  reviewLabel,
+  mismatchLabel,
+  missingNextCheck,
+  mismatchNextCheck,
+}: {
+  term: ApplicationConditionTerm;
+  tone: "good" | "neutral" | "warn";
+  missingLabel: string;
+  readyLabel: string;
+  reviewLabel: string;
+  mismatchLabel: string;
+  missingNextCheck: string;
+  mismatchNextCheck: string;
+}): ApplicationConditionFit {
+  if (term.source === "missing") {
+    return {
+      term,
+      tone: "warn",
+      readiness: "missing",
+      label: missingLabel,
+      nextCheck: missingNextCheck,
+    };
+  }
+  if (tone === "warn") {
+    return {
+      term,
+      tone,
+      readiness: "mismatch",
+      label: mismatchLabel,
+      nextCheck: mismatchNextCheck,
+    };
+  }
+  if (tone === "neutral") {
+    return {
+      term,
+      tone,
+      readiness: "review",
+      label: reviewLabel,
+      nextCheck: missingNextCheck,
+    };
+  }
+  return {
+    term,
+    tone,
+    readiness: "ready",
+    label: readyLabel,
+    nextCheck: missingNextCheck,
+  };
+}
 
 export function applicationConditionTerms(application: ApplicationConditionTermsInput): {
   rate: ApplicationConditionTerm;
