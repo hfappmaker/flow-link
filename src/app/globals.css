@@ -89,10 +89,12 @@ body {
 
 .top-nav-inner {
   flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .top-nav-brand,
 .top-nav-menu {
+  max-width: 100%;
   flex-shrink: 0;
   white-space: nowrap;
 }
