@@ -19,7 +19,7 @@ import type { PostInterviewOutcome } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge } from "@/components/ui";
+import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge, SubmitButton } from "@/components/ui";
 import { SafetyReportPanel } from "@/components/safety-reporting";
 
 export const dynamic = "force-dynamic";
@@ -483,7 +483,7 @@ export default async function InterviewPage({
                   defaultValue={postInterviewPlan.followUpMessage}
                   maxLength={1600}
                 />
-                <button className="btn btn-secondary" type="submit">確認文を送る</button>
+                <SubmitButton className="btn btn-secondary" pendingLabel="送信中">確認文を送る</SubmitButton>
               </form>
             </Card>
 
@@ -583,7 +583,9 @@ export default async function InterviewPage({
                   <p className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
                     フィードバックは参加者だけが送信できます。送信後14日間は編集できます。面談なしの見送りや応募前の印象は公開評価に使いません。非公開メモ、報告済み、非表示の内容は集計に含まれません。
                   </p>
-                  <button className="btn btn-secondary" type="submit">{existingFeedback ? "フィードバックを更新" : "フィードバックを送信"}</button>
+                  <SubmitButton className="btn btn-secondary" pendingLabel={existingFeedback ? "更新中" : "送信中"}>
+                    {existingFeedback ? "フィードバックを更新" : "フィードバックを送信"}
+                  </SubmitButton>
                 </form>
               ) : (
                 <p className="mt-4 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
@@ -619,7 +621,7 @@ export default async function InterviewPage({
                           {message.senderUserId === user.id ? "送信済み" : "返信する候補"}
                         </StatusBadge>
                       </div>
-                      <button className="btn btn-secondary mt-3 w-full" type="submit">この日時で確定</button>
+                      <SubmitButton className="btn btn-secondary mt-3 w-full" pendingLabel="確定中">この日時で確定</SubmitButton>
                     </form>
                   ))}
                 </div>
@@ -645,7 +647,7 @@ export default async function InterviewPage({
                     <TextField name="proposedAt3" label="候補3" type="datetime-local" />
                   </div>
                   <TextArea name="body" label="補足" defaultValue={timeOptionNote} maxLength={800} />
-                  <button className="btn btn-secondary" type="submit">候補日時を送る</button>
+                  <SubmitButton className="btn btn-secondary" pendingLabel="送信中">候補日時を送る</SubmitButton>
                 </form>
               </Card>
             )}
@@ -665,7 +667,7 @@ export default async function InterviewPage({
                 </SelectField>
                 <TextField name="proposedAt" label="候補/確定日時" type="datetime-local" />
                 <TextArea name="body" label="本文またはURL" defaultValue={starterMessage} />
-                <button className="btn btn-primary" type="submit">送信</button>
+                <SubmitButton className="btn btn-primary" pendingLabel="送信中">送信</SubmitButton>
               </form>
             </Card>
           </div>
@@ -930,7 +932,7 @@ function CompanyOutcomeForm({
           <option value="close_job">案件をクローズする</option>
         </SelectField>
       </div>
-      <button className="btn btn-primary" type="submit">面談後ステータスを保存</button>
+      <SubmitButton className="btn btn-primary" pendingLabel="保存中">面談後ステータスを保存</SubmitButton>
     </form>
   );
 }
@@ -974,7 +976,7 @@ function FreelancerOutcomeForm({
         defaultValue={outcome?.privateOutcomeNote}
         maxLength={800}
       />
-      <button className="btn btn-primary" type="submit">返答を保存</button>
+      <SubmitButton className="btn btn-primary" pendingLabel="保存中">返答を保存</SubmitButton>
     </form>
   );
 }
