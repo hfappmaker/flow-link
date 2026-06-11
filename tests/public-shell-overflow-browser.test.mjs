@@ -19,38 +19,53 @@ test(
     });
 
     try {
-      const page = await browser.newPage({ viewport: { width: 375, height: 812 } });
       const consoleErrors = [];
-      page.on("console", (message) => {
-        if (message.type() === "error" && !message.text().includes("/_next/webpack-hmr")) {
-          consoleErrors.push(message.text());
+      const routes = ["/", "/jobs", "/register", "/login"];
+
+      for (const width of [375, 320]) {
+        const page = await browser.newPage({ viewport: { width, height: 812 } });
+        page.on("console", (message) => {
+          if (message.type() === "error" && !message.text().includes("/_next/webpack-hmr")) {
+            consoleErrors.push(message.text());
+          }
+        });
+
+        for (const route of routes) {
+          await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+
+          const overflow = await page.evaluate(() => ({
+            clientWidth: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+            bodyScrollWidth: document.body.scrollWidth,
+          }));
+          assert.ok(
+            overflow.scrollWidth <= overflow.clientWidth,
+            `${route} should not overflow horizontally at ${width}px: ${JSON.stringify(overflow)}`,
+          );
+          assert.ok(
+            overflow.bodyScrollWidth <= overflow.clientWidth,
+            `${route} body should not overflow horizontally at ${width}px: ${JSON.stringify(overflow)}`,
+          );
+
+          const header = page.locator("header");
+          for (const label of ["Flow Link", "案件", "ログイン", "登録"]) {
+            const target = header.getByRole("link", {
+              name: label === "Flow Link" ? new RegExp(label) : label,
+              exact: label !== "Flow Link",
+            });
+            const box = await target.boundingBox();
+            assert.ok(box, `${route} should render visible ${label} link at ${width}px`);
+            assert.ok(box.width >= 32, `${route} ${label} link should remain tappable at ${width}px: ${JSON.stringify(box)}`);
+            assert.ok(box.height >= 32, `${route} ${label} link should remain tappable at ${width}px: ${JSON.stringify(box)}`);
+            assert.ok(box.x >= 0, `${route} ${label} link should not clip left at ${width}px: ${JSON.stringify(box)}`);
+            assert.ok(
+              box.x + box.width <= overflow.clientWidth,
+              `${route} ${label} link should not clip right at ${width}px: ${JSON.stringify(box)}`,
+            );
+          }
         }
-      });
 
-      for (const route of ["/", "/jobs", "/register", "/company", "/freelancer"]) {
-        await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
-
-        const overflow = await page.evaluate(() => ({
-          clientWidth: document.documentElement.clientWidth,
-          scrollWidth: document.documentElement.scrollWidth,
-          bodyScrollWidth: document.body.scrollWidth,
-        }));
-        assert.ok(
-          overflow.scrollWidth <= overflow.clientWidth,
-          `${route} should not overflow horizontally: ${JSON.stringify(overflow)}`,
-        );
-
-        const header = page.locator("header");
-        for (const label of ["Flow Link", "案件", "ログイン", "登録"]) {
-          const target = header.getByRole("link", {
-            name: label === "Flow Link" ? new RegExp(label) : label,
-            exact: label !== "Flow Link",
-          });
-          const box = await target.boundingBox();
-          assert.ok(box, `${route} should render visible ${label} link`);
-          assert.ok(box.x >= 0, `${route} ${label} link should not clip left: ${JSON.stringify(box)}`);
-          assert.ok(box.x + box.width <= overflow.clientWidth, `${route} ${label} link should not clip right: ${JSON.stringify(box)}`);
-        }
+        await page.close();
       }
 
       assert.equal(consoleErrors.length, 0, `unexpected browser console errors:\n${consoleErrors.join("\n")}`);
