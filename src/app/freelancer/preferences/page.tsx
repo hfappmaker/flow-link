@@ -99,7 +99,7 @@ export default async function WorkPreferencesPage() {
             <Card>
               <h2 className="font-semibold">通知への接続</h2>
               <p className="mt-2 text-sm leading-6 text-stone-600">
-                保存フィードごとのアラート頻度に従って、新しく公開された受付中案件を通知またはダイジェスト候補にします。メール配信は未接続ですが、同じ配信状態から後で拡張できます。
+                保存フィードに一致する新着の受付中案件は、Flow Linkの通知に表示されます。即時通知は一致時に届き、日次・週次ダイジェストは候補をまとめて通知します。停止中のフィードでは新しい通知を作成しません。
               </p>
               <div className="mt-3 rounded border border-stone-200 bg-stone-50 p-3 text-sm">
                 <p className="text-xs text-stone-500">現在の方針</p>
@@ -113,7 +113,7 @@ export default async function WorkPreferencesPage() {
             <div>
               <h2 className="text-lg font-semibold">保存した仕事フィード</h2>
               <p className="mt-1 text-sm leading-6 text-stone-600">
-                検索条件を保存すると、同じ条件の候補をワンクリックで再確認できます。
+                検索条件を保存すると、同じ条件の候補をワンクリックで再確認でき、アラート履歴もここで確認できます。
               </p>
             </div>
             <Link className="btn btn-secondary" href="/jobs?accepting=open&sort=direct">フィードを作る</Link>
@@ -127,7 +127,7 @@ export default async function WorkPreferencesPage() {
           ) : (
             <EmptyState
               title="保存した仕事フィードはまだありません。"
-              description="公開案件ページで検索条件を保存すると、同じ条件の候補を継続して確認できます。"
+              description="公開案件ページで検索条件を保存すると、同じ条件の候補を継続して確認でき、一致した新着案件はFlow Linkの通知に表示されます。"
               action={<Link className="btn btn-primary" href="/jobs?accepting=open&sort=direct">公開案件で保存</Link>}
             />
           )}
@@ -230,7 +230,7 @@ function SavedSearchCard({ search }: { search: SavedSearch }) {
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-stone-500">まだ一致履歴はありません。新しい受付中案件が公開されるとここに残ります。</p>
+          <p className="mt-2 text-sm text-stone-500">まだ一致履歴はありません。新しい受付中案件が公開されると、即時通知やダイジェストの履歴としてここに残ります。</p>
         )}
       </div>
     </div>
