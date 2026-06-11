@@ -234,6 +234,7 @@ Primary goal:
 - Preserve the issue's competitive purpose: Flow Link is being improved to win users from competitor services such as レバテック, Findy Freelance, and adjacent freelance/job marketplace services.
 - If implementation choices trade off simplicity, user value, and polish, prefer the option that most directly improves freelancer/company acquisition, activation, trust, speed to useful match/application, fit clarity, or core marketplace reliability.
 - Use docs/automation/agent-loop-competitive-lens.md to understand the target freelancer/company personas and competitor reference points when the issue includes product, UX, visual-design, or competitive relevance.
+- If the issue includes Competitor evidence or User voice evidence, preserve that research intent in the implementation instead of reducing it to generic feature parity.
 - Do not solve competitive issues by adding controls blindly. Prefer removing, combining, staging, or relocating choices when that better preserves a clear next action for the target persona.
 - For validation/readiness issues, preserve a lightweight registration path, prefer actionable readiness guidance before hard blocking, and hard-block only when missing or invalid data would harm marketplace quality for the other side.
 
@@ -244,7 +245,7 @@ Issue rules:
 - Prefer local write-path verification when feasible.
 - Before committing, compare the implementation against every Acceptance criteria bullet in the selected issue body and any follow-up issue comments.
 - Do not mark the issue fixed merely because the main technical bug is addressed. User-facing copy, option coverage, saved-search or alert consistency, and verification criteria count as part of done when the issue names them.
-- If the issue includes Target persona, Competitive relevance, User impact, or feature-overload concerns, verify the implemented flow still improves that persona's decision/action and does not make the first-time next action less clear.
+- If the issue includes Target persona, Competitor evidence, User voice evidence, Competitive relevance, User impact, or feature-overload concerns, verify the implemented flow still improves that persona's decision/action and does not make the first-time next action less clear.
 - If any acceptance criterion remains intentionally unsatisfied, either complete it in the same scoped change or leave the worktree clean and explain the blocker instead of committing a partial fix.
 
 Playwright verification policy:

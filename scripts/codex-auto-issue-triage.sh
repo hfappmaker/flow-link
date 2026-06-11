@@ -77,6 +77,8 @@ Product checklist:
 - Prioritize gaps that affect acquisition, activation, trust, speed to useful match/application, fit clarity, or competitor switching.
 - Compare Flow Link with current competitor or adjacent-market behavior when network access is available; include source URLs.
 - Use docs/automation/agent-loop-competitive-lens.md as the baseline competitor and persona lens before choosing an issue.
+- Open current competitor pages or credible recent writeups; do not rely only on search snippets or memory.
+- Include at least one user-voice source when network access is available, such as recent reviews, comparison articles, blog posts, note/Zenn/Qiita posts, social posts, or support/community discussions.
 - Audit search, filters, recommendations, saved searches, alerts, rate/price behavior, trust labels, readiness gates, and marketplace matching.
 - Look for semantic correctness gaps: UI copy promises concrete behavior, but implementation uses free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
 - Look for option granularity gaps: controls whose choices are too narrow, arbitrary, or implementation-shaped, such as a single hard-coded threshold where users need practical bands.
@@ -97,6 +99,7 @@ UX checklist:
 - Focus on navigation, screen transitions, user flow, pending/loading feedback, form-submit feedback, copy clarity, input burden, and empty/loading/error states.
 - Treat missing feedback after clicking links, submitting forms, switching filters, or starting navigation as issue-worthy unless already covered.
 - Use the freelancer/company personas in docs/automation/agent-loop-competitive-lens.md to decide whether the current flow makes the next action obvious.
+- When competitor/user research is relevant, cite the competitor behavior or user voice that shows why the flow causes confusion or confidence loss.
 - Treat feature overload as a UX issue when too many controls, labels, or competing actions make the next step unclear.
 - Avoid developer-facing terms such as MVC, MVP, direct matching, direct contract, core differentiation, or implementation jargon in user-facing flows.
 - Use Playwright for navigation, forms, pending/loading, and task-completion issues. Copy-only issues may use static inspection.
@@ -116,6 +119,7 @@ Visual-design checklist:
 - Screenshots are mandatory evidence for normal visual-design issues. Capture desktop and mobile, normally 1280x900 and 375x812.
 - Include exact screenshot paths and concrete visual observations.
 - Evaluate whether visual hierarchy helps the target persona choose the next action without scanning every feature.
+- When comparing with competitors, use concrete observed visual behavior such as card fields, filter grouping, primary action placement, current-location cues, or mobile density.
 - Prefer issues about clarifying, grouping, or de-emphasizing information over adding new visual elements.
 - Do not file purely aesthetic preferences unless they affect trust, clarity, conversion, repeated use, or professional polish.
 - If the problem is navigation behavior or copy comprehension, classify as UX. If it is a runtime failure, classify as bug.
@@ -305,6 +309,12 @@ Persona and competitor lens:
 - Do not create issues just because a competitor has a feature. Create them only when Flow Link can reduce decision time, ambiguity, risk, or mismatched applications.
 - For new functionality, first consider whether removing, combining, staging, moving details to a secondary view, or saving conditions would solve the problem with less user confusion.
 
+Research evidence gate:
+- For product issues, use current external research when network access is available: at least one competitor specification source and at least one user-voice source. If unavailable, explain the blocker and keep the issue lower confidence.
+- For UX and visual-design issues, cite competitor specification or user voice when it materially explains the confusion, trust gap, or expected interaction pattern.
+- Open sources and inspect concrete behavior. Do not rely only on search result snippets, old memory, or generic affiliate claims.
+- Separate observed competitor behavior from user voice and from your inference about Flow Link.
+
 Mode-specific checklist:
 $MODE_POLICY
 
@@ -334,6 +344,8 @@ Issue body:
 ## Summary
 ## Evidence
 ## Target persona
+## Competitor evidence
+## User voice evidence
 ## Competitive relevance
 ## User impact
 ## Acceptance criteria
@@ -346,6 +358,8 @@ Issue body:
 Quality bar:
 - Write from the freelancer/company user's perspective.
 - User impact must name the target persona and the decision, action, or trust concern being improved.
+- Competitor evidence must cite concrete observed behavior or state why current research was unavailable.
+- User voice evidence must cite a concrete praise, complaint, anxiety, or switching reason for product issues when network access is available.
 - In Competitive relevance, state which competitor user behavior this affects, why Flow Link becomes more attractive, and why now.
 - For additive features or controls, Acceptance criteria must show that the first-time user still knows the next action and that the UI is not more confusing.
 - Acceptance criteria must be specific enough for the worker to verify item by item.

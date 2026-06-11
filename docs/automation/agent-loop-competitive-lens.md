@@ -71,6 +71,22 @@ better issues, not to copy competitor features wholesale.
 - Create issues for persona pain, not for feature inventory parity.
 - Prefer issues that reduce decision time, ambiguity, risk, or mismatched
   applications for one or both personas.
+- Do not treat this document as sufficient research. Before filing product, UX,
+  or visual-design issues, inspect current competitor pages or credible recent
+  writeups and include the relevant source URLs.
+- For product issues, include at least one user-voice source when network access
+  is available. Useful sources include recent comparison articles, reviews,
+  blog posts, note/Zenn/Qiita posts, social posts, or support/community
+  discussions. Prefer concrete user praise, complaints, anxieties, or switching
+  reasons over generic affiliate summaries.
+- Separate competitor specification from user voice:
+  - Competitor specification: what the service actually exposes or promises,
+    such as search fields, rate display, application steps, support flow,
+    trust/payment information, saved searches, alerts, or mobile layout.
+  - User voice: what users say helped, confused, reassured, annoyed, delayed,
+    or made them switch services.
+- Translate research into a Flow Link issue only after identifying a concrete
+  target persona pain and a smaller or clearer product move Flow Link can make.
 - For new functionality, prove that the value outweighs the added choice burden.
   Consider removing, combining, staging, or moving details to a secondary view
   before adding controls to the main flow.
@@ -79,3 +95,15 @@ better issues, not to copy competitor features wholesale.
 - Acceptance criteria should state how the target persona can complete or judge
   the relevant task with less confusion.
 
+## Research checklist
+
+- Open at least one current competitor page, not just search result snippets.
+- Capture specific observed behavior: labels, filters, card fields, ordering,
+  onboarding steps, support promises, or mobile/desktop layout.
+- Capture at least one user voice for product issues when available, including
+  the source URL and whether it is praise, complaint, anxiety, or switching
+  reason.
+- Compare Flow Link against the observed behavior and voice. Ask whether the
+  answer is to add, remove, combine, stage, rename, or verify behavior.
+- Skip the issue when research only shows that a competitor has more features,
+  but does not show a clear persona pain Flow Link can address.
