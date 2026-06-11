@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { registerUser } from "@/lib/actions";
-import { Shell, TopNav, Card, TextField, SelectField, SubmitButton } from "@/components/ui";
+import { RegisterForm } from "@/app/register/register-form";
+import { Shell, TopNav, Card } from "@/components/ui";
 import { loginHref, registrationRoleIntent, safeAuthCallbackUrl } from "@/lib/registration-intent";
 
 export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string }> }) {
@@ -23,17 +24,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
               するか、別のメールアドレスを使用してください。
             </p>
           )}
-          <form action={registerUser} className="mt-5 grid gap-4">
-            <input type="hidden" name="callbackUrl" value={callbackUrl} />
-            <TextField name="name" label="氏名または企業名" required />
-            <TextField name="email" label="メールアドレス" type="email" required />
-            <TextField name="password" label="パスワード" type="password" required minLength={8} />
-            <SelectField name="role" label="種別" defaultValue={roleIntent}>
-              <option value="freelancer">フリーランス</option>
-              <option value="company_user">企業ユーザー</option>
-            </SelectField>
-            <SubmitButton className="btn btn-primary" pendingLabel="登録中">登録して開始</SubmitButton>
-          </form>
+          <RegisterForm action={registerUser} callbackUrl={callbackUrl} initialRole={roleIntent} />
         </Card>
       </div>
     </Shell>

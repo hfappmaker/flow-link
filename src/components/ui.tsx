@@ -62,7 +62,7 @@ export function TopNav({
               className={cn("btn btn-primary", currentSection === "register" && "nav-primary-active")}
               href={registerHref}
             >
-              登録
+              登録を選ぶ
               <PendingLinkHint />
             </Link>
           )}

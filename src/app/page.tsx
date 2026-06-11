@@ -39,7 +39,16 @@ export default async function Home() {
             <Link className="btn btn-primary" href="/jobs">
               応募できる案件を見る {icons.arrow}
             </Link>
-            {!session && <Link className="btn btn-secondary" href="/register">プロフィールを作る</Link>}
+            {!session && (
+              <>
+                <Link className="btn btn-secondary" href="/register">
+                  フリーランスとして始める
+                </Link>
+                <Link className="btn btn-secondary" href="/register?callbackUrl=%2Fcompany">
+                  企業として募集を始める
+                </Link>
+              </>
+            )}
           </div>
           {marketplaceCountsUnavailable ? (
             <MarketplaceStatsUnavailable />
