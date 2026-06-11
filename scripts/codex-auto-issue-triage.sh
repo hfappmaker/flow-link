@@ -15,8 +15,6 @@ DRY_RUN="${DRY_RUN:-0}"
 MATURITY_GATE_ENABLED="${MATURITY_GATE_ENABLED:-1}"
 MAX_READY_ISSUES="${MAX_READY_ISSUES:-8}"
 MAX_READY_PER_MODE="${MAX_READY_PER_MODE:-3}"
-MAX_RECENT_MODE_ISSUES="${MAX_RECENT_MODE_ISSUES:-3}"
-RECENT_ISSUE_DAYS="${RECENT_ISSUE_DAYS:-1}"
 
 usage() {
   cat <<'EOF'
@@ -183,29 +181,17 @@ count_issues() {
   gh issue list "$@" --json number --jq 'length' 2>/dev/null || printf '0\n'
 }
 
-count_recent_mode_issues() {
-  gh issue list \
-    --state all \
-    --label "codex" \
-    --label "$AREA_LABEL" \
-    --limit 100 \
-    --json createdAt \
-    --jq "[.[] | select((now - (.createdAt | fromdateiso8601)) <= ($RECENT_ISSUE_DAYS * 86400))] | length" \
-    2>/dev/null || printf '0\n'
-}
-
 run_maturity_gate() {
   if [[ "$MATURITY_GATE_ENABLED" != "1" ]]; then
     log "MATURITY_GATE_ENABLED=$MATURITY_GATE_ENABLED; maturity gate is disabled."
     return 0
   fi
 
-  local ready_total ready_mode recent_mode
+  local ready_total ready_mode
   ready_total="$(count_issues --state open --label "codex" --label "codex:ready" --limit 100)"
   ready_mode="$(count_issues --state open --label "codex" --label "codex:ready" --label "$AREA_LABEL" --limit 100)"
-  recent_mode="$(count_recent_mode_issues)"
 
-  log "Maturity gate: ready_total=$ready_total/$MAX_READY_ISSUES ready_mode=$ready_mode/$MAX_READY_PER_MODE recent_mode_${RECENT_ISSUE_DAYS}d=$recent_mode/$MAX_RECENT_MODE_ISSUES"
+  log "Maturity gate: ready_total=$ready_total/$MAX_READY_ISSUES ready_mode=$ready_mode/$MAX_READY_PER_MODE"
 
   if (( ready_total >= MAX_READY_ISSUES )); then
     log "Maturity gate skipped $MODE triage: open codex:ready backlog is at or above threshold."
@@ -214,11 +200,6 @@ run_maturity_gate() {
 
   if (( ready_mode >= MAX_READY_PER_MODE )); then
     log "Maturity gate skipped $MODE triage: this mode already has enough open codex:ready issues."
-    exit 0
-  fi
-
-  if (( recent_mode >= MAX_RECENT_MODE_ISSUES )); then
-    log "Maturity gate skipped $MODE triage: this mode created enough recent issues in the last $RECENT_ISSUE_DAYS days."
     exit 0
   fi
 }
@@ -321,7 +302,7 @@ $MODE_POLICY
 Operational rules:
 - Do not edit files, commit, push, format, or generate tracked files.
 - Create or update at most one GitHub issue; creating no issue is a valid successful outcome.
-- The wrapper already skips runs when open ready backlog, same-mode ready backlog, or recent same-mode issue creation exceeds thresholds.
+- The wrapper already skips runs when open ready backlog or same-mode ready backlog exceeds thresholds.
 - Inspect recent .codex-automation/issue-triage-logs/ and .codex-automation/issue-worker-logs/ before filing.
 - Search existing issues for duplicates by labels and fingerprint. If an open duplicate exists, comment instead of creating another issue.
 - If a similar issue was closed or fixed, verify the current behavior still fails before reopening or filing a follow-up.
