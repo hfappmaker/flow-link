@@ -40,7 +40,7 @@ import {
   workPreferenceCompleteness,
   type TrustConfidenceStatus,
 } from "@/lib/utils";
-import { Shell, TopNav, PageHeader, Card, EmptyState, StatusBadge, SubmitButton, icons } from "@/components/ui";
+import { Shell, TopNav, Card, EmptyState, StatusBadge, SubmitButton, icons } from "@/components/ui";
 import { RecommendationFeedbackForm } from "@/components/recommendation-feedback";
 import { collectSemanticCandidateMatches, emptySemanticCandidateSearchResult } from "@/lib/semantic-candidate-search";
 
@@ -277,8 +277,13 @@ export default async function JobsPage({
   return (
     <Shell>
       <TopNav activeSection="jobs" sessionRole={session?.user?.role} />
-      <div className="mx-auto max-w-7xl px-5 py-8">
-        <PageHeader title="公開案件" description="応募前に条件を確認しやすい案件を探せます。" />
+      <div className="mx-auto max-w-7xl px-4 py-4 md:px-5 md:py-8">
+        <div className="border-b border-stone-200 pb-4 md:pb-6">
+          <h1 className="text-2xl font-semibold tracking-normal md:text-3xl">公開案件</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600 md:mt-2">
+            応募前に条件を確認しやすい案件を探せます。
+          </p>
+        </div>
         {showMarketplaceUnavailableState && (
           <div className="mt-6">
             <EmptyState
@@ -319,7 +324,7 @@ export default async function JobsPage({
           </div>
         )}
         {showDiscoveryControls && (
-          <Card className="mt-6">
+          <section className="mt-3 rounded-md border border-stone-200 bg-white p-3 shadow-sm md:mt-6 md:p-5">
             <form
               className="grid gap-3 md:hidden"
               action="/jobs"
@@ -333,99 +338,101 @@ export default async function JobsPage({
                   placeholder="職種、スキル、会社名、勤務地"
                 />
               </label>
-              <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                並び順
-                <select
-                  className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                  name="sort"
-                  defaultValue={sort}
-                >
-                  <option value="direct">応募しやすい順</option>
-                  <option value="new">新着順</option>
-                </select>
-              </label>
-              <details className="rounded border border-stone-200 bg-stone-50/70 p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-stone-700 md:hidden">
-                  条件を絞り込む{activeSearchFilterLabels.length > 0 ? `（${activeSearchFilterLabels.length}件適用中）` : ""}
-                </summary>
-                <div className="mt-3 grid gap-3">
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                    勤務形態
-                    <select
-                      className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                      name="remote"
-                      defaultValue={remote ? "remote" : ""}
-                    >
-                      <option value="">すべて</option>
-                      <option value="remote">リモート可</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                    応募受付
-                    <select
-                      className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                      name="accepting"
-                      defaultValue={accepting ? "open" : ""}
-                    >
-                      <option value="">すべて</option>
-                      <option value="open">受付中のみ</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                    条件確認
-                    <select
-                      className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                      name="directReady"
-                      defaultValue={directReady ? "ready" : ""}
-                    >
-                      <option value="">すべて</option>
-                      <option value="ready">条件が揃った案件</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                    稼働量
-                    <select
-                      className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                      name="workload"
-                      defaultValue={workload}
-                    >
-                      <option value="">すべて</option>
-                      <option value="light">{LIGHT_WORKLOAD_FILTER_LABEL}</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                    単価
-                    <select
-                      className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                      name="rate"
-                      defaultValue={rate}
-                    >
-                      <option value="">すべて</option>
-                      {MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN.map((threshold) => (
-                        <option value={threshold} key={threshold}>{monthlyRateBandLabel(threshold)}</option>
-                      ))}
-                    </select>
-                    <span className="text-xs font-normal text-stone-500">時給・日給は月額換算せず除外</span>
-                  </label>
-                  {freelancerProfile && (
+              <div className="grid gap-2">
+                <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                  並び順
+                  <select
+                    className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                    name="sort"
+                    defaultValue={sort}
+                  >
+                    <option value="direct">応募しやすい順</option>
+                    <option value="new">新着順</option>
+                  </select>
+                </label>
+                <details className="rounded border border-stone-200 bg-stone-50/70 px-3 py-2">
+                  <summary className="cursor-pointer text-sm font-semibold leading-5 text-stone-700">
+                    絞り込み{activeSearchFilterLabels.length > 0 ? ` ${activeSearchFilterLabels.length}` : ""}
+                  </summary>
+                  <div className="mt-3 grid gap-3">
                     <label className="grid gap-1.5 text-sm font-medium text-stone-700">
-                      対応状況
+                      勤務形態
                       <select
                         className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
-                        name="candidate"
-                        defaultValue={candidate}
+                        name="remote"
+                        defaultValue={remote ? "remote" : ""}
                       >
                         <option value="">すべて</option>
-                        <option value="fresh">未対応の候補</option>
+                        <option value="remote">リモート可</option>
                       </select>
                     </label>
-                  )}
-                </div>
-              </details>
+                    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                      応募受付
+                      <select
+                        className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                        name="accepting"
+                        defaultValue={accepting ? "open" : ""}
+                      >
+                        <option value="">すべて</option>
+                        <option value="open">受付中のみ</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                      条件確認
+                      <select
+                        className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                        name="directReady"
+                        defaultValue={directReady ? "ready" : ""}
+                      >
+                        <option value="">すべて</option>
+                        <option value="ready">条件が揃った案件</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                      稼働量
+                      <select
+                        className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                        name="workload"
+                        defaultValue={workload}
+                      >
+                        <option value="">すべて</option>
+                        <option value="light">{LIGHT_WORKLOAD_FILTER_LABEL}</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                      単価
+                      <select
+                        className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                        name="rate"
+                        defaultValue={rate}
+                      >
+                        <option value="">すべて</option>
+                        {MONTHLY_RATE_BAND_THRESHOLDS_MAN_YEN.map((threshold) => (
+                          <option value={threshold} key={threshold}>{monthlyRateBandLabel(threshold)}</option>
+                        ))}
+                      </select>
+                      <span className="text-xs font-normal text-stone-500">時給・日給は月額換算せず除外</span>
+                    </label>
+                    {freelancerProfile && (
+                      <label className="grid gap-1.5 text-sm font-medium text-stone-700">
+                        対応状況
+                        <select
+                          className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
+                          name="candidate"
+                          defaultValue={candidate}
+                        >
+                          <option value="">すべて</option>
+                          <option value="fresh">未対応の候補</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                </details>
+              </div>
               {fit && <input type="hidden" name="fit" value={fit} />}
-              <div className="grid gap-3 md:col-span-2 md:grid-cols-2 lg:col-span-4 lg:flex lg:justify-end">
-                <SubmitButton className="btn btn-primary w-full lg:w-32" pendingLabel="検索中">検索</SubmitButton>
-                <Link className="btn btn-secondary w-full lg:w-32" href="/jobs">クリア</Link>
+              <div className="grid grid-cols-2 gap-2">
+                <SubmitButton className="btn btn-primary w-full" pendingLabel="検索中">検索</SubmitButton>
+                <Link className="btn btn-secondary w-full" href="/jobs">クリア</Link>
               </div>
             </form>
             <form
@@ -529,7 +536,7 @@ export default async function JobsPage({
                 <Link className="btn btn-secondary w-full lg:w-32" href="/jobs">クリア</Link>
               </div>
             </form>
-            <p className="mt-3 text-sm text-stone-500">
+            <p className="mt-2 text-xs leading-5 text-stone-500 md:mt-3 md:text-sm">
               {resultSummary}
             </p>
             {rankedJobs.length > 0 && (
@@ -559,7 +566,7 @@ export default async function JobsPage({
                 />
               </div>
             )}
-          </Card>
+          </section>
         )}
         <div className="flex flex-col">
           {showDiscoveryControls && freelancerProfile && jobs.length > 0 && (
