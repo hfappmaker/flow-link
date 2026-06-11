@@ -31,9 +31,9 @@ export function ReputationSummaryCard({
 
       <div className="mt-4 grid gap-2">
         <ReputationMetric
-          label="完了したやりとり"
+          label="完了した面談・連絡"
           value={`${summary.completedInteractionCount}件`}
-          detail="面談実施など、参加者が完了として送信したFlow Link内の相互作用です。"
+          detail="面談、メッセージ、選考フォローなど、完了後に参加者が評価を送信したFlow Link内のやりとりです。"
         />
         <ReputationMetric
           label="返信・フォロー"
