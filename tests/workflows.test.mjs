@@ -151,7 +151,9 @@ const applicationInput = {
   proposalMessage: "応募メッセージ".repeat(10),
   proposedStart: "来月",
   rateExpectation: "月100万円以上",
+  rateExpectationSource: "candidate",
   workloadExpectation: "週4日",
+  workloadExpectationSource: "candidate",
   contactPreference: "メール",
 };
 
@@ -302,9 +304,47 @@ test("application workflow snapshots application-specific rate and workload expe
     proposalMessage: applicationInput.proposalMessage,
     proposedStart: "来月",
     rateExpectation: "月100万円以上",
+    rateExpectationSource: "candidate",
     workloadExpectation: "週4日",
+    workloadExpectationSource: "candidate",
     contactPreference: "メール",
   });
+});
+
+test("application workflow rejects unconfirmed job-side condition defaults", async () => {
+  const db = workflowDb();
+
+  await assert.rejects(
+    () =>
+      applyToJobWorkflow(db, {
+        ...applicationInput,
+        rateExpectation: "月80万円",
+        rateExpectationSource: "job_default",
+        workloadExpectation: "週5日",
+        workloadExpectationSource: "job_default",
+      }),
+    /応募前に応募時の希望単価、応募時の希望稼働量を登録してください。/,
+  );
+  assert.equal(db.calls.length, 0);
+});
+
+test("application workflow snapshots explicitly confirmed job-side condition values", async () => {
+  const db = workflowDb();
+
+  await applyToJobWorkflow(db, {
+    ...applicationInput,
+    rateExpectation: "月80万円",
+    rateExpectationSource: "confirmed_job",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "confirmed_job",
+  });
+
+  const creates = db.calls.filter(([name]) => name === "jobApplication.create");
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0][1].data.rateExpectation, "月80万円");
+  assert.equal(creates[0][1].data.rateExpectationSource, "confirmed_job");
+  assert.equal(creates[0][1].data.workloadExpectation, "週5日");
+  assert.equal(creates[0][1].data.workloadExpectationSource, "confirmed_job");
 });
 
 test("closed or paused jobs cannot receive applications", async () => {

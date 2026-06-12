@@ -158,10 +158,10 @@ export default async function JobDetailPage({
         contactSignal: freelancerProfile.remotePreference,
       })
     : "";
-  const defaultRateExpectation =
-    freelancerProfile?.workPreference?.targetRate || freelancerProfile?.desiredRate || job.rate || "";
-  const defaultWorkloadExpectation =
-    freelancerProfile?.workPreference?.workload || freelancerProfile?.availability || job.workload || "";
+  const defaultRateExpectation = freelancerProfile?.workPreference?.targetRate || freelancerProfile?.desiredRate || "";
+  const defaultWorkloadExpectation = freelancerProfile?.workPreference?.workload || freelancerProfile?.availability || "";
+  const jobRateReference = defaultRateExpectation ? "" : job.rate || "";
+  const jobWorkloadReference = defaultWorkloadExpectation ? "" : job.workload || "";
   const jobCallbackUrl = `/jobs/${job.id}`;
   const jobRegisterHref = `/register?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
   const jobLoginHref = `/login?${new URLSearchParams({ callbackUrl: jobCallbackUrl }).toString()}`;
@@ -413,22 +413,40 @@ export default async function JobDetailPage({
                     placeholder="例: 7月第1週から / 契約後2週間で開始可"
                   />
                   <div className="grid gap-3 md:grid-cols-2">
-                    <TextField
-                      name="rateExpectation"
-                      label="この案件での希望単価"
-                      defaultValue={defaultRateExpectation}
-                      required
-                      maxLength={120}
-                      placeholder="例: 月100万円以上 / 時給8000円から"
-                    />
-                    <TextField
-                      name="workloadExpectation"
-                      label="この案件での希望稼働量"
-                      defaultValue={defaultWorkloadExpectation}
-                      required
-                      maxLength={120}
-                      placeholder="例: 週4日、月128時間まで"
-                    />
+                    <div className="grid gap-2">
+                      <TextField
+                        name="rateExpectation"
+                        label="この案件での希望単価"
+                        defaultValue={defaultRateExpectation}
+                        required={!jobRateReference}
+                        maxLength={120}
+                        placeholder={jobRateReference ? `例: ${jobRateReference}で進める / 月100万円以上` : "例: 月100万円以上 / 時給8000円から"}
+                      />
+                      {jobRateReference && (
+                        <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                          <input className="mt-1" type="checkbox" name="confirmJobRateExpectation" />
+                          <span>案件単価 {jobRateReference} を、この応募での希望単価として確認しました</span>
+                          <input type="hidden" name="confirmedRateExpectation" value={jobRateReference} />
+                        </label>
+                      )}
+                    </div>
+                    <div className="grid gap-2">
+                      <TextField
+                        name="workloadExpectation"
+                        label="この案件での希望稼働量"
+                        defaultValue={defaultWorkloadExpectation}
+                        required={!jobWorkloadReference}
+                        maxLength={120}
+                        placeholder={jobWorkloadReference ? `例: ${jobWorkloadReference}で進める / 週4日まで` : "例: 週4日、月128時間まで"}
+                      />
+                      {jobWorkloadReference && (
+                        <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                          <input className="mt-1" type="checkbox" name="confirmJobWorkloadExpectation" />
+                          <span>案件稼働量 {jobWorkloadReference} を、この応募での希望稼働量として確認しました</span>
+                          <input type="hidden" name="confirmedWorkloadExpectation" value={jobWorkloadReference} />
+                        </label>
+                      )}
+                    </div>
                   </div>
                   <TextField
                     name="contactPreference"
