@@ -5,6 +5,7 @@ import { requireCompanyUser } from "@/lib/page-guards";
 import { parseJobApplicationStatusFilter } from "@/lib/form-enums";
 import { prisma } from "@/lib/prisma";
 import { outcomeNextAction, outcomeTone, postInterviewOutcomeLabels } from "@/lib/post-interview-outcomes";
+import { hasMeaningfulCareerHistory } from "@/lib/readiness";
 import { applicationConditionFit, applicationConditionTerms, applicationStatusLabel, buildApplicationResponseState, buildApplicationReview, formatDateTime, jobStatusLabel } from "@/lib/utils";
 import {
   applicantKeywordCandidateWhere,
@@ -334,6 +335,7 @@ function ApplicationCard({
   const contactSignal = application.contactPreference || "面談判断後に調整";
   const conditionTerms = applicationConditionTerms(application);
   const conditionFit = applicationConditionFit({ ...application, jobPost });
+  const hasCareerHistoryEvidence = hasMeaningfulCareerHistory(application.freelancerProfile.careerHistory);
   const nextReviewAction = buildApplicantReviewAction({
     status: application.status,
     isInterviewReady: review.isInterviewReady,
@@ -378,8 +380,8 @@ function ApplicationCard({
             <StatusBadge tone={application.freelancerProfile.documents.length >= 2 ? "good" : "warn"}>
               PDF {application.freelancerProfile.documents.length}/2
             </StatusBadge>
-            <StatusBadge tone={application.freelancerProfile.careerHistory ? "good" : "warn"}>
-              職務経歴{application.freelancerProfile.careerHistory ? "あり" : "未登録"}
+            <StatusBadge tone={hasCareerHistoryEvidence ? "good" : "warn"}>
+              職務経歴{hasCareerHistoryEvidence ? "あり" : "未登録"}
             </StatusBadge>
             <StatusBadge tone={application.proposalMessage ? "good" : "warn"}>
               提案文{application.proposalMessage ? "あり" : "未登録"}

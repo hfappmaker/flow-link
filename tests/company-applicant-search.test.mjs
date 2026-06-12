@@ -464,6 +464,60 @@ test("company review counts explicitly confirmed job terms as application expect
   assert.deepEqual(review.nextChecks, []);
 });
 
+test("company review requires meaningful career-history text for interview readiness", () => {
+  const cases = [
+    { name: "no career-history row", careerHistory: null },
+    { name: "blank career-history row", careerHistory: {} },
+    { name: "whitespace-only summary", careerHistory: { summary: "   ", workExperiences: "" } },
+  ];
+
+  for (const { name, careerHistory } of cases) {
+    const review = buildApplicationReview({
+      ...application({ careerHistory, rateExpectation: "月80万円以上", workloadExpectation: "週5日" }),
+      jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+    });
+
+    assert.equal(review.interviewReadinessPercent, 86, `${name} should keep the score below complete`);
+    assert.equal(review.isInterviewReady, false, `${name} should not be interview-ready`);
+    assert.deepEqual(review.nextChecks, ["職務経歴"], `${name} should keep the career-history next check`);
+    assert.match(review.reviewQuestions.join("\n"), /直近プロジェクトの役割/);
+  }
+});
+
+test("company review accepts meaningful career-history summary or work experiences", () => {
+  const cases = [
+    { name: "summary", careerHistory: { summary: "SaaS platform renewal lead", workExperiences: "" } },
+    { name: "work experiences", careerHistory: { summary: "", workExperiences: "BtoB billing API migration" } },
+  ];
+
+  for (const { name, careerHistory } of cases) {
+    const review = buildApplicationReview({
+      ...application({ careerHistory, rateExpectation: "月80万円以上", workloadExpectation: "週5日" }),
+      jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+    });
+
+    assert.equal(review.interviewReadinessPercent, 100, `${name} should complete the career-history signal`);
+    assert.equal(review.isInterviewReady, true, `${name} should be interview-ready`);
+    assert.deepEqual(review.nextChecks, []);
+  }
+});
+
+test("company review still requires career-history text when PDFs exist", () => {
+  const review = buildApplicationReview({
+    ...application({
+      documents: [{ id: "resume-pdf" }, { id: "career-pdf" }],
+      careerHistory: { summary: "  ", workExperiences: "\n\t" },
+      rateExpectation: "月80万円以上",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.equal(review.interviewReadinessPercent, 86);
+  assert.equal(review.isInterviewReady, false);
+  assert.deepEqual(review.nextChecks, ["職務経歴"]);
+});
+
 test("company review marks compatible application rate and workload as interview-ready", () => {
   const review = buildApplicationReview({
     ...application({
@@ -583,7 +637,7 @@ function application(overrides = {}) {
       availableFrom: field(overrides, "availableFrom", "2026-07-01"),
       remotePreference: field(overrides, "remotePreference", "フルリモート"),
       documents: overrides.documents ?? [{ id: "doc-1" }, { id: "doc-2" }],
-      careerHistory: overrides.careerHistory ?? { summary: "Frontend apps" },
+      careerHistory: field(overrides, "careerHistory", { summary: "Frontend apps" }),
       workPreference: overrides.workPreference,
     },
   };
