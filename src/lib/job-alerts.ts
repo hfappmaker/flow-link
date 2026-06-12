@@ -2,6 +2,7 @@ import {
   JobAlertDispatchStatus,
   JobAlertCadence,
   JobAlertMatchStatus,
+  RecommendationFeedbackReason,
   RecommendationFeedbackSentiment,
   type Prisma,
 } from "@prisma/client";
@@ -14,8 +15,31 @@ import { isLightWorkloadText, LIGHT_WORKLOAD_FILTER_LABEL } from "./workload.ts"
 import type { WorkPreferenceInput } from "./utils.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
+export const JOB_ALERT_FEEDBACK_CONTEXT_LIMIT = 50;
 // Dispatch workers reclaim processing rows after this lease to recover from crashes.
 export const SAVED_FEED_ALERT_DISPATCH_LEASE_MS = 15 * 60 * 1000;
+
+export const jobAlertFeedbackJobPostSelect = {
+  id: true,
+  title: true,
+  description: true,
+  requiredSkills: true,
+  preferredSkills: true,
+  rate: true,
+  workload: true,
+  location: true,
+  remotePolicy: true,
+  companyProfileId: true,
+} satisfies Prisma.JobPostSelect;
+
+export const jobAlertFeedbackSelect = {
+  jobPostId: true,
+  reason: true,
+  sentiment: true,
+  hideSimilar: true,
+  visibleReasons: true,
+  jobPost: { select: jobAlertFeedbackJobPostSelect },
+} satisfies Prisma.RecommendationFeedbackSelect;
 
 type AlertDb = Pick<
   Prisma.TransactionClient,
@@ -106,16 +130,15 @@ export async function evaluateSavedFeedJobAlerts(
         where: { freelancerProfileId: freelancer.id, jobPostId: job.id },
         select: { jobPostId: true },
       }),
-      db.recommendationFeedback.findMany({
-        where: { freelancerProfileId: freelancer.id, jobPostId: job.id },
-        select: { jobPostId: true, reason: true, sentiment: true, hideSimilar: true, visibleReasons: true },
-      }),
+      loadSavedFeedAlertRecommendationFeedback(db, { freelancerProfileId: freelancer.id, jobPostId: job.id }),
     ]);
 
     const appliedJobIds = new Set(applications.map((application) => application.jobPostId));
     const savedJobIds = new Set(savedJobs.map((savedJob) => savedJob.jobPostId));
     const exactHandledFeedback = feedback.find(
-      (signal) => signal.sentiment === RecommendationFeedbackSentiment.negative || signal.reason === "already_handled",
+      (signal) =>
+        signal.jobPostId === job.id &&
+        (signal.sentiment === RecommendationFeedbackSentiment.negative || signal.reason === "already_handled"),
     );
     const readiness = getFreelancerReadiness(freelancer);
     const suppressionReason = appliedJobIds.has(job.id)
@@ -141,8 +164,9 @@ export async function evaluateSavedFeedJobAlerts(
       if (!savedFeedMatchesRecommendation(feed, recommendation, { freelancerReady: readiness.isReady })) continue;
       const trustWarning = alertTrustWarning(recommendation);
       const fitReasons = alertFitReasons(feed, recommendation, { feedback, freelancerReady: readiness.isReady, trustWarning });
+      const similarFeedbackReason = alertSimilarFeedbackSuppressionReason(recommendation);
       const lowConfidenceReason = fitReasons ? null : "具体的な一致理由不足";
-      const effectiveSuppressionReason = suppressionReason ?? lowConfidenceReason;
+      const effectiveSuppressionReason = suppressionReason ?? similarFeedbackReason ?? lowConfidenceReason;
       const cadence = normalizeAlertCadence(feed.notificationCadence);
       const match = await db.jobAlertMatch.upsert({
         where: {
@@ -202,6 +226,54 @@ export async function evaluateSavedFeedJobAlerts(
   const daily = await sendDueJobAlertDigests(db, { cadence: JobAlertCadence.daily, now });
   const weekly = await sendDueJobAlertDigests(db, { cadence: JobAlertCadence.weekly, now });
   return { created, notified: notified + daily.notified + weekly.notified, suppressed };
+}
+
+export async function loadSavedFeedAlertRecommendationFeedback(
+  db: Pick<Prisma.TransactionClient, "recommendationFeedback">,
+  {
+    contextLimit = JOB_ALERT_FEEDBACK_CONTEXT_LIMIT,
+    freelancerProfileId,
+    jobPostId,
+  }: {
+    contextLimit?: number;
+    freelancerProfileId: string;
+    jobPostId: string;
+  },
+) {
+  const [exactFeedback, contextualFeedback] = await Promise.all([
+    db.recommendationFeedback.findMany({
+      where: { freelancerProfileId, jobPostId },
+      select: jobAlertFeedbackSelect,
+    }),
+    db.recommendationFeedback.findMany({
+      where: {
+        freelancerProfileId,
+        jobPostId: { not: jobPostId },
+        OR: [
+          { hideSimilar: true },
+          { sentiment: RecommendationFeedbackSentiment.positive },
+          {
+            sentiment: RecommendationFeedbackSentiment.negative,
+            reason: {
+              in: [
+                RecommendationFeedbackReason.rate_mismatch,
+                RecommendationFeedbackReason.workload_mismatch,
+                RecommendationFeedbackReason.location_mismatch,
+                RecommendationFeedbackReason.company_trust_concern,
+                RecommendationFeedbackReason.wrong_role_skill,
+                RecommendationFeedbackReason.not_relevant,
+              ],
+            },
+          },
+        ],
+      },
+      select: jobAlertFeedbackSelect,
+      orderBy: { updatedAt: "desc" },
+      take: contextLimit,
+    }),
+  ]);
+
+  return [...exactFeedback, ...contextualFeedback];
 }
 
 export function shouldDispatchSavedFeedJobAlerts(job: { status?: string | null; applicationStatus?: string | null }) {
@@ -437,6 +509,11 @@ function alertTrustWarning(recommendation: ReturnType<typeof buildJobRecommendat
   if (!recommendation.trustConfidence || recommendation.trustConfidence.tone === "good") return null;
   const warning = recommendation.trustConfidence.items.find((item) => item.status === "missing" || item.status === "stale" || item.status === "rejected");
   return warning ? `${warning.label}: ${warning.detail}` : recommendation.trustConfidence.label;
+}
+
+function alertSimilarFeedbackSuppressionReason(recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
+  const similarFeedback = recommendation.preferenceReasons.find((reason) => reason.label === "似た案件を控えめに表示");
+  return similarFeedback ? "以前の「似た案件を控えめにする」フィードバックと近い条件のため通知を控えました" : null;
 }
 
 function alertNotificationBody({

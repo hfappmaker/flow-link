@@ -7,6 +7,9 @@ const {
   dispatchPendingSavedFeedJobAlerts,
   enqueueSavedFeedJobAlertDispatch,
   evaluateSavedFeedJobAlerts,
+  jobAlertFeedbackJobPostSelect,
+  jobAlertFeedbackSelect,
+  loadSavedFeedAlertRecommendationFeedback,
   normalizeAlertCadence,
   SAVED_FEED_ALERT_DISPATCH_LEASE_MS,
   sendDueJobAlertDigests,
@@ -86,6 +89,91 @@ test("alerts suppress jobs already saved, applied, dismissed, or handled", async
   assert.equal(handledDb.notifications.length, 0);
   assert.equal(handledDb.matches[0].status, JobAlertMatchStatus.suppressed);
   assert.match(handledDb.matches[0].suppressionReason, /対応済み/);
+});
+
+test("saved feed alerts load similar feedback and suppress near hide-similar matches", async () => {
+  const referenceJob = job({
+    id: "reference-job",
+    title: "React platform engineer",
+    requiredSkills: "React, TypeScript",
+    rate: "80万円",
+    workload: "週3日",
+    remotePolicy: "リモート可",
+    companyProfileId: "company-1",
+  });
+  const newJob = job({
+    id: "new-job",
+    title: "React platform engineer",
+    requiredSkills: "React, TypeScript",
+    rate: "80万円",
+    workload: "週3日",
+    remotePolicy: "リモート可",
+    companyProfileId: "company-1",
+  });
+  const feedback = [
+    {
+      jobPostId: "reference-job",
+      reason: "hide_similar",
+      sentiment: RecommendationFeedbackSentiment.negative,
+      hideSimilar: true,
+      visibleReasons: "単価と稼働量が近い",
+      jobPost: referenceJob,
+    },
+  ];
+  const db = alertDb({ feedback });
+  const discoveryRecommendation = rankJobRecommendations([newJob], {
+    freelancerReadinessPercent: 100,
+    freelancerSkills: db.freelancer.skills,
+    recommendationFeedback: feedback,
+    workPreference: db.freelancer.workPreference,
+  })[0];
+
+  await evaluateSavedFeedJobAlerts(db, { job: newJob });
+
+  assert.equal(discoveryRecommendation.preferenceReasons[0].label, "似た案件を控えめに表示");
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches.length, 1);
+  assert.equal(db.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.match(db.matches[0].suppressionReason, /似た案件を控えめにする/);
+});
+
+test("saved feed alert feedback context is capped and includes scorer reference job fields", async () => {
+  const queries = [];
+  const db = {
+    recommendationFeedback: {
+      findMany: async (query) => {
+        queries.push(query);
+        return [];
+      },
+    },
+  };
+
+  await loadSavedFeedAlertRecommendationFeedback(db, {
+    contextLimit: 7,
+    freelancerProfileId: "freelancer-1",
+    jobPostId: "job-1",
+  });
+
+  assert.deepEqual(queries[0], {
+    where: { freelancerProfileId: "freelancer-1", jobPostId: "job-1" },
+    select: jobAlertFeedbackSelect,
+  });
+  assert.equal(queries[1].take, 7);
+  assert.deepEqual(queries[1].orderBy, { updatedAt: "desc" });
+  assert.equal(queries[1].where.freelancerProfileId, "freelancer-1");
+  assert.deepEqual(queries[1].where.jobPostId, { not: "job-1" });
+  assert.deepEqual(Object.keys(jobAlertFeedbackJobPostSelect).sort(), [
+    "companyProfileId",
+    "description",
+    "id",
+    "location",
+    "preferredSkills",
+    "rate",
+    "remotePolicy",
+    "requiredSkills",
+    "title",
+    "workload",
+  ]);
 });
 
 test("daily digest matches wait until the digest window is due", async () => {
