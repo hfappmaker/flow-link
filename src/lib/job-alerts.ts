@@ -7,10 +7,10 @@ import {
 } from "@prisma/client";
 import { buildJobRecommendation, type JobRecommendationJob } from "./job-recommendations.ts";
 import { jobMatchesSearchQuery } from "./job-search.ts";
-import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter } from "./rates.ts";
+import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter, monthlyRateBandLabel } from "./rates.ts";
 import { getFreelancerReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
 import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
-import { isLightWorkloadText } from "./workload.ts";
+import { isLightWorkloadText, LIGHT_WORKLOAD_FILTER_LABEL } from "./workload.ts";
 import type { WorkPreferenceInput } from "./utils.ts";
 
 export const JOB_ALERT_REASON_LIMIT = 3;
@@ -139,8 +139,10 @@ export async function evaluateSavedFeedJobAlerts(
 
     for (const feed of activeFeeds) {
       if (!savedFeedMatchesRecommendation(feed, recommendation, { freelancerReady: readiness.isReady })) continue;
-      const fitReasons = alertFitReasons(recommendation);
       const trustWarning = alertTrustWarning(recommendation);
+      const fitReasons = alertFitReasons(feed, recommendation, { feedback, freelancerReady: readiness.isReady, trustWarning });
+      const lowConfidenceReason = fitReasons ? null : "具体的な一致理由不足";
+      const effectiveSuppressionReason = suppressionReason ?? lowConfidenceReason;
       const cadence = normalizeAlertCadence(feed.notificationCadence);
       const match = await db.jobAlertMatch.upsert({
         where: {
@@ -154,27 +156,28 @@ export async function evaluateSavedFeedJobAlerts(
           savedJobSearchId: feed.id,
           jobPostId: job.id,
           cadence,
-          status: suppressionReason ? JobAlertMatchStatus.suppressed : cadence === JobAlertCadence.immediate ? JobAlertMatchStatus.notified : JobAlertMatchStatus.pending_digest,
-          fitReasons,
+          status: effectiveSuppressionReason ? JobAlertMatchStatus.suppressed : cadence === JobAlertCadence.immediate ? JobAlertMatchStatus.notified : JobAlertMatchStatus.pending_digest,
+          fitReasons: fitReasons ?? "具体的な一致理由不足",
           trustWarning,
-          suppressionReason,
+          suppressionReason: effectiveSuppressionReason,
           matchedAt: now,
-          notifiedAt: suppressionReason || cadence !== JobAlertCadence.immediate ? null : now,
+          notifiedAt: effectiveSuppressionReason || cadence !== JobAlertCadence.immediate ? null : now,
         },
         update: {
           cadence,
-          fitReasons,
+          fitReasons: fitReasons ?? "具体的な一致理由不足",
           trustWarning,
-          suppressionReason,
-          status: suppressionReason ? JobAlertMatchStatus.suppressed : undefined,
+          suppressionReason: effectiveSuppressionReason,
+          status: effectiveSuppressionReason ? JobAlertMatchStatus.suppressed : undefined,
         },
       });
 
       if (match.createdAt?.getTime?.() === match.updatedAt?.getTime?.()) created += 1;
-      if (suppressionReason) {
+      if (effectiveSuppressionReason) {
         suppressed += 1;
         continue;
       }
+      if (!fitReasons) continue;
       if (cadence === JobAlertCadence.immediate && !match.notificationId) {
         const notification = await db.notification.create({
           data: {
@@ -328,9 +331,13 @@ export async function sendDueJobAlertDigests(
         type: "job_alert_digest",
         title: `「${first.savedJobSearch.name}」の新着候補 ${matches.length}件`,
         body: [
-          topJobs.map((match) => `${match.jobPost.title}${match.jobPost.companyProfile?.name ? ` / ${match.jobPost.companyProfile.name}` : ""}`).join("、"),
-          first.fitReasons ? `主な一致理由: ${first.fitReasons}` : null,
-          first.trustWarning ? `確認事項: ${first.trustWarning}` : null,
+          ...topJobs.map((match) =>
+            [
+              `${match.jobPost.title}${match.jobPost.companyProfile?.name ? ` / ${match.jobPost.companyProfile.name}` : ""}`,
+              match.trustWarning ? `確認事項: ${match.trustWarning}` : null,
+              match.fitReasons ? `一致した理由: ${match.fitReasons}` : null,
+            ].filter(Boolean).join("\n"),
+          ),
         ].filter(Boolean).join("\n"),
         actionUrl: `/jobs/${first.jobPostId}`,
       },
@@ -385,14 +392,45 @@ function savedFeedMatchesRecommendation(
   return recommendation.directScore >= 45 || recommendation.isSkillMatched || recommendation.isReadyToApply;
 }
 
-function alertFitReasons(recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
-  const reasons = recommendation.preferenceReasons
-    .filter((reason) => reason.tone !== "warn")
-    .map((reason) => reason.label)
-    .slice(0, JOB_ALERT_REASON_LIMIT);
-  if (reasons.length > 0) return reasons.join("、");
-  if (recommendation.matched.length > 0) return `スキル一致: ${recommendation.matched.slice(0, JOB_ALERT_REASON_LIMIT).join("、")}`;
-  return `マッチスコア ${recommendation.directScore}`;
+function alertFitReasons(
+  feed: SavedFeed,
+  recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>,
+  {
+    feedback,
+    freelancerReady,
+    trustWarning,
+  }: {
+    feedback: Array<{ jobPostId: string; reason: string; sentiment: RecommendationFeedbackSentiment }>;
+    freelancerReady: boolean;
+    trustWarning?: string | null;
+  },
+) {
+  const reasons: string[] = [];
+  const job = recommendation.job;
+  const query = feed.query?.trim();
+  const rateThreshold = monthlyRateBandFromFilter(feed.rate);
+  const exactPositiveFeedback = feedback.find(
+    (signal) => signal.jobPostId === job.id && signal.sentiment === RecommendationFeedbackSentiment.positive,
+  );
+
+  if (query && jobMatchesSearchQuery(query, job)) reasons.push(`保存キーワード一致: ${query}`);
+  if (recommendation.matched.length > 0) reasons.push(`スキル一致: ${recommendation.matched.slice(0, JOB_ALERT_REASON_LIMIT).join("、")}`);
+  if (rateThreshold !== null) reasons.push(`保存単価条件: ${monthlyRateBandLabel(rateThreshold)}`);
+  if (feed.workload === "light") reasons.push(`保存稼働量条件: ${LIGHT_WORKLOAD_FILTER_LABEL}`);
+  if (feed.directReadyOnly && recommendation.contractReadinessPercent >= 100) {
+    reasons.push("応募前条件がそろっています: 単価・稼働量・契約条件");
+  }
+  if (feed.fit === "ready" && freelancerReady && recommendation.isReadyToApply) {
+    reasons.push("応募準備と案件条件がそろっています");
+  }
+  if (feed.remote) {
+    const location = [job.remotePolicy, job.location].filter(Boolean).join(" / ");
+    if (location) reasons.push(`保存リモート条件: ${location}`);
+  }
+  if (exactPositiveFeedback) reasons.push("保存フィードバック: 良さそう");
+  if (trustWarning) reasons.push(`確認事項あり: ${trustWarning}`);
+
+  return uniqueReasons(reasons).slice(0, JOB_ALERT_REASON_LIMIT).join("、") || null;
 }
 
 function alertTrustWarning(recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
@@ -415,9 +453,18 @@ function alertNotificationBody({
   return [
     companyName ? `企業: ${companyName}` : null,
     `一致したフィード: ${feedName}`,
-    `強い一致理由: ${fitReasons}`,
     trustWarning ? `確認事項: ${trustWarning}` : null,
+    `一致した理由: ${fitReasons}`,
   ].filter(Boolean).join("\n");
+}
+
+function uniqueReasons(reasons: string[]) {
+  const seen = new Set<string>();
+  return reasons.filter((reason) => {
+    if (!reason || seen.has(reason)) return false;
+    seen.add(reason);
+    return true;
+  });
 }
 
 function digestWindowElapsed(matchedAt: Date, now: Date, cadence: typeof JobAlertCadence.daily | typeof JobAlertCadence.weekly) {
