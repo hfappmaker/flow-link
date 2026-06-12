@@ -54,6 +54,7 @@ type SavedFeed = {
   query?: string | null;
   remote: boolean;
   acceptingOnly: boolean;
+  freshOnly?: boolean | null;
   directReadyOnly: boolean;
   fit?: string | null;
   workload?: string | null;
@@ -454,6 +455,7 @@ function savedFeedMatchesRecommendation(
 ) {
   const job = recommendation.job;
   if (feed.acceptingOnly && !recommendation.isOpen) return false;
+  if (feed.freshOnly && !recommendation.isFreshCandidate) return false;
   if (feed.remote && !isRemoteCompatibleWorkLocation(job)) return false;
   if (feed.query && !jobMatchesSearchQuery(feed.query, job)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;

@@ -153,6 +153,7 @@ type SavedSearch = {
   query?: string | null;
   remote: boolean;
   acceptingOnly: boolean;
+  freshOnly?: boolean | null;
   directReadyOnly: boolean;
   fit?: string | null;
   workload?: string | null;
@@ -245,6 +246,7 @@ function savedSearchHref(search: SavedSearch) {
       ...(search.query ? { q: search.query } : {}),
       ...(search.remote ? { remote: "remote" } : {}),
       ...(search.acceptingOnly ? { accepting: "open" } : {}),
+      ...(search.freshOnly ? { candidate: "fresh" } : {}),
       ...(search.directReadyOnly ? { directReady: "ready" } : {}),
       ...(search.fit ? { fit: search.fit } : {}),
       ...(search.workload ? { workload: search.workload } : {}),
@@ -260,6 +262,7 @@ function savedSearchSummary(search: SavedSearch) {
     search.query && `キーワード: ${search.query}`,
     search.remote && "リモート可",
     search.acceptingOnly && "受付中",
+    search.freshOnly && "未対応の候補",
     search.directReadyOnly && "条件確認済み",
     search.fit === "skill" && "スキル一致",
     search.fit === "ready" && "応募へ進みやすい",

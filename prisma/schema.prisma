@@ -248,6 +248,7 @@ model SavedJobSearch {
   query               String?
   remote              Boolean           @default(false)
   acceptingOnly       Boolean           @default(true) @map("accepting_only")
+  freshOnly           Boolean           @default(false) @map("fresh_only")
   directReadyOnly     Boolean           @default(false) @map("direct_ready_only")
   fit                 String?
   workload            String?

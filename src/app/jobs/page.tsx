@@ -671,6 +671,7 @@ function SavedSearchPanel({
     query?: string | null;
     remote: boolean;
     acceptingOnly: boolean;
+    freshOnly: boolean;
     directReadyOnly: boolean;
     fit?: string | null;
     workload?: string | null;
@@ -683,6 +684,7 @@ function SavedSearchPanel({
     [
       filters.remote && "リモート",
       filters.accepting && "受付中",
+      filters.candidate === "fresh" && "未対応の候補",
       filters.directReady && "条件確認済み",
       filters.workload === "light" && LIGHT_WORKLOAD_FILTER_LABEL,
       filters.rate && monthlyRateBandLabel(Number(filters.rate)),
@@ -712,6 +714,7 @@ function SavedSearchPanel({
           <input type="hidden" name="q" value={filters.keyword} />
           <input type="hidden" name="remote" value={filters.remote ? "remote" : ""} />
           <input type="hidden" name="accepting" value={filters.accepting ? "open" : ""} />
+          <input type="hidden" name="candidate" value={filters.candidate} />
           <input type="hidden" name="directReady" value={filters.directReady ? "ready" : ""} />
           <input type="hidden" name="fit" value={filters.fit} />
           <input type="hidden" name="workload" value={filters.workload} />
@@ -1402,6 +1405,7 @@ function savedSearchHref(search: {
   query?: string | null;
   remote: boolean;
   acceptingOnly: boolean;
+  freshOnly?: boolean | null;
   directReadyOnly: boolean;
   fit?: string | null;
   workload?: string | null;
@@ -1412,6 +1416,7 @@ function savedSearchHref(search: {
     q: search.query ?? "",
     remote: search.remote,
     accepting: search.acceptingOnly,
+    candidate: search.freshOnly ? "fresh" : "",
     directReady: search.directReadyOnly,
     fit: search.fit ?? "",
     workload: search.workload ?? "",

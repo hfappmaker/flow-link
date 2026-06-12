@@ -19,6 +19,7 @@ const { rankJobRecommendations } = await import("../src/lib/job-recommendations.
 const migrationSql = await readFile("prisma/migrations/20260609154000_add_saved_feed_job_alerts/migration.sql", "utf8");
 const dispatchMigrationSql = await readFile("prisma/migrations/20260611160000_add_job_alert_dispatches/migration.sql", "utf8");
 const dispatchLockIndexMigrationSql = await readFile("prisma/migrations/20260611182000_add_job_alert_dispatch_lock_index/migration.sql", "utf8");
+const freshOnlyMigrationSql = await readFile("prisma/migrations/20260612033500_add_saved_feed_fresh_only/migration.sql", "utf8");
 const schema = await readFile("prisma/schema.prisma", "utf8");
 
 test("saved feed alert migration adds delivery state and notification links", () => {
@@ -39,6 +40,11 @@ test("saved feed alert dispatch migration adds a per-job outbox", () => {
   assert.match(schema, /jobPostId\s+String\s+@unique @map\("job_post_id"\)/);
   assert.match(dispatchLockIndexMigrationSql, /CREATE INDEX "job_alert_dispatches_status_locked_at_idx"/);
   assert.match(schema, /@@index\(\[status, lockedAt\]\)/);
+});
+
+test("saved feed schema persists fresh-candidate intent as durable feed state", () => {
+  assert.match(freshOnlyMigrationSql, /ADD COLUMN "fresh_only" BOOLEAN NOT NULL DEFAULT false/);
+  assert.match(schema, /freshOnly\s+Boolean\s+@default\(false\) @map\("fresh_only"\)/);
 });
 
 test("alert cadence parser maps explicit and legacy text values", () => {
@@ -123,6 +129,37 @@ test("alerts suppress jobs already saved, applied, dismissed, or handled", async
   assert.equal(handledDb.notifications.length, 0);
   assert.equal(handledDb.matches[0].status, JobAlertMatchStatus.suppressed);
   assert.match(handledDb.matches[0].suppressionReason, /対応済み/);
+});
+
+test("fresh-only saved feed alerts do not match saved, applied, dismissed, or handled jobs", async () => {
+  const handledCases = [
+    { name: "saved", options: { savedJobIds: ["job-1"] } },
+    { name: "applied", options: { appliedJobIds: ["job-1"] } },
+    {
+      name: "dismissed",
+      options: {
+        feedback: [{ jobPostId: "job-1", reason: "not_relevant", sentiment: RecommendationFeedbackSentiment.negative, hideSimilar: false, visibleReasons: null }],
+      },
+    },
+    {
+      name: "handled",
+      options: {
+        feedback: [{ jobPostId: "job-1", reason: "already_handled", sentiment: RecommendationFeedbackSentiment.neutral, hideSimilar: false, visibleReasons: null }],
+      },
+    },
+  ];
+
+  for (const { name, options } of handledCases) {
+    const db = alertDb({ freshOnly: true, ...options });
+    await evaluateSavedFeedJobAlerts(db, { job: job() });
+    assert.equal(db.notifications.length, 0, `${name} job should not notify`);
+    assert.equal(db.matches.length, 0, `${name} job should not create a pending digest or suppressed match`);
+  }
+
+  const freshDb = alertDb({ freshOnly: true });
+  await evaluateSavedFeedJobAlerts(freshDb, { job: job() });
+  assert.equal(freshDb.notifications.length, 1);
+  assert.equal(freshDb.matches[0].status, JobAlertMatchStatus.notified);
 });
 
 test("saved feed alerts load similar feedback and suppress near hide-similar matches", async () => {
@@ -613,7 +650,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", readiness = "complete", remote = true } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", freshOnly = false, readiness = "complete", remote = true } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -642,6 +679,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         query,
         remote,
         acceptingOnly: true,
+        freshOnly,
         directReadyOnly,
         fit,
         workload,
