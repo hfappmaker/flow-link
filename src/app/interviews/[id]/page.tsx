@@ -18,6 +18,11 @@ import {
 import type { PostInterviewOutcome } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getFreelancerReadiness } from "@/lib/readiness";
+import {
+  getInterviewCareerHistoryTrustSignal,
+  hasMeaningfulInterviewCareerHistoryEvidence,
+  isInterviewApplicantInfoPrepared,
+} from "@/lib/interview-preparation";
 import { formatDateTime, formatOpenings, matchedSkills, parseSkills } from "@/lib/utils";
 import { Shell, TopNav, PageHeader, Card, SelectField, TextArea, TextField, StatusBadge, SubmitButton } from "@/components/ui";
 import { SafetyReportPanel } from "@/components/safety-reporting";
@@ -47,6 +52,8 @@ export default async function InterviewPage({
   const jobPost = thread.jobApplication.jobPost;
   const company = jobPost.companyProfile;
   const readiness = getFreelancerReadiness(freelancer);
+  const hasMeaningfulCareerHistoryEvidence = hasMeaningfulInterviewCareerHistoryEvidence(freelancer.careerHistory);
+  const careerHistoryTrustSignal = getInterviewCareerHistoryTrustSignal(freelancer.careerHistory);
   const requiredSkillMatches = matchedSkills(jobPost.requiredSkills, freelancer.skills);
   const isCompanySender = thread.jobApplication.jobPost.companyProfile.users.some((companyUser) => companyUser.userId === user.id);
   const directDealChecks = [
@@ -133,7 +140,7 @@ export default async function InterviewPage({
     contactPreference: thread.jobApplication.contactPreference,
     readinessPercent: readiness.percent,
     documentCount: freelancer.documents.length,
-    hasCareerHistory: Boolean(freelancer.careerHistory),
+    hasMeaningfulCareerHistoryEvidence,
     requiredSkillCount: parseSkills(jobPost.requiredSkills).length,
     matchedSkillCount: requiredSkillMatches.length,
     openQuestions: meetingBrief.openQuestions,
@@ -317,7 +324,7 @@ export default async function InterviewPage({
               <div className="mt-4 grid gap-2">
                 <TrustSignal label="プロフィール充足" value={`${readiness.percent}%`} done={readiness.isReady} />
                 <TrustSignal label="PDF書類" value={`${freelancer.documents.length}/2件`} done={freelancer.documents.length >= 2} />
-                <TrustSignal label="職務経歴フォーム" value={freelancer.careerHistory ? "登録済み" : "未登録"} done={Boolean(freelancer.careerHistory)} />
+                <TrustSignal label="職務経歴フォーム" value={careerHistoryTrustSignal.value} done={careerHistoryTrustSignal.done} />
               </div>
 
               {requiredSkillMatches.length > 0 && (
@@ -688,7 +695,7 @@ function buildInterviewPreparationPlan({
   contactPreference,
   readinessPercent,
   documentCount,
-  hasCareerHistory,
+  hasMeaningfulCareerHistoryEvidence,
   requiredSkillCount,
   matchedSkillCount,
   openQuestions,
@@ -703,7 +710,7 @@ function buildInterviewPreparationPlan({
   contactPreference: string | null;
   readinessPercent: number;
   documentCount: number;
-  hasCareerHistory: boolean;
+  hasMeaningfulCareerHistoryEvidence: boolean;
   requiredSkillCount: number;
   matchedSkillCount: number;
   openQuestions: string[];
@@ -737,7 +744,7 @@ function buildInterviewPreparationPlan({
         readinessPercent >= 100
           ? "プロフィール、職務経歴、PDF書類が揃っています。"
           : `応募準備は${readinessPercent}%です。職務経歴とPDF書類を面談前に確認してください。`,
-      done: readinessPercent >= 100 && documentCount >= 2 && hasCareerHistory,
+      done: isInterviewApplicantInfoPrepared({ readinessPercent, documentCount, hasMeaningfulCareerHistoryEvidence }),
       owner: "応募者",
     },
     {
