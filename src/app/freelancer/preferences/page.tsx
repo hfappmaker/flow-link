@@ -4,6 +4,7 @@ import { alertCadenceLabel } from "@/lib/job-alerts";
 import { requireFreelancerProfile } from "@/lib/page-guards";
 import { monthlyRateBandFromFilter, monthlyRateBandLabel } from "@/lib/rates";
 import { formatDateTime, locationModeLabel, workPreferenceCompleteness } from "@/lib/utils";
+import { remoteWorkIntentFromSavedFeed, remoteWorkIntentLabel } from "@/lib/work-location";
 import { LIGHT_WORKLOAD_FILTER_LABEL } from "@/lib/workload";
 import { Shell, TopNav, PageHeader, Card, EmptyState, SelectField, StatusBadge, TextArea, TextField } from "@/components/ui";
 
@@ -152,6 +153,7 @@ type SavedSearch = {
   name: string;
   query?: string | null;
   remote: boolean;
+  remoteIntent?: string | null;
   acceptingOnly: boolean;
   freshOnly?: boolean | null;
   directReadyOnly: boolean;
@@ -240,11 +242,12 @@ function SavedSearchCard({ search }: { search: SavedSearch }) {
 }
 
 function savedSearchHref(search: SavedSearch) {
+  const remoteIntent = remoteWorkIntentFromSavedFeed(search);
   return {
     pathname: "/jobs",
     query: {
       ...(search.query ? { q: search.query } : {}),
-      ...(search.remote ? { remote: "remote" } : {}),
+      ...(remoteIntent ? { remote: remoteIntent } : {}),
       ...(search.acceptingOnly ? { accepting: "open" } : {}),
       ...(search.freshOnly ? { candidate: "fresh" } : {}),
       ...(search.directReadyOnly ? { directReady: "ready" } : {}),
@@ -258,9 +261,10 @@ function savedSearchHref(search: SavedSearch) {
 
 function savedSearchSummary(search: SavedSearch) {
   const rateThreshold = monthlyRateBandFromFilter(search.rate);
+  const remoteIntent = remoteWorkIntentFromSavedFeed(search);
   return [
     search.query && `キーワード: ${search.query}`,
-    search.remote && "リモート可",
+    remoteIntent && remoteWorkIntentLabel(remoteIntent),
     search.acceptingOnly && "受付中",
     search.freshOnly && "未対応の候補",
     search.directReadyOnly && "条件確認済み",

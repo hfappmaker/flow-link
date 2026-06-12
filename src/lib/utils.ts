@@ -1104,7 +1104,8 @@ function locationFitTone(preference: NonNullable<WorkPreferenceInput>, job: Pref
   const workLocation = normalizeWorkLocation(job);
   if (workLocation.kind === "unknown") return "neutral";
   if (preference.locationMode === "remote") {
-    return workLocation.remoteCompatible ? "good" : "warn";
+    if (workLocation.kind === "remote_required_or_primary" || workLocation.kind === "remote_allowed") return "good";
+    return "warn";
   }
   if (preference.locationMode === "onsite") {
     if (workLocation.kind === "onsite_required" || workLocation.kind === "hybrid" || workLocation.kind === "remote_not_allowed") return "good";

@@ -6,6 +6,8 @@ export type WorkLocationKind =
   | "unknown"
   | "remote_not_allowed";
 
+export type RemoteWorkIntent = "remote" | "full_remote" | "hybrid";
+
 export type WorkLocationInput = {
   location?: string | null;
   remotePolicy?: string | null;
@@ -38,8 +40,39 @@ export function isRemoteCompatibleWorkLocation(input: WorkLocationInput) {
   return normalizeWorkLocation(input).remoteCompatible;
 }
 
+export function normalizeRemoteWorkIntent(value?: string | null): RemoteWorkIntent | "" {
+  if (value === "full_remote" || value === "hybrid" || value === "remote") return value;
+  return "";
+}
+
+export function remoteWorkIntentFromSavedFeed(input: { remote?: boolean | null; remoteIntent?: string | null }): RemoteWorkIntent | "" {
+  return normalizeRemoteWorkIntent(input.remoteIntent) || (input.remote ? "remote" : "");
+}
+
+export function remoteWorkIntentLabel(intent?: RemoteWorkIntent | "" | null) {
+  const labels: Record<RemoteWorkIntent, string> = {
+    remote: "リモート可",
+    full_remote: "フルリモート中心",
+    hybrid: "一部リモート/ハイブリッド",
+  };
+  return intent ? labels[intent] : "";
+}
+
+export function matchesRemoteWorkIntent(input: WorkLocationInput, intent?: RemoteWorkIntent | "" | null) {
+  const normalizedIntent = normalizeRemoteWorkIntent(intent);
+  if (!normalizedIntent) return true;
+  const workLocation = normalizeWorkLocation(input);
+  if (normalizedIntent === "remote") return workLocation.remoteCompatible;
+  if (normalizedIntent === "full_remote") return workLocation.kind === "remote_required_or_primary";
+  return workLocation.kind === "hybrid";
+}
+
 export function filterRemoteCompatibleJobs<J extends WorkLocationInput>(jobs: J[]) {
   return jobs.filter((job) => isRemoteCompatibleWorkLocation(job));
+}
+
+export function filterJobsByRemoteWorkIntent<J extends WorkLocationInput>(jobs: J[], intent?: RemoteWorkIntent | "" | null) {
+  return jobs.filter((job) => matchesRemoteWorkIntent(job, intent));
 }
 
 function normalizeLocationText(value: string) {
@@ -82,6 +115,7 @@ const remoteAllowedPatterns = [
 const hybridPatterns = [
   /ハイブリッド/,
   /hybrid/,
+  /一部リモート/,
   /リモート併用/,
   /一部出社/,
   /出社.{0,8}(あり|有|併用|相談)/,

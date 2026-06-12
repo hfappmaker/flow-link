@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const {
+  filterJobsByRemoteWorkIntent,
   filterRemoteCompatibleJobs,
   isRemoteCompatibleWorkLocation,
+  matchesRemoteWorkIntent,
   normalizeWorkLocation,
+  remoteWorkIntentFromSavedFeed,
+  remoteWorkIntentLabel,
 } = await import("../src/lib/work-location.ts");
 
 test("work location normalization classifies remote aliases and negative phrases", () => {
@@ -17,6 +21,7 @@ test("work location normalization classifies remote aliases and negative phrases
     [{ location: "全国リモート" }, "remote_required_or_primary", true],
     [{ remotePolicy: "週1出社" }, "hybrid", true],
     [{ remotePolicy: "ハイブリッド" }, "hybrid", true],
+    [{ remotePolicy: "一部リモート" }, "hybrid", true],
     [{ remotePolicy: "常駐必須" }, "onsite_required", false],
     [{ remotePolicy: "リモート不可" }, "remote_not_allowed", false],
     [{ remotePolicy: "remote not allowed" }, "remote_not_allowed", false],
@@ -43,4 +48,27 @@ test("remote discovery filtering includes compatible aliases and excludes onsite
   ];
 
   assert.deepEqual(filterRemoteCompatibleJobs(jobs).map((job) => job.id), ["remote", "full-remote", "wfh", "hybrid"]);
+});
+
+test("remote intent filtering separates full remote, hybrid, and broad remote semantics", () => {
+  const jobs = [
+    { id: "remote", remotePolicy: "リモート可" },
+    { id: "full-remote", remotePolicy: "フルリモート" },
+    { id: "online", location: "全国リモート" },
+    { id: "hybrid", remotePolicy: "週1出社" },
+    { id: "partial", remotePolicy: "一部リモート" },
+    { id: "onsite", remotePolicy: "常駐必須" },
+  ];
+
+  assert.deepEqual(filterJobsByRemoteWorkIntent(jobs, "full_remote").map((job) => job.id), ["full-remote", "online"]);
+  assert.deepEqual(filterJobsByRemoteWorkIntent(jobs, "hybrid").map((job) => job.id), ["hybrid", "partial"]);
+  assert.deepEqual(filterJobsByRemoteWorkIntent(jobs, "remote").map((job) => job.id), ["remote", "full-remote", "online", "hybrid", "partial"]);
+  assert.equal(matchesRemoteWorkIntent({ remotePolicy: "週1出社" }, "full_remote"), false);
+});
+
+test("saved feed remote intent preserves legacy broad remote defaults", () => {
+  assert.equal(remoteWorkIntentFromSavedFeed({ remote: true, remoteIntent: null }), "remote");
+  assert.equal(remoteWorkIntentFromSavedFeed({ remote: true, remoteIntent: "full_remote" }), "full_remote");
+  assert.equal(remoteWorkIntentFromSavedFeed({ remote: false, remoteIntent: null }), "");
+  assert.equal(remoteWorkIntentLabel("hybrid"), "一部リモート/ハイブリッド");
 });
