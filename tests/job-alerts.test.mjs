@@ -67,6 +67,40 @@ test("new published matching jobs create one immediate notification per feed", a
   assert.equal(db.notifications.length, 1);
 });
 
+test("saved feed alerts suppress jobs matching avoided freelancer conditions", async () => {
+  const cases = [
+    { excludedConditions: "常駐必須", jobOverrides: { remotePolicy: "常駐必須" } },
+    { excludedConditions: "夜間中心", jobOverrides: { description: "ReactとTypeScriptの夜間中心運用。" } },
+    { excludedConditions: "短納期のみ", jobOverrides: { workload: "短納期のみ・週3日" } },
+  ];
+
+  for (const { excludedConditions, jobOverrides } of cases) {
+    const db = alertDb({ excludedConditions, remote: false });
+    await evaluateSavedFeedJobAlerts(db, { job: job(jobOverrides), now: new Date("2026-06-09T00:00:00Z") });
+
+    assert.equal(db.notifications.length, 0, `${excludedConditions} should not notify`);
+    assert.equal(db.matches.length, 1, `${excludedConditions} should record alert history`);
+    assert.equal(db.matches[0].status, JobAlertMatchStatus.suppressed);
+    assert.equal(db.matches[0].suppressionReason, "避けたい条件に一致");
+    assert.match(db.matches[0].fitReasons, /保存キーワード一致: React|スキル一致: React/);
+  }
+
+  const normalDb = alertDb({ excludedConditions: "常駐必須" });
+  await evaluateSavedFeedJobAlerts(normalDb, { job: job({ remotePolicy: "リモート可" }) });
+  assert.equal(normalDb.notifications.length, 1);
+  assert.equal(normalDb.matches[0].status, JobAlertMatchStatus.notified);
+});
+
+test("ready saved feed alerts record avoided-condition suppression instead of notifying", async () => {
+  const db = alertDb({ excludedConditions: "常駐必須", fit: "ready", remote: false });
+  await evaluateSavedFeedJobAlerts(db, { job: job({ remotePolicy: "常駐必須" }) });
+
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches.length, 1);
+  assert.equal(db.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.equal(db.matches[0].suppressionReason, "避けたい条件に一致");
+});
+
 test("alerts suppress jobs already saved, applied, dismissed, or handled", async () => {
   const savedDb = alertDb({ savedJobIds: ["job-1"] });
   await evaluateSavedFeedJobAlerts(savedDb, { job: job() });
@@ -579,7 +613,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false, fit = "skill", readiness = "complete", remote = true } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", readiness = "complete", remote = true } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -598,6 +632,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
       targetRate: "80万円",
       workload: "週3日",
       locationMode: "remote",
+      excludedConditions,
       lastConfirmedAt: new Date("2026-06-01T00:00:00Z"),
     },
     savedJobSearches: [

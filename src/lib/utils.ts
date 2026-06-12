@@ -862,6 +862,11 @@ type PreferenceReason = {
   tone: "good" | "neutral" | "warn";
 };
 
+export type AvoidedConditionFit = {
+  matched: string[];
+  reason: PreferenceReason | null;
+};
+
 export function workPreferenceCompleteness(preference: WorkPreferenceInput, now = new Date()) {
   const checks = [
     Boolean(preference?.status),
@@ -898,6 +903,24 @@ export function preferenceAwareMatchScore(job: PreferenceAwareMatchInput) {
   return Math.max(0, Math.min(100, baseScore + adjustment));
 }
 
+export function buildAvoidedConditionFit(job: PreferenceAwareMatchInput): AvoidedConditionFit {
+  const exclusions = parseSkills(job.workPreference?.excludedConditions);
+  if (exclusions.length === 0) return { matched: [], reason: null };
+
+  const text = preferenceJobText(job).toLowerCase();
+  const matched = exclusions.filter((condition) => text.includes(condition.toLowerCase()));
+  return {
+    matched,
+    reason: matched.length > 0
+      ? {
+          label: "避けたい条件あり",
+          detail: matched.slice(0, 3).join("、"),
+          tone: "warn",
+        }
+      : null,
+  };
+}
+
 export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
   const preference = job.workPreference;
   const completeness = workPreferenceCompleteness(preference);
@@ -915,19 +938,11 @@ export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
     };
   }
 
-  const text = [
-    job.title,
-    job.description,
-    job.requiredSkills,
-    job.preferredSkills,
-    job.rate,
-    job.workload,
-    job.location,
-    job.remotePolicy,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const text = preferenceJobText(job).toLowerCase();
   const reasons: PreferenceReason[] = [];
   const preferredSkills = parseSkills(preference.preferredSkills);
   const matchedPreferredSkills = matchedSkills([job.requiredSkills, job.preferredSkills].filter(Boolean).join(","), preference.preferredSkills);
+  const avoidedConditionFit = buildAvoidedConditionFit(job);
 
   if (preference.status === "inactive") {
     reasons.push({
@@ -1019,14 +1034,8 @@ export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
     });
   }
 
-  const exclusions = parseSkills(preference.excludedConditions);
-  const matchedExclusions = exclusions.filter((condition) => text.includes(condition.toLowerCase()));
-  if (matchedExclusions.length > 0) {
-    reasons.push({
-      label: "避けたい条件あり",
-      detail: matchedExclusions.slice(0, 3).join("、"),
-      tone: "warn",
-    });
+  if (avoidedConditionFit.reason) {
+    reasons.unshift(avoidedConditionFit.reason);
   }
 
   if (completeness.stale) {
@@ -1052,6 +1061,19 @@ export function buildPreferenceFit(job: PreferenceAwareMatchInput) {
 
 export function visiblePreferenceReasons(job: PreferenceAwareMatchInput, limit = 4) {
   return buildPreferenceFit(job).reasons.slice(0, limit);
+}
+
+function preferenceJobText(job: PreferenceAwareMatchInput) {
+  return [
+    job.title,
+    job.description,
+    job.requiredSkills,
+    job.preferredSkills,
+    job.rate,
+    job.workload,
+    job.location,
+    job.remotePolicy,
+  ].filter(Boolean).join(" ");
 }
 
 export function locationModeLabel(mode?: string | null) {

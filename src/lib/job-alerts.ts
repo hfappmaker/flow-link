@@ -165,8 +165,9 @@ export async function evaluateSavedFeedJobAlerts(
       const trustWarning = alertTrustWarning(recommendation);
       const fitReasons = alertFitReasons(feed, recommendation, { feedback, freelancerReady: readiness.isReady, trustWarning });
       const similarFeedbackReason = alertSimilarFeedbackSuppressionReason(recommendation);
+      const avoidedConditionReason = recommendation.isAvoidedConditionMatched ? "避けたい条件に一致" : null;
       const lowConfidenceReason = fitReasons ? null : "具体的な一致理由不足";
-      const effectiveSuppressionReason = suppressionReason ?? similarFeedbackReason ?? lowConfidenceReason;
+      const effectiveSuppressionReason = suppressionReason ?? similarFeedbackReason ?? avoidedConditionReason ?? lowConfidenceReason;
       const cadence = normalizeAlertCadence(feed.notificationCadence);
       const match = await db.jobAlertMatch.upsert({
         where: {
@@ -457,11 +458,17 @@ function savedFeedMatchesRecommendation(
   if (feed.query && !jobMatchesSearchQuery(feed.query, job)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
-  if (feed.fit === "ready" && (!freelancerReady || !recommendation.isReadyToApply)) return false;
+  if (
+    feed.fit === "ready" &&
+    (!freelancerReady || (!recommendation.isReadyToApply && !(recommendation.isAvoidedConditionMatched && recommendation.wouldBeReadyToApplyWithoutAvoidance)))
+  ) return false;
   if (feed.workload === "light" && !isLightWorkloadText(job.workload)) return false;
   const rateThreshold = monthlyRateBandFromFilter(feed.rate);
   if (rateThreshold !== null && !isMonthlyRateAtLeastText(job.rate, rateThreshold)) return false;
-  return recommendation.directScore >= 45 || recommendation.isSkillMatched || recommendation.isReadyToApply;
+  return recommendation.directScore >= 45 ||
+    recommendation.isSkillMatched ||
+    recommendation.isReadyToApply ||
+    (recommendation.isAvoidedConditionMatched && recommendation.wouldBeReadyToApplyWithoutAvoidance);
 }
 
 function alertFitReasons(

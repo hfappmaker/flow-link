@@ -3,6 +3,7 @@ import {
   type RecommendationFeedbackSignal,
 } from "./recommendation-feedback.ts";
 import {
+  buildAvoidedConditionFit,
   buildTrustConfidence,
   directContractChecklist,
   matchedSkills,
@@ -55,8 +56,10 @@ export type JobRecommendation<J extends JobRecommendationJob> = {
   directScore: number;
   interactionState: RecommendationInteractionState;
   isFreshCandidate: boolean;
+  isAvoidedConditionMatched: boolean;
   isOpen: boolean;
   isReadyToApply: boolean;
+  wouldBeReadyToApplyWithoutAvoidance: boolean;
   isSkillMatched: boolean;
   matchPercent: number | null;
   matched: string[];
@@ -88,6 +91,12 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     freelancerSkills: context.freelancerSkills,
     workPreference: context.workPreference,
   });
+  const avoidedConditionFit = buildAvoidedConditionFit({
+    ...job,
+    freelancerReadinessPercent: context.freelancerReadinessPercent,
+    freelancerSkills: context.freelancerSkills,
+    workPreference: context.workPreference,
+  });
   const trustAdjustment = options.trustAdjusted === false || !trustConfidence ? 0 : trustRecommendationAdjustment(trustConfidence);
   const isOpen = job.applicationStatus === "open";
   const exactFeedback = (context.recommendationFeedback ?? []).find((signal) => signal.jobPostId === job.id);
@@ -113,6 +122,20 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     workPreference: context.workPreference,
   });
   const directScore = Math.max(0, Math.min(100, baseDirectScore + trustAdjustment + feedbackAdjustment.adjustment));
+  const wouldBeReadyToApplyWithoutAvoidance =
+    isOpen && directScore >= READY_TO_APPLY_SCORE_THRESHOLD && contractReadiness.percent >= READY_TO_APPLY_CONTRACT_THRESHOLD;
+  const preferenceReasons = prioritizeAvoidedConditionReasons([
+    ...feedbackAdjustment.reasons,
+    ...visiblePreferenceReasons(
+      {
+        ...job,
+        freelancerReadinessPercent: context.freelancerReadinessPercent,
+        freelancerSkills: context.freelancerSkills,
+        workPreference: context.workPreference,
+      },
+      options.preferenceReasonLimit ?? 4,
+    ),
+  ]).slice(0, options.preferenceReasonLimit ?? 4);
 
   return {
     job,
@@ -121,27 +144,25 @@ export function buildJobRecommendation<J extends JobRecommendationJob>(
     directScore,
     interactionState,
     isFreshCandidate,
+    isAvoidedConditionMatched: avoidedConditionFit.matched.length > 0,
     isOpen,
-    isReadyToApply: isOpen && directScore >= READY_TO_APPLY_SCORE_THRESHOLD && contractReadiness.percent >= READY_TO_APPLY_CONTRACT_THRESHOLD,
+    isReadyToApply: wouldBeReadyToApplyWithoutAvoidance && avoidedConditionFit.matched.length === 0,
+    wouldBeReadyToApplyWithoutAvoidance,
     isSkillMatched: isOpen && (matchPercent ?? 0) > 0,
     matchPercent,
     matched,
-    preferenceReasons: [
-      ...feedbackAdjustment.reasons,
-      ...visiblePreferenceReasons(
-        {
-          ...job,
-          freelancerReadinessPercent: context.freelancerReadinessPercent,
-          freelancerSkills: context.freelancerSkills,
-          workPreference: context.workPreference,
-        },
-        options.preferenceReasonLimit ?? 4,
-      ),
-    ].slice(0, options.preferenceReasonLimit ?? 4),
+    preferenceReasons,
     requiredSkills,
     skillGaps,
     trustConfidence,
   };
+}
+
+function prioritizeAvoidedConditionReasons<T extends { label: string }>(reasons: T[]) {
+  return [
+    ...reasons.filter((reason) => reason.label === "避けたい条件あり"),
+    ...reasons.filter((reason) => reason.label !== "避けたい条件あり"),
+  ];
 }
 
 export function buildRecommendationInteractionState({
