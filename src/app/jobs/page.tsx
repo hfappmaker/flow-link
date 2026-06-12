@@ -21,9 +21,7 @@ import {
 import {
   buildDiscoveryIntentCounts,
   rankJobRecommendations,
-  sortJobRecommendations,
   type DiscoveryIntentCounts,
-  type JobRecommendation,
 } from "@/lib/job-recommendations";
 import { filterJobsBySearchQuery, jobKeywordCandidateWhere, jobMatchesSearchQuery } from "@/lib/job-search";
 import {
@@ -266,7 +264,6 @@ export default async function JobsPage({
       : `${rankedJobs.length}件の案件を表示中${activeFilterLabels.length > 0 ? ` / ${activeFilterLabels.join(" / ")}` : ""} / ${
           sort === "direct" ? "応募しやすい順" : "新着順"
         }${hasMoreKeywordCandidateMatches ? " / さらに一致候補がある可能性があります" : ""}`;
-  const priorityJobs = sortJobRecommendations(rankedJobs, "direct").slice(0, 3);
   const freshCandidateCount = freelancerProfile
     ? allRecommendedJobs.filter((recommendation) => recommendation.isFreshCandidate).length
     : 0;
@@ -608,15 +605,6 @@ export default async function JobsPage({
               />
             </div>
           )}
-          {priorityJobs.length > 0 && (
-            <div className="order-2 md:order-none">
-              <DirectPriorityStrip
-                freelancerProfile={freelancerProfile}
-                jobs={priorityJobs}
-                readinessPercent={readiness.percent}
-              />
-            </div>
-          )}
           <div className="order-1 mt-4 grid gap-4 md:order-none md:mt-6">
             {rankedJobs.map(({ job, directScore, contractReadinessPercent, preferenceReasons, trustConfidence }) => (
               <JobCard
@@ -659,7 +647,6 @@ type JobWithCompany = Prisma.JobPostGetPayload<{
   include: { companyProfile: { include: { verificationRequests: true } } };
 }>;
 type FreelancerForMatch = Prisma.FreelancerProfileGetPayload<{ include: { documents: true; careerHistory: true } }>;
-type RankedJob = JobRecommendation<JobWithCompany>;
 
 function SavedSearchPanel({
   currentJobsPath,
@@ -954,94 +941,6 @@ function ProfileDiscoveryShortcuts({
   );
 }
 
-function DirectPriorityStrip({
-  freelancerProfile,
-  jobs,
-  readinessPercent,
-}: {
-  freelancerProfile: FreelancerForMatch | null;
-  jobs: RankedJob[];
-  readinessPercent: number;
-}) {
-  return (
-    <section className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/70 p-5">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-stone-950">応募しやすい候補</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-600">
-            条件公開、応募受付、プロフィール準備を合わせて、次の会話へ進みやすい案件を先に表示します。
-          </p>
-        </div>
-        {freelancerProfile && (
-          <StatusBadge tone={readinessPercent === 100 ? "good" : "warn"}>応募準備 {readinessPercent}%</StatusBadge>
-        )}
-      </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        {jobs.map(({ job, contractReadinessPercent }) => {
-          const matchPercent = freelancerProfile ? skillMatchPercent(job.requiredSkills, freelancerProfile.skills) : null;
-          const reasons = buildPriorityReasons({
-            contractReadinessPercent,
-            isOpen: job.applicationStatus === "open",
-            matchPercent,
-            hasTerms: Boolean(job.selectionFlow || job.contractTerms),
-          });
-
-          return (
-            <Link
-              className="rounded-md border border-emerald-200 bg-white p-4 shadow-sm transition hover:border-emerald-400"
-              href={`/jobs/${job.id}`}
-              key={job.id}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="line-clamp-2 text-sm font-semibold text-stone-950">{job.title}</p>
-                  <p className="mt-1 text-xs text-stone-500">{job.companyProfile.name}</p>
-                </div>
-                <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                  {contractReadinessPercent >= 80 ? "条件充実" : job.applicationStatus === "open" ? "受付中" : "要確認"}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {reasons.map((reason) => (
-                  <span className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-medium text-stone-700" key={reason}>
-                    {reason}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-3 grid gap-2 text-xs text-stone-700 sm:grid-cols-2">
-                <ScoreMeta label="条件確認" value={`${contractReadinessPercent}%`} />
-                <ScoreMeta label={freelancerProfile ? "必須一致" : "公開条件"} value={matchPercent === null ? `${reasons.length}件` : `${matchPercent}%`} />
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function buildPriorityReasons({
-  contractReadinessPercent,
-  hasTerms,
-  isOpen,
-  matchPercent,
-}: {
-  contractReadinessPercent: number;
-  hasTerms: boolean;
-  isOpen: boolean;
-  matchPercent: number | null;
-}) {
-  const reasons = [];
-  if (isOpen) reasons.push("受付中");
-  if (contractReadinessPercent === 100) reasons.push("条件確認100%");
-  else if (contractReadinessPercent >= 60) reasons.push("条件整理済み");
-  if (hasTerms) reasons.push("選考・契約条件あり");
-  if (matchPercent === null) reasons.push("必須スキル未設定");
-  else if (matchPercent >= 60) reasons.push("スキル高一致");
-  else if (matchPercent > 0) reasons.push("一致スキルあり");
-  return reasons.slice(0, 4);
-}
-
 type JobCardReason = {
   label: string;
   tone: "neutral" | "good" | "warn" | "bad";
@@ -1172,6 +1071,7 @@ function JobCard({
   const contractReadiness = directContractChecklist(job);
   const decisionReasons = buildJobCardDecisionReasons({ job, contractReadiness });
   const concernReasons = buildJobCardConcernReasons({ job, contractReadiness, trustConfidence });
+  const workstyleSignal = job.remotePolicy || job.location;
   const nextStep = freelancerProfile
     ? buildJobCardNextStep({
         applied,
@@ -1186,9 +1086,9 @@ function JobCard({
     : null;
 
   return (
-    <Card>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
+    <Card className="p-4 md:p-5">
+      <div className="grid gap-4 lg:grid-cols-[1fr_180px] lg:items-start">
+        <div className="min-w-0">
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={job.applicationStatus === "open" ? "good" : "warn"}>
               {job.applicationStatus === "open" ? "受付中" : "受付停止"}
@@ -1200,11 +1100,29 @@ function JobCard({
               <StatusBadge tone={reason.tone} key={reason.label}>{reason.label}</StatusBadge>
             ))}
           </div>
-          <h2 className="mt-3 text-xl font-semibold">{job.title}</h2>
-          <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
-          <div className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2 lg:grid-cols-5">
-            <JobMeta label="単価" value={job.rate} />
-            <JobMeta label="稼働率" value={job.workload} />
+          <div className="mt-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-7 text-stone-950 md:text-xl">{job.title}</h2>
+              <p className="mt-1 text-sm text-stone-500">{job.companyProfile.name}</p>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-stone-700 lg:grid-cols-4">
+            <JobMeta emphasis label="単価" value={job.rate} />
+            <JobMeta emphasis label="稼働率" value={job.workload} />
+            <JobMeta emphasis label="働き方" value={workstyleSignal} />
+            <JobMeta label="条件確認" value={`${contractReadinessPercent}%`} />
+          </div>
+          <div className="mt-3 flex md:justify-end">
+            <Link className="btn btn-primary w-full md:w-auto" href={`/jobs/${job.id}`}>
+              詳細 {icons.arrow}
+            </Link>
+          </div>
+          <div className="mt-2 grid gap-2 text-xs text-stone-700 sm:grid-cols-3">
+            <ScoreMeta label="おすすめ度" value={`${directScore}%`} />
+            <ScoreMeta label={freelancerProfile ? "必須一致" : "公開条件"} value={matchPercent === null ? `${decisionReasons.length}件` : `${matchPercent}%`} />
+            <ScoreMeta label="信頼確認" value={`${trustConfidence.score}%`} />
+          </div>
+          <div className="mt-2 grid gap-2 text-sm text-stone-700 sm:grid-cols-3">
             <JobMeta label="契約期間" value={job.contractPeriod} />
             <JobMeta label="勤務地" value={job.location} />
             <JobMeta label="募集人数" value={formatOpenings(job.openings)} />
@@ -1273,30 +1191,25 @@ function JobCard({
             </div>
           )}
         </div>
-        <div className="grid shrink-0 gap-2 sm:grid-cols-2 md:grid-cols-1">
-          {freelancerProfile && !applied && (
-            <>
-              <form action={saved ? removeSavedJob : saveJobForReview}>
-                <input type="hidden" name="jobPostId" value={job.id} />
-                <input type="hidden" name="returnTo" value={returnTo} />
-                <SubmitButton className="btn btn-secondary w-full" pendingLabel="更新中">
-                  {saved ? "検討リストから外す" : "検討リストに保存"}
-                </SubmitButton>
-              </form>
-              <RecommendationFeedbackForm
-                currentReason={recommendationFeedbackReason}
-                jobPostId={job.id}
-                returnTo={returnTo}
-                source="jobs"
-                sourceContext={returnTo}
-                visibleReasons={preferenceReasons}
-              />
-            </>
-          )}
-          <Link className="btn btn-secondary" href={`/jobs/${job.id}`}>
-            詳細 {icons.arrow}
-          </Link>
-        </div>
+        {freelancerProfile && !applied && (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <form action={saved ? removeSavedJob : saveJobForReview}>
+              <input type="hidden" name="jobPostId" value={job.id} />
+              <input type="hidden" name="returnTo" value={returnTo} />
+              <SubmitButton className="btn btn-secondary w-full" pendingLabel="更新中">
+                {saved ? "検討リストから外す" : "検討リストに保存"}
+              </SubmitButton>
+            </form>
+            <RecommendationFeedbackForm
+              currentReason={recommendationFeedbackReason}
+              jobPostId={job.id}
+              returnTo={returnTo}
+              source="jobs"
+              sourceContext={returnTo}
+              visibleReasons={preferenceReasons}
+            />
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -1439,11 +1352,11 @@ function ScoreMeta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function JobMeta({ label, value }: { label: string; value?: string | null }) {
+function JobMeta({ emphasis = false, label, value }: { emphasis?: boolean; label: string; value?: string | null }) {
   return (
-    <div className="rounded border border-stone-200 bg-stone-50 px-3 py-2">
+    <div className={`rounded border px-3 py-2 ${emphasis ? "border-emerald-200 bg-emerald-50/70" : "border-stone-200 bg-stone-50"}`}>
       <p className="text-xs text-stone-500">{label}</p>
-      <p className="mt-1 truncate font-semibold">{value || "未設定"}</p>
+      <p className={`mt-1 break-words font-semibold ${emphasis ? "text-stone-950" : ""}`}>{value || "未設定"}</p>
     </div>
   );
 }
