@@ -328,6 +328,38 @@ test("application workflow rejects unconfirmed job-side condition defaults", asy
   assert.equal(db.calls.length, 0);
 });
 
+test("application workflow rejects invalid application expectation sources", async () => {
+  const db = workflowDb();
+
+  await assert.rejects(
+    () =>
+      applyToJobWorkflow(db, {
+        ...applicationInput,
+        rateExpectation: "月80万円",
+        rateExpectationSource: "unexpected_value",
+        workloadExpectation: "週5日",
+        workloadExpectationSource: "unexpected_value",
+      }),
+    /応募前に応募時の希望単価、応募時の希望稼働量を登録してください。/,
+  );
+  assert.equal(db.calls.length, 0);
+});
+
+test("application workflow normalizes omitted application expectation sources before create", async () => {
+  const db = workflowDb();
+
+  await applyToJobWorkflow(db, {
+    ...applicationInput,
+    rateExpectationSource: undefined,
+    workloadExpectationSource: undefined,
+  });
+
+  const creates = db.calls.filter(([name]) => name === "jobApplication.create");
+  assert.equal(creates.length, 1);
+  assert.equal(creates[0][1].data.rateExpectationSource, "candidate");
+  assert.equal(creates[0][1].data.workloadExpectationSource, "candidate");
+});
+
 test("application workflow snapshots explicitly confirmed job-side condition values", async () => {
   const db = workflowDb();
 

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { clsx, type ClassValue } from "clsx";
+import { parseApplicationExpectationSource } from "./application-expectations.ts";
 import { rateFitTone } from "./rates.ts";
 import { getJobPublishingReadiness } from "./readiness.ts";
 import { normalizeWorkLocation } from "./work-location.ts";
@@ -478,8 +479,12 @@ function conditionTerm(
   applicationSource?: string | null,
 ): ApplicationConditionTerm {
   if (applicationValue) {
-    if (applicationSource === "job_default") {
+    const source = parseApplicationExpectationSource(applicationSource);
+    if (source === "job_default") {
       return { value: applicationValue, source: "job", display: `${applicationValue}（案件条件・未確認）` };
+    }
+    if (applicationSource?.trim() && !source) {
+      return { value: applicationValue, source: "job", display: `${applicationValue}（要確認）` };
     }
     return { value: applicationValue, source: "application", display: applicationValue };
   }
