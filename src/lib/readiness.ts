@@ -1,4 +1,5 @@
 import type { ResumeDocumentType } from "@prisma/client";
+import { hasConfirmedApplicationExpectation } from "./application-expectations.ts";
 
 export type ReadinessSeverity = "required" | "recommended";
 
@@ -211,7 +212,7 @@ export function getApplicationReadiness(
 }
 
 function hasConfirmedExpectation(value?: string | null, source?: string | null) {
-  return Boolean(value?.trim()) && source !== "job_default";
+  return hasConfirmedApplicationExpectation(value, source);
 }
 
 export function getJobPublishingReadiness(

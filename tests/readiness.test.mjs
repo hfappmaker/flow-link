@@ -111,6 +111,21 @@ test("application readiness accepts candidate defaults but not unconfirmed job d
     contactPreference: "平日18時以降",
   });
   assert.equal(confirmedJobTerms.isReady, true);
+
+  const invalidSource = getApplicationReadiness(readyProfile, {
+    proposalMessage: "応募メッセージ".repeat(10),
+    proposedStart: "7月第1週",
+    rateExpectation: "月80万円",
+    rateExpectationSource: "unexpected_value",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "unexpected_value",
+    contactPreference: "平日18時以降",
+  });
+  assert.equal(invalidSource.isReady, false);
+  assert.deepEqual(
+    invalidSource.missingRequired.map((item) => item.label),
+    ["応募時の希望単価", "応募時の希望稼働量"],
+  );
 });
 
 test("job publishing readiness separates draft guidance from publish eligibility", () => {

@@ -403,6 +403,39 @@ test("company review keeps unconfirmed job defaults out of application expectati
   assert.match(review.reviewQuestions.join("\n"), /案件単価を応募者本人の希望単価/);
 });
 
+test("company review treats invalid application expectation sources as unconfirmed", () => {
+  const invalidSource = application({
+    rateExpectation: "月80万円",
+    rateExpectationSource: "unexpected_value",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "unexpected_value",
+    desiredRate: "",
+    availability: "",
+  });
+
+  assert.deepEqual(applicationConditionTerms(invalidSource), {
+    rate: { value: "月80万円", source: "job", display: "月80万円（要確認）" },
+    workload: { value: "週5日", source: "job", display: "週5日（要確認）" },
+  });
+
+  const fit = applicationConditionFit({
+    ...invalidSource,
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+  assert.equal(fit.rate.readiness, "unconfirmed");
+  assert.equal(fit.rate.label, "要確認");
+  assert.equal(fit.workload.readiness, "unconfirmed");
+  assert.equal(fit.workload.label, "要確認");
+
+  const review = buildApplicationReview({
+    ...invalidSource,
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  assert.equal(review.interviewReadinessPercent, 71);
+  assert.equal(review.isInterviewReady, false);
+  assert.deepEqual(review.nextChecks, ["希望単価の確認", "希望稼働量の確認"]);
+});
+
 test("company review counts explicitly confirmed job terms as application expectations", () => {
   const confirmedJobTerms = application({
     rateExpectation: "月80万円",

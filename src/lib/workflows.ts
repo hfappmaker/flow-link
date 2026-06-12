@@ -21,6 +21,7 @@ import {
   type FreelancerReadinessProfile,
   type JobPublishingReadinessInput,
 } from "./readiness.ts";
+import { normalizeApplicationExpectationSourceForCreate } from "./application-expectations.ts";
 import { validatePostInterviewOutcomePolicy } from "./post-interview-outcomes.ts";
 import { buildScreeningPassedHandoffMessage, daysSince } from "./utils.ts";
 
@@ -91,6 +92,14 @@ type ApplyToJobInput = {
 };
 
 export async function applyToJobWorkflow(db: WorkflowDb, input: ApplyToJobInput) {
+  const rateExpectationSource = normalizeApplicationExpectationSourceForCreate(
+    input.rateExpectation,
+    input.rateExpectationSource,
+  );
+  const workloadExpectationSource = normalizeApplicationExpectationSourceForCreate(
+    input.workloadExpectation,
+    input.workloadExpectationSource,
+  );
   const readinessProfile = await db.freelancerProfile.findUnique({
     where: { id: input.freelancerProfileId },
     include: { documents: true, careerHistory: true, workPreference: true },
@@ -124,9 +133,9 @@ export async function applyToJobWorkflow(db: WorkflowDb, input: ApplyToJobInput)
       proposalMessage: input.proposalMessage,
       proposedStart: input.proposedStart,
       rateExpectation: input.rateExpectation,
-      rateExpectationSource: input.rateExpectationSource ?? (input.rateExpectation ? "candidate" : null),
+      rateExpectationSource,
       workloadExpectation: input.workloadExpectation,
-      workloadExpectationSource: input.workloadExpectationSource ?? (input.workloadExpectation ? "candidate" : null),
+      workloadExpectationSource,
       contactPreference: input.contactPreference,
     },
   });
