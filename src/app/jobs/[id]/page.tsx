@@ -201,6 +201,23 @@ export default async function JobDetailPage({
             )}
           </Card>
           <div className="grid h-fit gap-5">
+            {!session && (
+              <Card>
+                <p className="font-semibold">この案件への応募準備を始める</p>
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  無料登録すると、この案件に戻ってプロフィールや提案文の準備を進められます。
+                </p>
+                <div className="mt-4 grid gap-2">
+                  <Link className="btn btn-primary w-full" href={jobRegisterHref}>
+                    登録して応募準備を始める
+                  </Link>
+                  <Link className="btn btn-secondary w-full" href={jobLoginHref}>
+                    ログインして応募
+                  </Link>
+                </div>
+              </Card>
+            )}
+
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -311,188 +328,175 @@ export default async function JobDetailPage({
               </Card>
             )}
 
-            <Card>
-              {session?.user?.role === "freelancer" && !existingApplication && (
-                <div className="mb-4 rounded border border-stone-200 bg-stone-50 p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {session && (
+              <Card>
+                {session?.user?.role === "freelancer" && !existingApplication && (
+                  <div className="mb-4 rounded border border-stone-200 bg-stone-50 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">{savedJob ? "検討リストに保存済み" : "応募前に検討リストへ保存"}</p>
+                        <p className="mt-1 text-sm leading-6 text-stone-600">
+                          条件確認や提案文の準備が必要な案件を、応募前にまとめて見返せます。
+                        </p>
+                      </div>
+                      <form action={savedJob ? removeSavedJob : saveJobForReview}>
+                        <input type="hidden" name="jobPostId" value={job.id} />
+                        <input type="hidden" name="returnTo" value={`/jobs/${job.id}`} />
+                        <SubmitButton className="btn btn-secondary w-full sm:w-auto" pendingLabel="更新中">
+                          {savedJob ? "検討リストから外す" : "検討リストに保存"}
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  </div>
+                )}
+                {session?.user?.role === "freelancer" && !existingApplication && (
+                  <div className="mb-4">
+                    <RecommendationFeedbackForm
+                      currentReason={freelancerProfile?.recommendationFeedback[0]?.reason}
+                      jobPostId={job.id}
+                      returnTo={`/jobs/${job.id}`}
+                      source="job_detail"
+                      sourceContext={`/jobs/${job.id}`}
+                      visibleReasons={preferenceReasons}
+                    />
+                  </div>
+                )}
+                {session?.user?.role === "freelancer" && (
+                  <div className="mb-4">
+                    <SafetyReportPanel
+                      acknowledgement={query.safetyReport === "submitted"}
+                      compact
+                      context={{
+                        jobPostId: job.id,
+                        jobApplicationId: existingApplication?.id,
+                        interviewThreadId: existingApplication?.interviewThread?.id,
+                      }}
+                      reports={reporterSafetyReports}
+                      returnTo={`/jobs/${job.id}`}
+                    />
+                  </div>
+                )}
+                {existingApplication ? (
+                  <div>
+                    <StatusBadge tone={existingApplication.status === "screening_passed" ? "good" : existingApplication.status === "screening_rejected" ? "bad" : "neutral"}>
+                      {applicationStatusLabel(existingApplication.status)}
+                    </StatusBadge>
+                    <p className="mt-3 font-semibold">この案件には応募済みです</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-600">
+                      応募日時: {formatDateTime(existingApplication.appliedAt)}
+                    </p>
+                    {existingApplication.proposalMessage && (
+                      <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
+                        <p className="text-xs font-medium text-stone-500">送信した応募メッセージ</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">{existingApplication.proposalMessage}</p>
+                      </div>
+                    )}
+                    <div className="mt-4 grid gap-2">
+                      {existingApplication.interviewThread && (
+                        <Link className="btn btn-primary" href={`/interviews/${existingApplication.interviewThread.id}`}>面談チャット</Link>
+                      )}
+                      <Link className="btn btn-secondary" href="/freelancer/applications">応募済み案件を見る</Link>
+                    </div>
+                  </div>
+                ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" && readiness.isReady ? (
+                  <form action={applyToJob} className="grid gap-3">
+                    <input type="hidden" name="jobPostId" value={job.id} />
                     <div>
-                      <p className="text-sm font-semibold">{savedJob ? "検討リストに保存済み" : "応募前に検討リストへ保存"}</p>
+                      <p className="font-semibold">応募メッセージ</p>
                       <p className="mt-1 text-sm leading-6 text-stone-600">
-                        条件確認や提案文の準備が必要な案件を、応募前にまとめて見返せます。
+                        企業が最初に読む提案として送信されます。
                       </p>
                     </div>
-                    <form action={savedJob ? removeSavedJob : saveJobForReview}>
-                      <input type="hidden" name="jobPostId" value={job.id} />
-                      <input type="hidden" name="returnTo" value={`/jobs/${job.id}`} />
-                      <SubmitButton className="btn btn-secondary w-full sm:w-auto" pendingLabel="更新中">
-                        {savedJob ? "検討リストから外す" : "検討リストに保存"}
-                      </SubmitButton>
-                    </form>
-                  </div>
-                </div>
-              )}
-              {session?.user?.role === "freelancer" && !existingApplication && (
-                <div className="mb-4">
-                  <RecommendationFeedbackForm
-                    currentReason={freelancerProfile?.recommendationFeedback[0]?.reason}
-                    jobPostId={job.id}
-                    returnTo={`/jobs/${job.id}`}
-                    source="job_detail"
-                    sourceContext={`/jobs/${job.id}`}
-                    visibleReasons={preferenceReasons}
-                  />
-                </div>
-              )}
-              {session?.user?.role === "freelancer" && (
-                <div className="mb-4">
-                  <SafetyReportPanel
-                    acknowledgement={query.safetyReport === "submitted"}
-                    compact
-                    context={{
-                      jobPostId: job.id,
-                      jobApplicationId: existingApplication?.id,
-                      interviewThreadId: existingApplication?.interviewThread?.id,
-                    }}
-                    reports={reporterSafetyReports}
-                    returnTo={`/jobs/${job.id}`}
-                  />
-                </div>
-              )}
-              {existingApplication ? (
-                <div>
-                  <StatusBadge tone={existingApplication.status === "screening_passed" ? "good" : existingApplication.status === "screening_rejected" ? "bad" : "neutral"}>
-                    {applicationStatusLabel(existingApplication.status)}
-                  </StatusBadge>
-                  <p className="mt-3 font-semibold">この案件には応募済みです</p>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">
-                    応募日時: {formatDateTime(existingApplication.appliedAt)}
-                  </p>
-                  {existingApplication.proposalMessage && (
-                    <div className="mt-4 rounded border border-stone-200 bg-stone-50 p-3">
-                      <p className="text-xs font-medium text-stone-500">送信した応募メッセージ</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-stone-700">{existingApplication.proposalMessage}</p>
+                    <TextArea
+                      name="proposalMessage"
+                      label="この案件で貢献できること"
+                      defaultValue={proposalDraft}
+                      required
+                      minLength={40}
+                      maxLength={1200}
+                      placeholder="関連する経験、得意領域、案件条件との合い方を簡潔に入力"
+                    />
+                    <div className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
+                      <p className="font-medium text-stone-800">下書きを編集して送信できます</p>
+                      <p className="mt-1">
+                        一致スキル、近い実績、開始可能時期、面談で確認したい条件を先に伝える形にしています。
+                      </p>
                     </div>
-                  )}
-                  <div className="mt-4 grid gap-2">
-                    {existingApplication.interviewThread && (
-                      <Link className="btn btn-primary" href={`/interviews/${existingApplication.interviewThread.id}`}>面談チャット</Link>
-                    )}
-                    <Link className="btn btn-secondary" href="/freelancer/applications">応募済み案件を見る</Link>
-                  </div>
-                </div>
-              ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" && readiness.isReady ? (
-                <form action={applyToJob} className="grid gap-3">
-                  <input type="hidden" name="jobPostId" value={job.id} />
+                    <TextField
+                      name="proposedStart"
+                      label="稼働開始目安"
+                      defaultValue={freelancerProfile?.workPreference?.availableFrom || freelancerProfile?.availableFrom || ""}
+                      required
+                      maxLength={120}
+                      placeholder="例: 7月第1週から / 契約後2週間で開始可"
+                    />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="grid gap-2">
+                        <TextField
+                          name="rateExpectation"
+                          label="この案件での希望単価"
+                          defaultValue={defaultRateExpectation}
+                          required={!jobRateReference}
+                          maxLength={120}
+                          placeholder={jobRateReference ? `例: ${jobRateReference}で進める / 月100万円以上` : "例: 月100万円以上 / 時給8000円から"}
+                        />
+                        {jobRateReference && (
+                          <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                            <input className="mt-1" type="checkbox" name="confirmJobRateExpectation" />
+                            <span>案件単価 {jobRateReference} を、この応募での希望単価として確認しました</span>
+                            <input type="hidden" name="confirmedRateExpectation" value={jobRateReference} />
+                          </label>
+                        )}
+                      </div>
+                      <div className="grid gap-2">
+                        <TextField
+                          name="workloadExpectation"
+                          label="この案件での希望稼働量"
+                          defaultValue={defaultWorkloadExpectation}
+                          required={!jobWorkloadReference}
+                          maxLength={120}
+                          placeholder={jobWorkloadReference ? `例: ${jobWorkloadReference}で進める / 週4日まで` : "例: 週4日、月128時間まで"}
+                        />
+                        {jobWorkloadReference && (
+                          <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
+                            <input className="mt-1" type="checkbox" name="confirmJobWorkloadExpectation" />
+                            <span>案件稼働量 {jobWorkloadReference} を、この応募での希望稼働量として確認しました</span>
+                            <input type="hidden" name="confirmedWorkloadExpectation" value={jobWorkloadReference} />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                    <TextField
+                      name="contactPreference"
+                      label="連絡希望"
+                      defaultValue={freelancerProfile?.remotePreference || ""}
+                      required
+                      maxLength={120}
+                      placeholder="例: 平日18時以降のオンライン面談を希望"
+                    />
+                    <SubmitButton className="btn btn-primary" pendingLabel="応募送信中">この案件に応募</SubmitButton>
+                  </form>
+                ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" ? (
                   <div>
-                    <p className="font-semibold">応募メッセージ</p>
-                    <p className="mt-1 text-sm leading-6 text-stone-600">
-                      企業が最初に読む提案として送信されます。
+                    <p className="font-semibold">応募準備が未完了です</p>
+                    <p className="mt-2 text-sm leading-6 text-stone-600">
+                      応募前にプロフィール、職務経歴、PDF書類を揃えてください。
                     </p>
-                  </div>
-                  <TextArea
-                    name="proposalMessage"
-                    label="この案件で貢献できること"
-                    defaultValue={proposalDraft}
-                    required
-                    minLength={40}
-                    maxLength={1200}
-                    placeholder="関連する経験、得意領域、案件条件との合い方を簡潔に入力"
-                  />
-                  <div className="rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-600">
-                    <p className="font-medium text-stone-800">下書きを編集して送信できます</p>
-                    <p className="mt-1">
-                      一致スキル、近い実績、開始可能時期、面談で確認したい条件を先に伝える形にしています。
-                    </p>
-                  </div>
-                  <TextField
-                    name="proposedStart"
-                    label="稼働開始目安"
-                    defaultValue={freelancerProfile?.workPreference?.availableFrom || freelancerProfile?.availableFrom || ""}
-                    required
-                    maxLength={120}
-                    placeholder="例: 7月第1週から / 契約後2週間で開始可"
-                  />
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="grid gap-2">
-                      <TextField
-                        name="rateExpectation"
-                        label="この案件での希望単価"
-                        defaultValue={defaultRateExpectation}
-                        required={!jobRateReference}
-                        maxLength={120}
-                        placeholder={jobRateReference ? `例: ${jobRateReference}で進める / 月100万円以上` : "例: 月100万円以上 / 時給8000円から"}
-                      />
-                      {jobRateReference && (
-                        <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
-                          <input className="mt-1" type="checkbox" name="confirmJobRateExpectation" />
-                          <span>案件単価 {jobRateReference} を、この応募での希望単価として確認しました</span>
-                          <input type="hidden" name="confirmedRateExpectation" value={jobRateReference} />
-                        </label>
-                      )}
-                    </div>
-                    <div className="grid gap-2">
-                      <TextField
-                        name="workloadExpectation"
-                        label="この案件での希望稼働量"
-                        defaultValue={defaultWorkloadExpectation}
-                        required={!jobWorkloadReference}
-                        maxLength={120}
-                        placeholder={jobWorkloadReference ? `例: ${jobWorkloadReference}で進める / 週4日まで` : "例: 週4日、月128時間まで"}
-                      />
-                      {jobWorkloadReference && (
-                        <label className="flex gap-2 rounded border border-stone-200 bg-stone-50 p-3 text-sm leading-6 text-stone-700">
-                          <input className="mt-1" type="checkbox" name="confirmJobWorkloadExpectation" />
-                          <span>案件稼働量 {jobWorkloadReference} を、この応募での希望稼働量として確認しました</span>
-                          <input type="hidden" name="confirmedWorkloadExpectation" value={jobWorkloadReference} />
-                        </label>
-                      )}
+                    <div className="mt-4 grid gap-2">
+                      {readiness.items
+                        .filter((item) => !item.done && item.href)
+                        .map((item) => (
+                          <Link className="btn btn-secondary justify-start" href={item.href!} key={item.key}>
+                            {item.label}を登録
+                          </Link>
+                        ))}
                     </div>
                   </div>
-                  <TextField
-                    name="contactPreference"
-                    label="連絡希望"
-                    defaultValue={freelancerProfile?.remotePreference || ""}
-                    required
-                    maxLength={120}
-                    placeholder="例: 平日18時以降のオンライン面談を希望"
-                  />
-                  <SubmitButton className="btn btn-primary" pendingLabel="応募送信中">この案件に応募</SubmitButton>
-                </form>
-              ) : session?.user?.role === "freelancer" && job.applicationStatus === "open" ? (
-                <div>
-                  <p className="font-semibold">応募準備が未完了です</p>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">
-                    応募前にプロフィール、職務経歴、PDF書類を揃えてください。
-                  </p>
-                  <div className="mt-4 grid gap-2">
-                    {readiness.items
-                      .filter((item) => !item.done && item.href)
-                      .map((item) => (
-                        <Link className="btn btn-secondary justify-start" href={item.href!} key={item.key}>
-                          {item.label}を登録
-                        </Link>
-                      ))}
-                  </div>
-                </div>
-              ) : session ? (
-                <p className="text-sm text-stone-600">応募にはフリーランスアカウントが必要です。</p>
-              ) : (
-                <div>
-                  <p className="font-semibold">この案件への応募準備を始める</p>
-                  <p className="mt-2 text-sm leading-6 text-stone-600">
-                    無料登録すると、この案件に戻ってプロフィールや提案文の準備を進められます。
-                  </p>
-                  <div className="mt-4 grid gap-2">
-                    <Link className="btn btn-primary w-full" href={jobRegisterHref}>
-                      登録して応募準備を始める
-                    </Link>
-                    <Link className="btn btn-secondary w-full" href={jobLoginHref}>
-                      ログインして応募
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </Card>
+                ) : (
+                  <p className="text-sm text-stone-600">応募にはフリーランスアカウントが必要です。</p>
+                )}
+              </Card>
+            )}
           </div>
         </div>
       </div>
