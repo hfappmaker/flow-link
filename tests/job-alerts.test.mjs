@@ -54,6 +54,8 @@ test("new published matching jobs create one immediate notification per feed", a
   assert.equal(db.notifications[0].type, "job_alert");
   assert.equal(db.notifications[0].actionUrl, "/jobs/job-1");
   assert.match(db.notifications[0].body, /一致したフィード: React即時/);
+  assert.match(db.notifications[0].body, /一致した理由: 保存キーワード一致: React/);
+  assert.doesNotMatch(db.notifications[0].body, /強い一致理由|マッチスコア|積極的に探している|働き方に近い/);
   assert.equal(db.matches.length, 1);
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
 
@@ -98,6 +100,8 @@ test("daily digest matches wait until the digest window is due", async () => {
   const due = await sendDueJobAlertDigests(db, { cadence: JobAlertCadence.daily, now: new Date("2026-06-10T00:00:00Z") });
   assert.equal(due.notified, 1);
   assert.equal(db.notifications[0].type, "job_alert_digest");
+  assert.match(db.notifications[0].body, /一致した理由: 保存キーワード一致: React/);
+  assert.doesNotMatch(db.notifications[0].body, /主な一致理由|マッチスコア|積極的に探している/);
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
 });
 
@@ -201,6 +205,7 @@ test("saved feed alerts use selected monthly rate bands with normalized lower bo
     const includedDb = alertDb({ rate });
     await evaluateSavedFeedJobAlerts(includedDb, { job: job({ rate: included }) });
     assert.equal(includedDb.notifications.length, 1, `${included} should match saved feed rate ${rate}`);
+    assert.match(includedDb.matches[0].fitReasons, new RegExp(`保存単価条件: 月${rate === "high" ? "80" : rate}万円以上`));
 
     const excludedDb = alertDb({ rate });
     await evaluateSavedFeedJobAlerts(excludedDb, { job: job({ rate: excluded }) });
@@ -226,6 +231,7 @@ test("remote saved feed alerts use shared work-location semantics", async () => 
   const aliasDb = alertDb();
   await evaluateSavedFeedJobAlerts(aliasDb, { job: job({ remotePolicy: "在宅可" }) });
   assert.equal(aliasDb.notifications.length, 1);
+  assert.match(aliasDb.matches[0].fitReasons, /保存リモート条件: 在宅可/);
 
   const hybridDb = alertDb();
   await evaluateSavedFeedJobAlerts(hybridDb, { job: job({ remotePolicy: "週1出社" }) });
@@ -271,6 +277,7 @@ test("saved feed alerts use the same normalized light workload semantics as publ
     const db = alertDb({ workload: "light" });
     await evaluateSavedFeedJobAlerts(db, { job: job({ workload }) });
     assert.equal(db.notifications.length, 1, `${workload} should match light workload alerts`);
+    assert.match(db.matches[0].fitReasons, /保存稼働量条件: 週2-3日目安/);
   }
 
   for (const workload of rejected) {
@@ -292,7 +299,8 @@ test("saved feed alerts match canonical skill aliases without raw substring frag
     }),
   });
   assert.equal(aliasDb.notifications.length, 1);
-  assert.match(aliasDb.matches[0].fitReasons, /希望スキル一致|スキル一致/);
+  assert.match(aliasDb.matches[0].fitReasons, /保存キーワード一致: TS|スキル一致: TypeScript/);
+  assert.doesNotMatch(aliasDb.notifications[0].body, /マッチスコア|積極的に探している/);
 
   const spacedAliasDb = alertDb({ query: "Next JS", skills: "NextJS" });
   await evaluateSavedFeedJobAlerts(spacedAliasDb, {
@@ -329,6 +337,7 @@ test("direct-ready saved feed alerts require publish-ready company, title, and t
   const readyDb = alertDb({ directReadyOnly: true });
   await evaluateSavedFeedJobAlerts(readyDb, { job: job() });
   assert.equal(readyDb.notifications.length, 1);
+  assert.match(readyDb.matches[0].fitReasons, /応募前条件がそろっています/);
 
   const placeholderCompanyDb = alertDb({ directReadyOnly: true });
   await evaluateSavedFeedJobAlerts(placeholderCompanyDb, { job: job({ companyProfile: { name: "未設定の企業", verificationRequests: [] } }) });
@@ -362,6 +371,47 @@ test("ready saved feed alerts use freelancer readiness for borderline condition-
   assert.equal(publicReadyResults.length, 1);
   assert.equal(db.notifications.length, 1);
   assert.equal(db.matches[0].status, JobAlertMatchStatus.notified);
+  assert.match(db.matches[0].fitReasons, /応募準備と案件条件がそろっています|スキル一致: React/);
+});
+
+test("saved feed alerts suppress direct-score-only matches without concrete notification evidence", async () => {
+  const db = alertDb({ fit: "", query: "", skills: "", remote: false });
+
+  await evaluateSavedFeedJobAlerts(db, {
+    job: job({
+      title: "Platform support",
+      description: "幅広い開発支援。",
+      requiredSkills: null,
+      preferredSkills: null,
+      rate: null,
+      workload: null,
+      contractPeriod: null,
+      selectionFlow: null,
+      contractTerms: null,
+      location: null,
+      remotePolicy: null,
+      companyProfile: null,
+    }),
+  });
+
+  assert.equal(db.notifications.length, 0);
+  assert.equal(db.matches.length, 1);
+  assert.equal(db.matches[0].status, JobAlertMatchStatus.suppressed);
+  assert.equal(db.matches[0].suppressionReason, "具体的な一致理由不足");
+  assert.doesNotMatch(db.matches[0].fitReasons, /マッチスコア|積極的に探している|働き方に近い/);
+});
+
+test("trust warnings stay visible before concrete positive alert reasons", async () => {
+  const db = alertDb();
+
+  await evaluateSavedFeedJobAlerts(db, { job: job({ companyProfile: { name: "Acme", verificationRequests: [] } }) });
+
+  assert.equal(db.notifications.length, 1);
+  const body = db.notifications[0].body;
+  assert.match(body, /確認事項: 会社・Web公開情報:/);
+  assert.match(body, /一致した理由: 保存キーワード一致: React/);
+  assert.ok(body.indexOf("確認事項:") < body.indexOf("一致した理由:"));
+  assert.doesNotMatch(body, /強い一致理由|マッチスコア|積極的に探している/);
 });
 
 test("ready saved feed alerts do not imply ready-to-apply when freelancer readiness is incomplete", async () => {
@@ -441,7 +491,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false, fit = "skill", readiness = "complete" } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, failNotifications = false, fit = "skill", readiness = "complete", remote = true } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -467,7 +517,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         id: "feed-1",
         name: cadence === JobAlertCadence.immediate ? "React即時" : "React日次",
         query,
-        remote: true,
+        remote,
         acceptingOnly: true,
         directReadyOnly,
         fit,
