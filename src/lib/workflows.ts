@@ -84,7 +84,9 @@ type ApplyToJobInput = {
   proposalMessage: string;
   proposedStart: string | null;
   rateExpectation: string | null;
+  rateExpectationSource?: string | null;
   workloadExpectation: string | null;
+  workloadExpectationSource?: string | null;
   contactPreference: string | null;
 };
 
@@ -122,7 +124,9 @@ export async function applyToJobWorkflow(db: WorkflowDb, input: ApplyToJobInput)
       proposalMessage: input.proposalMessage,
       proposedStart: input.proposedStart,
       rateExpectation: input.rateExpectation,
+      rateExpectationSource: input.rateExpectationSource ?? (input.rateExpectation ? "candidate" : null),
       workloadExpectation: input.workloadExpectation,
+      workloadExpectationSource: input.workloadExpectationSource ?? (input.workloadExpectation ? "candidate" : null),
       contactPreference: input.contactPreference,
     },
   });

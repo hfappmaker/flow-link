@@ -365,8 +365,70 @@ test("company review uses application-specific condition expectations before pro
     ...missingCandidateTerms,
     jobPost: { requiredSkills: "React, TypeScript", rate: "月100万円", workload: "週5日" },
   });
-  assert.deepEqual(review.nextChecks, ["希望単価", "希望稼働量"]);
+  assert.deepEqual(review.nextChecks, ["希望単価の確認", "希望稼働量の確認"]);
   assert.match(review.reviewQuestions.join("\n"), /応募者のこの案件での希望単価/);
+});
+
+test("company review keeps unconfirmed job defaults out of application expectations and interview candidates", () => {
+  const jobDefault = application({
+    rateExpectation: "月80万円",
+    rateExpectationSource: "job_default",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "job_default",
+    desiredRate: "",
+    availability: "",
+  });
+
+  assert.deepEqual(applicationConditionTerms(jobDefault), {
+    rate: { value: "月80万円", source: "job", display: "月80万円（案件条件・未確認）" },
+    workload: { value: "週5日", source: "job", display: "週5日（案件条件・未確認）" },
+  });
+
+  const fit = applicationConditionFit({
+    ...jobDefault,
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+  assert.equal(fit.rate.readiness, "unconfirmed");
+  assert.equal(fit.rate.label, "要確認");
+  assert.equal(fit.workload.readiness, "unconfirmed");
+  assert.equal(fit.workload.label, "要確認");
+
+  const review = buildApplicationReview({
+    ...jobDefault,
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+  assert.equal(review.interviewReadinessPercent, 71);
+  assert.equal(review.isInterviewReady, false);
+  assert.deepEqual(review.nextChecks, ["希望単価の確認", "希望稼働量の確認"]);
+  assert.match(review.reviewQuestions.join("\n"), /案件単価を応募者本人の希望単価/);
+});
+
+test("company review counts explicitly confirmed job terms as application expectations", () => {
+  const confirmedJobTerms = application({
+    rateExpectation: "月80万円",
+    rateExpectationSource: "confirmed_job",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "confirmed_job",
+    desiredRate: "",
+    availability: "",
+  });
+  const fit = applicationConditionFit({
+    ...confirmedJobTerms,
+    jobPost: { rate: "月80万円", workload: "週5日" },
+  });
+  const review = buildApplicationReview({
+    ...confirmedJobTerms,
+    jobPost: { requiredSkills: "React, TypeScript", rate: "月80万円", workload: "週5日" },
+  });
+
+  assert.deepEqual(applicationConditionTerms(confirmedJobTerms), {
+    rate: { value: "月80万円", source: "application", display: "月80万円" },
+    workload: { value: "週5日", source: "application", display: "週5日" },
+  });
+  assert.equal(fit.rate.readiness, "ready");
+  assert.equal(fit.workload.readiness, "ready");
+  assert.equal(review.isInterviewReady, true);
+  assert.deepEqual(review.nextChecks, []);
 });
 
 test("company review marks compatible application rate and workload as interview-ready", () => {
@@ -474,7 +536,9 @@ function application(overrides = {}) {
     proposalMessage: overrides.proposalMessage ?? "Platform delivery experience.",
     proposedStart: overrides.proposedStart ?? "2026-07-01",
     rateExpectation: field(overrides, "rateExpectation", "月100万円以上"),
+    rateExpectationSource: field(overrides, "rateExpectationSource", "candidate"),
     workloadExpectation: field(overrides, "workloadExpectation", "週4日"),
+    workloadExpectationSource: field(overrides, "workloadExpectationSource", "candidate"),
     contactPreference: field(overrides, "contactPreference", "メール希望"),
     freelancerProfile: {
       fullName: overrides.fullName ?? "Aoi Tanaka",

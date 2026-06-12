@@ -485,8 +485,24 @@ export async function applyToJob(formData: FormData) {
   const jobPostId = toText(formData.get("jobPostId"));
   const proposalMessage = toText(formData.get("proposalMessage"));
   const proposedStart = toOptionalText(formData.get("proposedStart"));
-  const rateExpectation = toOptionalText(formData.get("rateExpectation"));
-  const workloadExpectation = toOptionalText(formData.get("workloadExpectation"));
+  const rateExpectationInput = toOptionalText(formData.get("rateExpectation"));
+  const workloadExpectationInput = toOptionalText(formData.get("workloadExpectation"));
+  const rateExpectation = confirmedExpectationValue({
+    value: rateExpectationInput,
+    confirmedJobValue: toOptionalText(formData.get("confirmedRateExpectation")),
+    confirmed: formData.get("confirmJobRateExpectation") === "on",
+  });
+  const workloadExpectation = confirmedExpectationValue({
+    value: workloadExpectationInput,
+    confirmedJobValue: toOptionalText(formData.get("confirmedWorkloadExpectation")),
+    confirmed: formData.get("confirmJobWorkloadExpectation") === "on",
+  });
+  const rateExpectationSource = expectationSource(rateExpectationInput, rateExpectation, formData.get("confirmJobRateExpectation") === "on");
+  const workloadExpectationSource = expectationSource(
+    workloadExpectationInput,
+    workloadExpectation,
+    formData.get("confirmJobWorkloadExpectation") === "on",
+  );
   const contactPreference = toOptionalText(formData.get("contactPreference"));
   if (proposalMessage.length < 40 || proposalMessage.length > 1200) {
     throw new Error("応募メッセージは40文字以上1200文字以内で入力してください。");
@@ -507,7 +523,9 @@ export async function applyToJob(formData: FormData) {
     proposalMessage,
     proposedStart,
     rateExpectation,
+    rateExpectationSource,
     workloadExpectation,
+    workloadExpectationSource,
     contactPreference,
   });
   if (!applicationReadiness.isReady) {
@@ -519,12 +537,31 @@ export async function applyToJob(formData: FormData) {
     proposalMessage,
     proposedStart,
     rateExpectation,
+    rateExpectationSource,
     workloadExpectation,
+    workloadExpectationSource,
     contactPreference,
   });
 
   revalidatePath("/jobs");
   redirect("/freelancer/applications");
+}
+
+function confirmedExpectationValue({
+  value,
+  confirmedJobValue,
+  confirmed,
+}: {
+  value: string | null;
+  confirmedJobValue: string | null;
+  confirmed: boolean;
+}) {
+  return value || (confirmed ? confirmedJobValue : null);
+}
+
+function expectationSource(inputValue: string | null, persistedValue: string | null, confirmedJobTerm: boolean) {
+  if (!persistedValue) return null;
+  return inputValue ? "candidate" : confirmedJobTerm ? "confirmed_job" : "job_default";
 }
 
 export async function saveJobForReview(formData: FormData) {

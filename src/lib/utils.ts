@@ -224,7 +224,9 @@ type ApplicationReviewInput = {
   proposalMessage?: string | null;
   proposedStart?: string | null;
   rateExpectation?: string | null;
+  rateExpectationSource?: string | null;
   workloadExpectation?: string | null;
+  workloadExpectationSource?: string | null;
   freelancerProfile: {
     skills?: string | null;
     availableFrom?: string | null;
@@ -264,17 +266,24 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ),
       nextCheck: "開始条件",
     },
-    { done: conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch", nextCheck: conditionFit.rate.nextCheck },
-    { done: conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch", nextCheck: conditionFit.workload.nextCheck },
+    {
+      done: !["missing", "mismatch", "unconfirmed"].includes(conditionFit.rate.readiness),
+      nextCheck: conditionFit.rate.nextCheck,
+    },
+    {
+      done: !["missing", "mismatch", "unconfirmed"].includes(conditionFit.workload.readiness),
+      nextCheck: conditionFit.workload.nextCheck,
+    },
   ];
   const interviewReadinessPercent = Math.round((reviewSignals.filter((signal) => signal.done).length / reviewSignals.length) * 100);
-  const hasConditionMismatch = conditionFit.rate.readiness === "mismatch" || conditionFit.workload.readiness === "mismatch";
+  const hasConditionBlocker = ["mismatch", "unconfirmed"].includes(conditionFit.rate.readiness) ||
+    ["mismatch", "unconfirmed"].includes(conditionFit.workload.readiness);
 
   return {
     requiredSkillMatches,
     matchPercent,
     interviewReadinessPercent,
-    isInterviewReady: !hasConditionMismatch && interviewReadinessPercent >= 80 && application.status === "applied",
+    isInterviewReady: !hasConditionBlocker && interviewReadinessPercent >= 80 && application.status === "applied",
     nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
     reviewQuestions: [
       ...(missingSkillCount > 0
@@ -288,6 +297,8 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
         : []),
       ...(conditionFit.rate.readiness === "mismatch"
         ? ["応募者の希望単価が案件単価に収まるか、条件調整の余地を確認する"]
+        : conditionFit.rate.readiness === "unconfirmed"
+          ? ["案件単価を応募者本人の希望単価として進めてよいか確認する"]
         : conditionFit.rate.readiness === "review"
           ? ["応募者の希望単価と案件単価の前提を面談前に確認する"]
           : []),
@@ -296,6 +307,8 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
         : []),
       ...(conditionFit.workload.readiness === "mismatch"
         ? ["応募者の希望稼働量で案件を進められるか、稼働日数をすり合わせる"]
+        : conditionFit.workload.readiness === "unconfirmed"
+          ? ["案件稼働量を応募者本人の希望稼働量として進めてよいか確認する"]
         : conditionFit.workload.readiness === "review"
           ? ["応募者の希望稼働量と案件稼働量の前提を面談前に確認する"]
           : []),
@@ -317,7 +330,9 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
 
 type ApplicationConditionTermsInput = {
   rateExpectation?: string | null;
+  rateExpectationSource?: string | null;
   workloadExpectation?: string | null;
+  workloadExpectationSource?: string | null;
   freelancerProfile: {
     desiredRate?: string | null;
     availability?: string | null;
@@ -330,7 +345,7 @@ type ApplicationConditionTermsInput = {
 
 type ApplicationConditionTerm = {
   value: string;
-  source: "application" | "profile" | "missing";
+  source: "application" | "profile" | "job" | "missing";
   display: string;
 };
 
@@ -344,7 +359,7 @@ type ApplicationConditionFitInput = ApplicationConditionTermsInput & {
 type ApplicationConditionFit = {
   term: ApplicationConditionTerm;
   tone: "good" | "neutral" | "warn";
-  readiness: "ready" | "review" | "mismatch" | "missing";
+  readiness: "ready" | "review" | "mismatch" | "missing" | "unconfirmed";
   label: string;
   nextCheck: string;
 };
@@ -362,7 +377,7 @@ export function applicationConditionFit(application: ApplicationConditionFitInpu
       readyLabel: "適合",
       reviewLabel: "要確認",
       mismatchLabel: "要すり合わせ",
-      missingNextCheck: "希望単価",
+      missingNextCheck: "希望単価の確認",
       mismatchNextCheck: "希望単価のすり合わせ",
     }),
     workload: conditionFit({
@@ -372,7 +387,7 @@ export function applicationConditionFit(application: ApplicationConditionFitInpu
       readyLabel: "適合",
       reviewLabel: "要確認",
       mismatchLabel: "要すり合わせ",
-      missingNextCheck: "希望稼働量",
+      missingNextCheck: "希望稼働量の確認",
       mismatchNextCheck: "希望稼働量のすり合わせ",
     }),
   };
@@ -403,6 +418,15 @@ function conditionFit({
       tone: "warn",
       readiness: "missing",
       label: missingLabel,
+      nextCheck: missingNextCheck,
+    };
+  }
+  if (term.source === "job") {
+    return {
+      term,
+      tone: "neutral",
+      readiness: "unconfirmed",
+      label: reviewLabel,
       nextCheck: missingNextCheck,
     };
   }
@@ -443,13 +467,20 @@ export function applicationConditionTerms(application: ApplicationConditionTerms
   const profileWorkload = application.freelancerProfile.workPreference?.workload?.trim() || application.freelancerProfile.availability?.trim();
 
   return {
-    rate: conditionTerm(applicationRate, profileRate),
-    workload: conditionTerm(applicationWorkload, profileWorkload),
+    rate: conditionTerm(applicationRate, profileRate, application.rateExpectationSource),
+    workload: conditionTerm(applicationWorkload, profileWorkload, application.workloadExpectationSource),
   };
 }
 
-function conditionTerm(applicationValue?: string | null, profileValue?: string | null): ApplicationConditionTerm {
+function conditionTerm(
+  applicationValue?: string | null,
+  profileValue?: string | null,
+  applicationSource?: string | null,
+): ApplicationConditionTerm {
   if (applicationValue) {
+    if (applicationSource === "job_default") {
+      return { value: applicationValue, source: "job", display: `${applicationValue}（案件条件・未確認）` };
+    }
     return { value: applicationValue, source: "application", display: applicationValue };
   }
   if (profileValue) {

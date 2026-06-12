@@ -58,8 +58,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const conditionTerms = applicationConditionTerms(application);
   const conditionFit = applicationConditionFit(application);
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
-  const hasRateSignal = conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch";
-  const hasWorkloadSignal = conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch";
+  const hasRateSignal = !["missing", "mismatch", "unconfirmed"].includes(conditionFit.rate.readiness);
+  const hasWorkloadSignal = !["missing", "mismatch", "unconfirmed"].includes(conditionFit.workload.readiness);
   const interviewDecisionItems = [
     {
       label: "必須スキル",
@@ -145,8 +145,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     workload: application.jobPost.workload,
     rateFitLabel: conditionFit.rate.label,
     workloadFitLabel: conditionFit.workload.label,
-    hasRateFit: conditionFit.rate.readiness !== "missing" && conditionFit.rate.readiness !== "mismatch",
-    hasWorkloadFit: conditionFit.workload.readiness !== "missing" && conditionFit.workload.readiness !== "mismatch",
+    hasRateFit: hasRateSignal,
+    hasWorkloadFit: hasWorkloadSignal,
     contractTerms: application.jobPost.contractTerms,
   });
   const handoffMessageDraft = buildScreeningPassedHandoffMessage({

@@ -80,7 +80,9 @@ export type ApplicationReadinessInput = {
   proposalMessage?: string | null;
   proposedStart?: string | null;
   rateExpectation?: string | null;
+  rateExpectationSource?: string | null;
   workloadExpectation?: string | null;
+  workloadExpectationSource?: string | null;
   contactPreference?: string | null;
 };
 
@@ -188,14 +190,14 @@ export function getApplicationReadiness(
       label: "応募時の希望単価",
       detail: "企業が面談前にこの案件での単価期待を判断できる応募時点の見込み",
       severity: "required",
-      done: Boolean(input.rateExpectation?.trim()),
+      done: hasConfirmedExpectation(input.rateExpectation, input.rateExpectationSource),
     },
     {
       key: "workload-expectation",
       label: "応募時の希望稼働量",
       detail: "企業が面談前にこの案件での週あたり稼働量を判断できる応募時点の見込み",
       severity: "required",
-      done: Boolean(input.workloadExpectation?.trim()),
+      done: hasConfirmedExpectation(input.workloadExpectation, input.workloadExpectationSource),
     },
     {
       key: "contact-preference",
@@ -206,6 +208,10 @@ export function getApplicationReadiness(
     },
   ];
   return summarizeReadiness(items);
+}
+
+function hasConfirmedExpectation(value?: string | null, source?: string | null) {
+  return Boolean(value?.trim()) && source !== "job_default";
 }
 
 export function getJobPublishingReadiness(

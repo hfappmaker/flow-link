@@ -74,6 +74,45 @@ test("application readiness requires profile evidence and next-action fields", (
   assert.equal(ready.isReady, true);
 });
 
+test("application readiness accepts candidate defaults but not unconfirmed job defaults", () => {
+  const profileDefault = getApplicationReadiness(readyProfile, {
+    proposalMessage: "応募メッセージ".repeat(10),
+    proposedStart: "7月第1週",
+    rateExpectation: "月90万円",
+    rateExpectationSource: "candidate",
+    workloadExpectation: "週4日",
+    workloadExpectationSource: "candidate",
+    contactPreference: "平日18時以降",
+  });
+  assert.equal(profileDefault.isReady, true);
+
+  const jobDefault = getApplicationReadiness(readyProfile, {
+    proposalMessage: "応募メッセージ".repeat(10),
+    proposedStart: "7月第1週",
+    rateExpectation: "月80万円",
+    rateExpectationSource: "job_default",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "job_default",
+    contactPreference: "平日18時以降",
+  });
+  assert.equal(jobDefault.isReady, false);
+  assert.deepEqual(
+    jobDefault.missingRequired.map((item) => item.label),
+    ["応募時の希望単価", "応募時の希望稼働量"],
+  );
+
+  const confirmedJobTerms = getApplicationReadiness(readyProfile, {
+    proposalMessage: "応募メッセージ".repeat(10),
+    proposedStart: "7月第1週",
+    rateExpectation: "月80万円",
+    rateExpectationSource: "confirmed_job",
+    workloadExpectation: "週5日",
+    workloadExpectationSource: "confirmed_job",
+    contactPreference: "平日18時以降",
+  });
+  assert.equal(confirmedJobTerms.isReady, true);
+});
+
 test("job publishing readiness separates draft guidance from publish eligibility", () => {
   const draft = getJobPublishingReadiness(
     { ...readyJob, rate: "", contractTerms: "", selectionFlow: "" },
