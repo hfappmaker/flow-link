@@ -611,6 +611,28 @@ test("company review marks compatible application rate and workload as interview
   assert.deepEqual(review.nextChecks, []);
 });
 
+test("company review marks compatible hourly application rate as interview-ready", () => {
+  const review = buildApplicationReview({
+    ...application({
+      rateExpectation: "時給7000円から",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { requiredSkills: "React, TypeScript", rate: "時給8000円", workload: "週5日" },
+  });
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "時給7000円から",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { rate: "時給8000円", workload: "週5日" },
+  });
+
+  assert.equal(fit.rate.readiness, "ready");
+  assert.equal(fit.rate.label, "適合");
+  assert.equal(review.isInterviewReady, true);
+  assert.deepEqual(review.nextChecks, []);
+});
+
 test("company review flags applicant rate above the posted job rate before interview-ready", () => {
   const review = buildApplicationReview({
     ...application({
@@ -633,6 +655,19 @@ test("company review flags applicant rate above the posted job rate before inter
   assert.equal(review.isInterviewReady, false);
   assert.deepEqual(review.nextChecks, ["希望単価のすり合わせ"]);
   assert.match(review.reviewQuestions.join("\n"), /希望単価/);
+});
+
+test("company review flags applicant hourly rate above the posted hourly range", () => {
+  const fit = applicationConditionFit({
+    ...application({
+      rateExpectation: "時給7000円から",
+      workloadExpectation: "週5日",
+    }),
+    jobPost: { rate: "(5,000〜6,000 円/1h)", workload: "週5日" },
+  });
+
+  assert.equal(fit.rate.readiness, "mismatch");
+  assert.equal(fit.rate.label, "要すり合わせ");
 });
 
 test("company review flags light applicant workload against weekly-five jobs before interview-ready", () => {

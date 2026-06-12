@@ -416,6 +416,40 @@ test("work-location preference reasons use normalized remote semantics", () => {
   assert.equal(onsiteReasons.find((reason) => reason.label === "働き方ミスマッチ")?.tone, "warn");
 });
 
+test("recommendation preference reasons honor hourly rate fit without monthly conversion", () => {
+  const matchingReasons = visiblePreferenceReasons({
+    ...job({ rate: "時給8000円" }),
+    workPreference: {
+      status: "active",
+      targetRate: "時給7000円から",
+      lastConfirmedAt: new Date(),
+    },
+  }, 6);
+  const matchingRate = matchingReasons.find((reason) => reason.label === "単価条件に近い");
+  assert.equal(matchingRate?.tone, "good");
+  assert.match(matchingRate?.detail ?? "", /希望: 時給7000円から \/ 案件: 時給8000円/);
+
+  const mismatchReasons = visiblePreferenceReasons({
+    ...job({ rate: "(5,000〜6,000 円/1h)" }),
+    workPreference: {
+      status: "active",
+      targetRate: "時給7000円から",
+      lastConfirmedAt: new Date(),
+    },
+  }, 6);
+  assert.equal(mismatchReasons.find((reason) => reason.label === "単価ミスマッチ")?.tone, "warn");
+
+  const mixedUnitReasons = visiblePreferenceReasons({
+    ...job({ rate: "月額120万円" }),
+    workPreference: {
+      status: "active",
+      targetRate: "時給7000円から",
+      lastConfirmedAt: new Date(),
+    },
+  }, 6);
+  assert.equal(mixedUnitReasons.find((reason) => reason.label === "単価要確認")?.tone, "neutral");
+});
+
 test("saved-job readiness counts use the shared open score and contract thresholds", () => {
   const savedRecommendations = [
     buildJobRecommendation(job({ id: "ready" }), readyContext),

@@ -510,8 +510,17 @@ function alertFitReasons(
   }
   if (exactPositiveFeedback) reasons.push("保存フィードバック: 良さそう");
   if (trustWarning) reasons.push(`確認事項あり: ${trustWarning}`);
+  for (const reason of recommendation.preferenceReasons) {
+    if ((reason.label === "単価条件に近い" || reason.label === "単価ミスマッチ") && isHourlyRateReason(reason.detail)) {
+      reasons.push(reason.label);
+    }
+  }
 
   return uniqueReasons(reasons).slice(0, JOB_ALERT_REASON_LIMIT).join("、") || null;
+}
+
+function isHourlyRateReason(detail: string) {
+  return /(時給|\/(?:1)?h|\/hour|hourly)/i.test(detail);
 }
 
 function alertTrustWarning(recommendation: ReturnType<typeof buildJobRecommendation<AlertJob>>) {
