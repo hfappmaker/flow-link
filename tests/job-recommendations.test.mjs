@@ -173,6 +173,58 @@ test("ready-to-apply requires score and contract readiness thresholds", () => {
   assert.equal(weakContract.isReadyToApply, false);
 });
 
+test("avoided conditions take priority and prevent ready recommendations", () => {
+  const avoidedCases = [
+    { id: "onsite", excludedConditions: "常駐必須", remotePolicy: "常駐必須" },
+    { id: "night", excludedConditions: "夜間中心", description: "夜間中心の運用改善を含みます。" },
+    { id: "short", excludedConditions: "短納期のみ", workload: "短納期のみ・週3日" },
+  ];
+
+  for (const { excludedConditions, id, ...jobOverrides } of avoidedCases) {
+    const recommendation = buildJobRecommendation(job({ id, ...jobOverrides }), {
+      ...readyContext,
+      workPreference: {
+        status: "active",
+        targetRole: "TypeScript",
+        preferredSkills: "TypeScript, React",
+        targetRate: "80万円",
+        workload: "週3日",
+        locationMode: "flexible",
+        excludedConditions,
+        lastConfirmedAt: new Date(),
+      },
+    });
+
+    assert.equal(recommendation.preferenceReasons[0].label, "避けたい条件あり", id);
+    assert.equal(recommendation.preferenceReasons[0].detail, excludedConditions, id);
+    assert.equal(recommendation.wouldBeReadyToApplyWithoutAvoidance, true, id);
+    assert.equal(recommendation.isReadyToApply, false, id);
+  }
+});
+
+test("fit ready excludes avoided-condition jobs while broad search keeps them recoverable", () => {
+  const avoidedJob = job({ id: "avoided", remotePolicy: "常駐必須" });
+  const goodJob = job({ id: "good" });
+  const context = {
+    ...readyContext,
+    workPreference: {
+      status: "active",
+      preferredSkills: "TypeScript, React",
+      targetRate: "80万円",
+      workload: "週3日",
+      locationMode: "flexible",
+      excludedConditions: "常駐必須",
+      lastConfirmedAt: new Date(),
+    },
+  };
+
+  const broadResults = rankJobRecommendations([avoidedJob, goodJob], context);
+  const readyResults = rankJobRecommendations([avoidedJob, goodJob], context, { fit: "ready" });
+
+  assert.deepEqual(new Set(broadResults.map((recommendation) => recommendation.job.id)), new Set(["avoided", "good"]));
+  assert.deepEqual(readyResults.map((recommendation) => recommendation.job.id), ["good"]);
+});
+
 test("public direct-ready query boundary matches direct contract checklist", () => {
   const candidates = [
     job({ id: "ready" }),
