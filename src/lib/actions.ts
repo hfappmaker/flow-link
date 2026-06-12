@@ -261,6 +261,7 @@ export async function saveCurrentJobSearch(formData: FormData) {
       query: toOptionalText(formData.get("q")),
       remote: formData.get("remote") === "remote",
       acceptingOnly: formData.get("accepting") === "open",
+      freshOnly: formData.get("candidate") === "fresh",
       directReadyOnly: formData.get("directReady") === "ready",
       fit: toOptionalText(formData.get("fit")),
       workload: toOptionalText(formData.get("workload")),
