@@ -79,10 +79,10 @@ export default async function CompanyProfilePage({
             <div>
               <h2 className="font-semibold">フリーランスに表示される信頼状態</h2>
               <p className="mt-1 text-sm leading-6 text-stone-600">
-                Flow Link確認済み、確認リクエスト中、自己申告、未記載、期限切れ、再提出が必要、を分けて表示します。支払い保証や法務確認ではありません。
+                Flow Link確認済み、確認リクエスト中、自己申告、未記載、更新確認が必要、再提出が必要、を分けて表示します。支払い保証や法務確認ではありません。
               </p>
             </div>
-            <StatusBadge tone={confidence.tone}>信頼スコア {confidence.score}%</StatusBadge>
+            <StatusBadge tone={confidence.tone}>{confidence.label}</StatusBadge>
           </div>
           <div className="mt-4 grid gap-2">
             {confidence.items.slice(0, 3).map((item) => (
@@ -229,8 +229,32 @@ function FreelancerPreviewItem({
         <span className="text-right text-xs font-semibold">{statusLabels[status]}</span>
       </div>
       <p className="mt-1 leading-6 text-stone-600">{detail}</p>
+      <p className="mt-2 border-t border-current/10 pt-2 text-xs font-medium leading-5 text-stone-700">
+        次の対応: {trustNextAction(label, status)}
+      </p>
     </div>
   );
+}
+
+function trustNextAction(label: string, status: "confirmed" | "pending" | "selfReported" | "missing" | "stale" | "rejected") {
+  if (status === "confirmed") return "確認済みの範囲を最新に保ち、会社情報や支払い方針が変わったら再提出してください。";
+  if (status === "pending") return "Flow Linkの確認結果を待ち、追加根拠を求められたら補足してください。";
+  if (status === "stale") return "公開情報や支払い方針の最新根拠を確認リクエストから再提出してください。";
+  if (status === "rejected") return "却下理由に沿って、不足または不一致のある根拠を修正して再提出してください。";
+
+  if (label === "会社・Web公開情報") {
+    return status === "missing"
+      ? "会社説明、公開Webサイト、連絡窓口、所在地・稼働エリアを保存してください。"
+      : "フリーランスには自己申告として表示されます。確認済みにするには公開Webサイトや連絡窓口の根拠を提出してください。";
+  }
+  if (label === "支払い・契約条件") {
+    return status === "missing"
+      ? "請求締め、支払い時期、契約主体、確認窓口を保存してください。"
+      : "フリーランスには自己申告として表示されます。確認済みにするには契約条件と請求・支払い方針の根拠を提出してください。";
+  }
+  return status === "missing"
+    ? "案件作成・編集で単価、稼働率、期間、働き方を具体化してください。"
+    : "案件条件として表示されます。変更時は案件編集で最新の条件に更新してください。";
 }
 
 function RequestHistoryItem({
