@@ -236,6 +236,7 @@ Primary goal:
 - Use docs/automation/agent-loop-competitive-lens.md to understand the target freelancer/company personas and competitor reference points when the issue includes product, UX, visual-design, or competitive relevance.
 - If the issue includes Competitor evidence or User voice evidence, preserve that research intent in the implementation instead of reducing it to generic feature parity.
 - Do not solve competitive issues by adding controls blindly. Prefer removing, combining, staging, or relocating choices when that better preserves a clear next action for the target persona.
+- Treat avoidable manual entry as a product and UX cost. When the issue names manual input burden, prefer reuse, defaults, inferred values, import/upload, saved conditions, structured choices, draft preservation, or progressive disclosure over adding more free-text fields.
 - For validation/readiness issues, preserve a lightweight registration path, prefer actionable readiness guidance before hard blocking, and hard-block only when missing or invalid data would harm marketplace quality for the other side.
 
 Issue rules:
@@ -245,7 +246,7 @@ Issue rules:
 - Prefer local write-path verification when feasible.
 - Before committing, compare the implementation against every Acceptance criteria bullet in the selected issue body and any follow-up issue comments.
 - Do not mark the issue fixed merely because the main technical bug is addressed. User-facing copy, option coverage, saved-search or alert consistency, and verification criteria count as part of done when the issue names them.
-- If the issue includes Target persona, Competitor evidence, User voice evidence, Competitive relevance, User impact, or feature-overload concerns, verify the implemented flow still improves that persona's decision/action and does not make the first-time next action less clear.
+- If the issue includes Target persona, Manual input burden, Competitor evidence, User voice evidence, Competitive relevance, User impact, or feature-overload concerns, verify the implemented flow still improves that persona's decision/action and does not make the first-time next action less clear.
 - If any acceptance criterion remains intentionally unsatisfied, either complete it in the same scoped change or leave the worktree clean and explain the blocker instead of committing a partial fix.
 
 Playwright verification policy:
@@ -270,6 +271,7 @@ Repository rules:
 Verification:
 - Run relevant commands, usually npm run typecheck, npm run lint, npm run build, or targeted checks based on the issue.
 - For UI changes that add options, controls, or displayed information, include a short check that the primary next action remains clear for the target persona.
+- For UI changes that affect forms or onboarding, include a short check that the implementation does not increase unnecessary manual entry and preserves or improves reuse/defaulting/draft behavior when relevant.
 - For area:bug, area:ux, and area:visual-design, include the Playwright scenario, target URL, viewport(s), and result in your final message. If Playwright could not run, include the exact reason and fallback checks.
 - For area:visual-design, include the saved screenshot paths in your final message.
 - Include commands/checks run in your final message.

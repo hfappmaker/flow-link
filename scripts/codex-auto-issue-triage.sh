@@ -77,6 +77,7 @@ Product checklist:
 - Use docs/automation/agent-loop-competitive-lens.md as the baseline competitor and persona lens before choosing an issue.
 - Open current competitor pages or credible recent writeups; do not rely only on search snippets or memory.
 - Include at least one user-voice source when network access is available, such as recent reviews, comparison articles, blog posts, note/Zenn/Qiita posts, social posts, or support/community discussions.
+- Treat unnecessary manual entry as a product gap when freelancers or companies must repeatedly type information that could be reused, inferred, imported, selected, defaulted, saved, or progressively requested.
 - Audit search, filters, recommendations, saved searches, alerts, rate/price behavior, trust labels, readiness gates, and marketplace matching.
 - Look for semantic correctness gaps: UI copy promises concrete behavior, but implementation uses free-text matching, keyword contains checks, loose heuristics, hard-coded fragments, incomplete placeholders, or duplicated ad hoc parsing.
 - Look for option granularity gaps: controls whose choices are too narrow, arbitrary, or implementation-shaped, such as a single hard-coded threshold where users need practical bands.
@@ -94,11 +95,12 @@ EOF
     BROWSER_POLICY="Playwright browser verification is required by default for UX triage when the issue concerns navigation, screen transitions, missing route-transition or form-submit pending feedback, forms, login/register flows, empty/loading/error states, or task completion. Copy-only issues may use static inspection. If Playwright cannot run, state the exact blocker in the issue Evidence and Verification plan."
     MODE_POLICY=$(cat <<'EOF'
 UX checklist:
-- Focus on navigation, screen transitions, user flow, pending/loading feedback, form-submit feedback, copy clarity, input burden, and empty/loading/error states.
+- Focus on navigation, screen transitions, user flow, pending/loading feedback, form-submit feedback, copy clarity, manual input burden, and empty/loading/error states.
 - Treat missing feedback after clicking links, submitting forms, switching filters, or starting navigation as issue-worthy unless already covered.
 - Use the freelancer/company personas in docs/automation/agent-loop-competitive-lens.md to decide whether the current flow makes the next action obvious.
 - When competitor/user research is relevant, cite the competitor behavior or user voice that shows why the flow causes confusion or confidence loss.
 - Treat feature overload as a UX issue when too many controls, labels, or competing actions make the next step unclear.
+- Treat repeated free-text fields, duplicated entry, lost drafts, unnecessary required fields, and lack of profile/company/job-data reuse as issue-worthy when they slow a real task.
 - Avoid developer-facing terms such as MVC, MVP, direct matching, direct contract, core differentiation, or implementation jargon in user-facing flows.
 - Use Playwright for navigation, forms, pending/loading, and task-completion issues. Copy-only issues may use static inspection.
 - If behavior fails with 404/500 or a runtime error, classify it as bug instead.
@@ -280,14 +282,15 @@ Strategic filter:
 - Skip cosmetic, speculative, or internally interesting findings when competitive/user impact is weak.
 
 Primary personas:
-- Freelancer: quickly decides whether a job is worth applying to by checking rate, workload, remote policy, company trust, required skills, application readiness, and selection status.
-- Company operator: quickly decides whether a candidate is worth interviewing by checking skills, experience, documents, start timing, rate expectations, and response priority.
-- Shared rule: neither persona should need to understand implementation terms, internal product strategy, or a crowded control surface. The next action must be obvious.
+- Freelancer: quickly decides whether a job is worth applying to by checking rate, workload, remote policy, company trust, required skills, application readiness, and selection status with as little manual entry as possible.
+- Company operator: quickly decides whether a candidate is worth interviewing by checking skills, experience, documents, start timing, rate expectations, and response priority with as little manual entry as possible.
+- Shared rule: neither persona should need to understand implementation terms, internal product strategy, repeated free-text entry, or a crowded control surface. The next action must be obvious.
 
 Persona and competitor lens:
 - Read docs/automation/agent-loop-competitive-lens.md before filing product, UX, or visual-design issues; use it as baseline context for other modes when relevant.
 - State the target persona and competitor behavior behind the issue. If the issue cannot name a persona pain or competitor switching reason, skip it.
 - Do not create issues just because a competitor has a feature. Create them only when Flow Link can reduce decision time, ambiguity, risk, or mismatched applications.
+- Treat avoidable manual entry as a competitive weakness. Prefer reuse, defaults, inferred values, import/upload, saved conditions, structured choices, draft preservation, and progressive disclosure over repeated typing.
 - For new functionality, first consider whether removing, combining, staging, moving details to a secondary view, or saving conditions would solve the problem with less user confusion.
 
 Research evidence gate:
@@ -325,6 +328,7 @@ Issue body:
 ## Summary
 ## Evidence
 ## Target persona
+## Manual input burden
 ## Competitor evidence
 ## User voice evidence
 ## Competitive relevance
@@ -339,6 +343,7 @@ Issue body:
 Quality bar:
 - Write from the freelancer/company user's perspective.
 - User impact must name the target persona and the decision, action, or trust concern being improved.
+- Manual input burden must say whether the issue reduces typing, repeated entry, lost work, unnecessary required fields, or free-text ambiguity. If not relevant, say so.
 - Competitor evidence must cite concrete observed behavior or state why current research was unavailable.
 - User voice evidence must cite a concrete praise, complaint, anxiety, or switching reason for product issues when network access is available.
 - In Competitive relevance, state which competitor user behavior this affects, why Flow Link becomes more attractive, and why now.

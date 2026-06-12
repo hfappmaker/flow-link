@@ -63,6 +63,10 @@ unscoped edits.
 - New functionality must pass a simplicity check: adding controls or surfaced
   information is only valid when it reduces decision time, ambiguity, risk, or
   mismatched applications more than it increases user choice burden.
+- Avoidable manual entry is treated as a product and UX cost. Prefer profile or
+  company-data reuse, defaults, inferred values, upload/import, saved
+  conditions, structured choices, draft preservation, and progressive
+  disclosure over repeated free-text input.
 
 Useful local commands:
 

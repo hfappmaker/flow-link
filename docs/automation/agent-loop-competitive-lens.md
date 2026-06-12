@@ -7,13 +7,14 @@ better issues, not to copy competitor features wholesale.
 
 - Freelancer: wants to quickly decide whether a job is worth applying to by
   checking rate, workload, remote policy, company trust, required skills,
-  application readiness, and selection status.
+  application readiness, and selection status with as little manual entry as
+  possible.
 - Company operator: wants to quickly decide whether a candidate is worth moving
   to interview by checking skills, experience, documents, start timing, rate
-  expectations, and response priority.
+  expectations, and response priority with as little manual entry as possible.
 - Shared need: neither persona should need to understand implementation terms,
   internal product strategy, or a crowded control surface. The next action must
-  be obvious.
+  be obvious, and repeated free-text entry should be avoided.
 
 ## Competitor reference points
 
@@ -71,6 +72,10 @@ better issues, not to copy competitor features wholesale.
 - Create issues for persona pain, not for feature inventory parity.
 - Prefer issues that reduce decision time, ambiguity, risk, or mismatched
   applications for one or both personas.
+- Treat unnecessary manual entry as a first-class product and UX problem. Prefer
+  reuse, defaults, inferred values, import/upload, saved conditions, structured
+  choices, draft preservation, and progressive disclosure over repeated free
+  text fields.
 - Do not treat this document as sufficient research. Before filing product, UX,
   or visual-design issues, inspect current competitor pages or credible recent
   writeups and include the relevant source URLs.
@@ -87,6 +92,9 @@ better issues, not to copy competitor features wholesale.
     or made them switch services.
 - Translate research into a Flow Link issue only after identifying a concrete
   target persona pain and a smaller or clearer product move Flow Link can make.
+- For input-heavy flows, ask whether users could complete the same job with
+  fewer required fields, fewer repeated answers, clearer structured choices, or
+  better reuse of existing profile/company/job data.
 - For new functionality, prove that the value outweighs the added choice burden.
   Consider removing, combining, staging, or moving details to a secondary view
   before adding controls to the main flow.
@@ -100,6 +108,9 @@ better issues, not to copy competitor features wholesale.
 - Open at least one current competitor page, not just search result snippets.
 - Capture specific observed behavior: labels, filters, card fields, ordering,
   onboarding steps, support promises, or mobile/desktop layout.
+- Capture how much manual input competitors require or avoid: selectable
+  options, profile reuse, document import, saved searches, suggested text,
+  defaults, or progressive onboarding.
 - Capture at least one user voice for product issues when available, including
   the source URL and whether it is praise, complaint, anxiety, or switching
   reason.
