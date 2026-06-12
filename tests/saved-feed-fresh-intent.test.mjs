@@ -20,3 +20,16 @@ test("saved feed panel and management summary show the preserved fresh-candidate
   assert.match(jobsPageSource, /filters\.candidate === "fresh" && "未対応の候補"/);
   assert.match(preferencesPageSource, /search\.freshOnly && "未対応の候補"/);
 });
+
+test("saving a job feed persists selected remote intent separately from legacy broad remote", () => {
+  assert.match(actionsSource, /const remoteIntent = normalizeRemoteWorkIntent\(toText\(formData\.get\("remote"\)\)\)/);
+  assert.match(actionsSource, /remote:\s*Boolean\(remoteIntent\)/);
+  assert.match(actionsSource, /remoteIntent:\s*remoteIntent \|\| null/);
+  assert.match(jobsPageSource, /name="remote"\s+value=\{filters\.remote\}/);
+});
+
+test("saved feed links restore full remote and hybrid intent values", () => {
+  assert.match(jobsPageSource, /remote:\s*remoteWorkIntentFromSavedFeed\(search\)/);
+  assert.match(preferencesPageSource, /const remoteIntent = remoteWorkIntentFromSavedFeed\(search\)/);
+  assert.match(preferencesPageSource, /\.\.\.\(remoteIntent \? \{ remote: remoteIntent \} : \{\}\)/);
+});

@@ -398,7 +398,7 @@ test("remote saved feed alerts use shared work-location semantics", async () => 
   const aliasDb = alertDb();
   await evaluateSavedFeedJobAlerts(aliasDb, { job: job({ remotePolicy: "在宅可" }) });
   assert.equal(aliasDb.notifications.length, 1);
-  assert.match(aliasDb.matches[0].fitReasons, /保存リモート条件: 在宅可/);
+  assert.match(aliasDb.matches[0].fitReasons, /保存リモート可条件: 在宅可/);
 
   const hybridDb = alertDb();
   await evaluateSavedFeedJobAlerts(hybridDb, { job: job({ remotePolicy: "週1出社" }) });
@@ -413,6 +413,18 @@ test("remote saved feed alerts use shared work-location semantics", async () => 
   await evaluateSavedFeedJobAlerts(onsiteDb, { job: job({ remotePolicy: "常駐必須" }) });
   assert.equal(onsiteDb.notifications.length, 0);
   assert.equal(onsiteDb.matches.length, 0);
+});
+
+test("full remote saved feed alerts do not notify on hybrid-only jobs", async () => {
+  const fullRemoteDb = alertDb({ remoteIntent: "full_remote" });
+  await evaluateSavedFeedJobAlerts(fullRemoteDb, { job: job({ remotePolicy: "フルリモート" }) });
+  assert.equal(fullRemoteDb.notifications.length, 1);
+  assert.match(fullRemoteDb.matches[0].fitReasons, /保存フルリモート中心条件: フルリモート/);
+
+  const hybridDb = alertDb({ remoteIntent: "full_remote" });
+  await evaluateSavedFeedJobAlerts(hybridDb, { job: job({ remotePolicy: "週1出社" }) });
+  assert.equal(hybridDb.notifications.length, 0);
+  assert.equal(hybridDb.matches.length, 0);
 });
 
 test("saved feed alerts use the same normalized light workload semantics as public filtering", async () => {
@@ -658,7 +670,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", targetRate = "80万円", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", freshOnly = false, readiness = "complete", remote = true } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", targetRate = "80万円", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", freshOnly = false, readiness = "complete", remote = true, remoteIntent = null } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -686,6 +698,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
         name: cadence === JobAlertCadence.immediate ? "React即時" : "React日次",
         query,
         remote,
+        remoteIntent,
         acceptingOnly: true,
         freshOnly,
         directReadyOnly,

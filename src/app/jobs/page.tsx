@@ -12,7 +12,13 @@ import {
   monthlyRateBandLabel,
 } from "@/lib/rates";
 import { getFreelancerReadiness } from "@/lib/readiness";
-import { filterRemoteCompatibleJobs } from "@/lib/work-location";
+import {
+  filterJobsByRemoteWorkIntent,
+  normalizeRemoteWorkIntent,
+  remoteWorkIntentFromSavedFeed,
+  remoteWorkIntentLabel,
+  type RemoteWorkIntent,
+} from "@/lib/work-location";
 import {
   LIGHT_WORKLOAD_FILTER_LABEL,
   filterLightWorkloadJobs,
@@ -61,7 +67,7 @@ export default async function JobsPage({
 }) {
   const filters = await searchParams;
   const keyword = filters.q?.trim() ?? "";
-  const remote = filters.remote === "remote";
+  const remoteIntent = normalizeRemoteWorkIntent(filters.remote);
   const accepting = filters.accepting === "open";
   const directReady = filters.directReady === "ready";
   const workload = filters.workload === "light" ? "light" : "";
@@ -70,7 +76,7 @@ export default async function JobsPage({
   const candidate = filters.candidate === "fresh" ? "fresh" : "";
   const activeSearchFilterLabels = [
     keyword && `キーワード: ${keyword}`,
-    remote && "リモート可",
+    remoteIntent && remoteWorkIntentLabel(remoteIntent),
     accepting && "受付中のみ",
     directReady && "条件が揃った案件",
     workload === "light" && LIGHT_WORKLOAD_FILTER_LABEL,
@@ -134,7 +140,7 @@ export default async function JobsPage({
         );
   const keywordFilteredJobs = keyword && workload !== "light" ? jobsResult.data.matches : filterJobsBySearchQuery(jobsResult.data.matches, keyword);
   const workloadFilteredJobs = workload === "light" ? filterLightWorkloadJobs(keywordFilteredJobs) : keywordFilteredJobs;
-  const remoteFilteredJobs = remote ? filterRemoteCompatibleJobs(workloadFilteredJobs) : workloadFilteredJobs;
+  const remoteFilteredJobs = filterJobsByRemoteWorkIntent(workloadFilteredJobs, remoteIntent);
   const rateFilteredJobs = rateThreshold ? remoteFilteredJobs.filter((job) => isMonthlyRateAtLeastText(job.rate, rateThreshold)) : remoteFilteredJobs;
   const jobs = directReady ? rateFilteredJobs.filter((job) => directContractChecklist(job).isReady) : rateFilteredJobs;
   const jobsUnavailable = jobsResult.status === "unavailable";
@@ -227,7 +233,7 @@ export default async function JobsPage({
   const feedbackByJobId = new Map((freelancerProfile?.recommendationFeedback ?? []).map((feedback) => [feedback.jobPostId, feedback]));
   const currentJobsPath = jobsPath({
     q: keyword,
-    remote,
+    remote: remoteIntent,
     accepting,
     directReady,
     fit,
@@ -357,9 +363,11 @@ export default async function JobsPage({
                       <select
                         className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
                         name="remote"
-                        defaultValue={remote ? "remote" : ""}
+                        defaultValue={remoteIntent}
                       >
                         <option value="">すべて</option>
+                        <option value="full_remote">フルリモート中心</option>
+                        <option value="hybrid">一部リモート/ハイブリッド</option>
                         <option value="remote">リモート可</option>
                       </select>
                     </label>
@@ -450,9 +458,11 @@ export default async function JobsPage({
                 <select
                   className="rounded border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-700"
                   name="remote"
-                  defaultValue={remote ? "remote" : ""}
+                  defaultValue={remoteIntent}
                 >
                   <option value="">すべて</option>
+                  <option value="full_remote">フルリモート中心</option>
+                  <option value="hybrid">一部リモート/ハイブリッド</option>
                   <option value="remote">リモート可</option>
                 </select>
               </label>
@@ -570,7 +580,7 @@ export default async function JobsPage({
             <div className="order-2 md:order-none">
               <SavedSearchPanel
                 currentJobsPath={currentJobsPath}
-                filters={{ accepting, candidate, directReady, fit, keyword, rate, remote, sort: sort ?? "direct", workload }}
+                filters={{ accepting, candidate, directReady, fit, keyword, rate, remote: remoteIntent, sort: sort ?? "direct", workload }}
                 savedSearches={freelancerProfile.savedJobSearches}
               />
             </div>
@@ -589,7 +599,7 @@ export default async function JobsPage({
                 activeCandidate={candidate}
                 activeWorkload={workload}
                 keyword={keyword}
-                remote={remote}
+                remote={remoteIntent}
                 desiredOccupation={freelancerProfile.desiredOccupation}
                 skills={parseSkills(freelancerProfile.skills).slice(0, 6)}
               />
@@ -600,7 +610,7 @@ export default async function JobsPage({
               <DiscoveryIntentPanel
                 counts={discoveryIntentCounts}
                 keyword={keyword}
-                remote={remote}
+                remote={remoteIntent}
                 readinessComplete={readiness.isReady}
               />
             </div>
@@ -661,7 +671,7 @@ function SavedSearchPanel({
     fit: string;
     keyword: string;
     rate: string;
-    remote: boolean;
+    remote: RemoteWorkIntent | "";
     sort: string;
     workload: string;
   };
@@ -670,6 +680,7 @@ function SavedSearchPanel({
     name: string;
     query?: string | null;
     remote: boolean;
+    remoteIntent?: string | null;
     acceptingOnly: boolean;
     freshOnly: boolean;
     directReadyOnly: boolean;
@@ -682,7 +693,7 @@ function SavedSearchPanel({
   const defaultName =
     filters.keyword ||
     [
-      filters.remote && "リモート",
+      filters.remote && remoteWorkIntentLabel(filters.remote),
       filters.accepting && "受付中",
       filters.candidate === "fresh" && "未対応の候補",
       filters.directReady && "条件確認済み",
@@ -712,7 +723,7 @@ function SavedSearchPanel({
         <form action={saveCurrentJobSearch} className="grid gap-3">
           <input type="hidden" name="returnTo" value={currentJobsPath} />
           <input type="hidden" name="q" value={filters.keyword} />
-          <input type="hidden" name="remote" value={filters.remote ? "remote" : ""} />
+          <input type="hidden" name="remote" value={filters.remote} />
           <input type="hidden" name="accepting" value={filters.accepting ? "open" : ""} />
           <input type="hidden" name="candidate" value={filters.candidate} />
           <input type="hidden" name="directReady" value={filters.directReady ? "ready" : ""} />
@@ -758,7 +769,7 @@ function DiscoveryIntentPanel({
   counts: DiscoveryIntentCounts;
   keyword: string;
   readinessComplete: boolean;
-  remote: boolean;
+  remote: RemoteWorkIntent | "";
 }) {
   const intents = [
     readinessComplete
@@ -861,7 +872,7 @@ function ProfileDiscoveryShortcuts({
   activeWorkload?: string;
   desiredOccupation?: string | null;
   keyword: string;
-  remote: boolean;
+  remote: RemoteWorkIntent | "";
   skills: string[];
 }) {
   const shortcuts = [
@@ -887,8 +898,8 @@ function ProfileDiscoveryShortcuts({
     },
     {
       label: "リモート受付中",
-      href: jobsHref({ q: keyword, remote: true, accepting: true, sort: "direct", candidate: activeCandidate, workload: activeWorkload, rate: activeRate }),
-      active: remote && !activeFit && !activeCandidate && !activeWorkload && !activeRate,
+      href: jobsHref({ q: keyword, remote: "remote", accepting: true, sort: "direct", candidate: activeCandidate, workload: activeWorkload, rate: activeRate }),
+      active: remote === "remote" && !activeFit && !activeCandidate && !activeWorkload && !activeRate,
     },
     ...(desiredOccupation
       ? [
@@ -1376,7 +1387,7 @@ function jobsHref({
   rate,
 }: {
   q?: string;
-  remote?: boolean;
+  remote?: RemoteWorkIntent | "";
   accepting?: boolean;
   directReady?: boolean;
   fit?: string;
@@ -1389,7 +1400,7 @@ function jobsHref({
     pathname: "/jobs",
     query: {
       ...(q ? { q } : {}),
-      ...(remote ? { remote: "remote" } : {}),
+      ...(remote ? { remote } : {}),
       ...(accepting ? { accepting: "open" } : {}),
       ...(directReady ? { directReady: "ready" } : {}),
       ...(fit ? { fit } : {}),
@@ -1404,6 +1415,7 @@ function jobsHref({
 function savedSearchHref(search: {
   query?: string | null;
   remote: boolean;
+  remoteIntent?: string | null;
   acceptingOnly: boolean;
   freshOnly?: boolean | null;
   directReadyOnly: boolean;
@@ -1414,7 +1426,7 @@ function savedSearchHref(search: {
 }) {
   return jobsHref({
     q: search.query ?? "",
-    remote: search.remote,
+    remote: remoteWorkIntentFromSavedFeed(search),
     accepting: search.acceptingOnly,
     candidate: search.freshOnly ? "fresh" : "",
     directReady: search.directReadyOnly,

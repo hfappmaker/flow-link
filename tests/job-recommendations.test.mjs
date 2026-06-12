@@ -403,6 +403,13 @@ test("work-location preference reasons use normalized remote semantics", () => {
   }, 6);
   assert.equal(remoteNegativeReasons.find((reason) => reason.label === "働き方ミスマッチ")?.tone, "warn");
 
+  const remoteHybridReasons = visiblePreferenceReasons({
+    ...job({ remotePolicy: "週1出社" }),
+    workPreference: remotePreference,
+  }, 6);
+  assert.equal(remoteHybridReasons.some((reason) => reason.label === "働き方に近い"), false);
+  assert.equal(remoteHybridReasons.find((reason) => reason.label === "働き方ミスマッチ")?.tone, "warn");
+
   const hybridReasons = visiblePreferenceReasons({
     ...job({ remotePolicy: "週1出社" }),
     workPreference: hybridPreference,

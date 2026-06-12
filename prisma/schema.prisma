@@ -247,6 +247,7 @@ model SavedJobSearch {
   name                String
   query               String?
   remote              Boolean           @default(false)
+  remoteIntent        String?           @map("remote_intent")
   acceptingOnly       Boolean           @default(true) @map("accepting_only")
   freshOnly           Boolean           @default(false) @map("fresh_only")
   directReadyOnly     Boolean           @default(false) @map("direct_ready_only")

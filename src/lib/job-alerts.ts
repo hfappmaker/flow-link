@@ -10,7 +10,7 @@ import { buildJobRecommendation, type JobRecommendationJob } from "./job-recomme
 import { jobMatchesSearchQuery } from "./job-search.ts";
 import { isMonthlyRateAtLeastText, monthlyRateBandFromFilter, monthlyRateBandLabel } from "./rates.ts";
 import { getFreelancerReadiness, type FreelancerReadinessProfile } from "./readiness.ts";
-import { isRemoteCompatibleWorkLocation } from "./work-location.ts";
+import { matchesRemoteWorkIntent, remoteWorkIntentFromSavedFeed, remoteWorkIntentLabel } from "./work-location.ts";
 import { isLightWorkloadText, LIGHT_WORKLOAD_FILTER_LABEL } from "./workload.ts";
 import type { WorkPreferenceInput } from "./utils.ts";
 
@@ -53,6 +53,7 @@ type SavedFeed = {
   name: string;
   query?: string | null;
   remote: boolean;
+  remoteIntent?: string | null;
   acceptingOnly: boolean;
   freshOnly?: boolean | null;
   directReadyOnly: boolean;
@@ -456,7 +457,8 @@ function savedFeedMatchesRecommendation(
   const job = recommendation.job;
   if (feed.acceptingOnly && !recommendation.isOpen) return false;
   if (feed.freshOnly && !recommendation.isFreshCandidate) return false;
-  if (feed.remote && !isRemoteCompatibleWorkLocation(job)) return false;
+  const remoteIntent = remoteWorkIntentFromSavedFeed(feed);
+  if (remoteIntent && !matchesRemoteWorkIntent(job, remoteIntent)) return false;
   if (feed.query && !jobMatchesSearchQuery(feed.query, job)) return false;
   if (feed.directReadyOnly && recommendation.contractReadinessPercent < 100) return false;
   if (feed.fit === "skill" && !recommendation.isSkillMatched) return false;
@@ -504,9 +506,10 @@ function alertFitReasons(
   if (feed.fit === "ready" && freelancerReady && recommendation.isReadyToApply) {
     reasons.push("応募準備と案件条件がそろっています");
   }
-  if (feed.remote) {
+  const remoteIntent = remoteWorkIntentFromSavedFeed(feed);
+  if (remoteIntent) {
     const location = [job.remotePolicy, job.location].filter(Boolean).join(" / ");
-    if (location) reasons.push(`保存リモート条件: ${location}`);
+    if (location) reasons.push(`保存${remoteWorkIntentLabel(remoteIntent)}条件: ${location}`);
   }
   if (exactPositiveFeedback) reasons.push("保存フィードバック: 良さそう");
   if (trustWarning) reasons.push(`確認事項あり: ${trustWarning}`);

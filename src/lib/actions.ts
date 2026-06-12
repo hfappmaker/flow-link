@@ -36,6 +36,7 @@ import { monthlyRateBandFilterValue } from "@/lib/rates";
 import { getApplicationReadiness } from "@/lib/readiness";
 import { loginErrorUrl } from "@/lib/registration-intent";
 import { toOptionalText, toText } from "@/lib/utils";
+import { normalizeRemoteWorkIntent } from "@/lib/work-location";
 import {
   applyToJobWorkflow,
   createCompanySafetyReportWorkflow,
@@ -250,6 +251,7 @@ export async function saveCurrentJobSearch(formData: FormData) {
   const { profile } = await currentFreelancer();
   const name = toText(formData.get("name")) || "保存した仕事フィード";
   const returnTo = safeReturnPath(toText(formData.get("returnTo")) || "/jobs");
+  const remoteIntent = normalizeRemoteWorkIntent(toText(formData.get("remote")));
   if (name.length > 80) {
     throw new Error("保存フィード名は80文字以内で入力してください。");
   }
@@ -259,7 +261,8 @@ export async function saveCurrentJobSearch(formData: FormData) {
       freelancerProfileId: profile.id,
       name,
       query: toOptionalText(formData.get("q")),
-      remote: formData.get("remote") === "remote",
+      remote: Boolean(remoteIntent),
+      remoteIntent: remoteIntent || null,
       acceptingOnly: formData.get("accepting") === "open",
       freshOnly: formData.get("candidate") === "fresh",
       directReadyOnly: formData.get("directReady") === "ready",
