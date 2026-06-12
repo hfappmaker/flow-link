@@ -187,6 +187,52 @@ test("company applicant search matches public work-preference condition labels",
   }
 });
 
+test("company applicant search matches public work-preference status labels", () => {
+  const cases = [
+    { query: "募集中", status: "active" },
+    { query: "積極的に探している", status: "active" },
+    { query: "よい案件があれば", status: "passive" },
+    { query: "情報収集", status: "passive" },
+    { query: "停止中", status: "inactive" },
+    { query: "積極募集外", status: "inactive" },
+  ];
+
+  for (const { query, status } of cases) {
+    const matchingApplication = application({
+      id: `work-preference-status-match-${status}-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      desiredRate: "",
+      availability: "",
+      availableFrom: "",
+      remotePreference: "",
+      preferredLocation: "",
+      workPreference: { status },
+    });
+    const nonMatchingApplication = application({
+      id: `work-preference-status-miss-${status}-${query}`,
+      proposedStart: "",
+      rateExpectation: "",
+      workloadExpectation: "",
+      desiredRate: "",
+      availability: "",
+      availableFrom: "",
+      remotePreference: "",
+      preferredLocation: "",
+      workPreference: { status: status === "active" ? "inactive" : "active" },
+    });
+
+    assert.equal(applicantMatchesSearchQuery(query, matchingApplication), true, `${query} should match ${status} status`);
+    assert.equal(applicantMatchesSearchQuery(query, nonMatchingApplication), false, `${query} should not match other statuses`);
+    assert.deepEqual(
+      filterApplicantsBySearchQuery([matchingApplication, nonMatchingApplication], query).map((item) => item.id),
+      [matchingApplication.id],
+      `${query} should keep only the matching work-preference status`,
+    );
+  }
+});
+
 test("company applicant search does not match avoided work-preference conditions", () => {
   const avoidedConditionOnlyApplication = application({
     proposalMessage: "Queue review text.",
@@ -254,6 +300,30 @@ test("company applicant keyword candidate where includes safe profile and work-p
   }
 
   assert.match(JSON.stringify(applicantKeywordCandidateWhere("リモート中心")), /"locationMode".*"remote"/);
+});
+
+test("company applicant keyword candidate where maps public work-preference status labels", () => {
+  const cases = [
+    { query: "募集中", status: "active", otherStatuses: ["passive", "inactive"] },
+    { query: "積極的に探している", status: "active", otherStatuses: ["passive", "inactive"] },
+    { query: "よい案件があれば", status: "passive", otherStatuses: ["active", "inactive"] },
+    { query: "情報収集", status: "passive", otherStatuses: ["active", "inactive"] },
+    { query: "停止中", status: "inactive", otherStatuses: ["active", "passive"] },
+    { query: "積極募集外", status: "inactive", otherStatuses: ["active", "passive"] },
+  ];
+
+  for (const { query, status, otherStatuses } of cases) {
+    const whereJson = JSON.stringify(applicantKeywordCandidateWhere(query));
+    assert.match(whereJson, new RegExp(`"status"\\s*:\\s*\\{\\s*"equals"\\s*:\\s*"${status}"`), `${query} should map to ${status}`);
+
+    for (const otherStatus of otherStatuses) {
+      assert.doesNotMatch(
+        whereJson,
+        new RegExp(`"status"\\s*:\\s*\\{\\s*"equals"\\s*:\\s*"${otherStatus}"`),
+        `${query} should not map to ${otherStatus}`,
+      );
+    }
+  }
 });
 
 test("company applicant search excludes private freelancer work-preference notes", () => {

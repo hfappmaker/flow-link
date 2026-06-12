@@ -72,6 +72,7 @@ export function applicantKeywordText(application: SearchableApplicant) {
     application.freelancerProfile.careerHistory?.certifications,
     application.freelancerProfile.careerHistory?.education,
     application.freelancerProfile.workPreference?.status,
+    ...workPreferenceStatusKeywordText(application.freelancerProfile.workPreference?.status),
     application.freelancerProfile.workPreference?.targetRole,
     application.freelancerProfile.workPreference?.preferredSkills,
     application.freelancerProfile.workPreference?.targetRate,
@@ -136,10 +137,14 @@ export function applicantKeywordCandidateWhere(query: string | null | undefined)
 
 function workPreferenceStatusCandidateWhere(term: string): Prisma.JobApplicationWhereInput[] {
   return WORK_PREFERENCE_STATUS_SEARCH_LABELS
-    .filter(({ value, labels }) => searchableLabelMatchesTerm(term, [value, ...labels]))
+    .filter(({ value }) => searchableLabelMatchesTerm(term, workPreferenceStatusKeywordText(value)))
     .map(({ value }) => ({
       freelancerProfile: { workPreference: { is: { status: { equals: value } } } },
     }));
+}
+
+function workPreferenceStatusKeywordText(status: string | null | undefined) {
+  return WORK_PREFERENCE_STATUS_SEARCH_LABELS.find(({ value }) => value === status)?.labels ?? [];
 }
 
 function workLocationModeKeywordText(mode: string | null | undefined) {
