@@ -77,6 +77,15 @@ export type FreelancerReadinessProfile = {
   }>;
 };
 
+export type CareerHistoryEvidence = {
+  summary?: string | null;
+  workExperiences?: string | null;
+} | null | undefined;
+
+export function hasMeaningfulCareerHistory(careerHistory: CareerHistoryEvidence) {
+  return Boolean(careerHistory?.summary?.trim() || careerHistory?.workExperiences?.trim());
+}
+
 export type ApplicationReadinessInput = {
   proposalMessage?: string | null;
   proposedStart?: string | null;
@@ -145,7 +154,7 @@ export function getFreelancerReadiness(profile: FreelancerReadinessProfile | nul
       label: "職務経歴フォーム",
       href: "/freelancer/career",
       severity: "required",
-      done: Boolean(profile?.careerHistory?.summary?.trim() || profile?.careerHistory?.workExperiences?.trim()),
+      done: hasMeaningfulCareerHistory(profile?.careerHistory),
     },
     {
       key: "resume-pdf",

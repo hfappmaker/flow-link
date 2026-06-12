@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { clsx, type ClassValue } from "clsx";
 import { parseApplicationExpectationSource } from "./application-expectations.ts";
 import { rateFitTone } from "./rates.ts";
-import { getJobPublishingReadiness } from "./readiness.ts";
+import { getJobPublishingReadiness, hasMeaningfulCareerHistory, type CareerHistoryEvidence } from "./readiness.ts";
 import { normalizeWorkLocation } from "./work-location.ts";
 import { workloadFitTone } from "./workload.ts";
 
@@ -237,7 +237,7 @@ type ApplicationReviewInput = {
       targetRate?: string | null;
       workload?: string | null;
     } | null;
-    careerHistory?: unknown | null;
+    careerHistory?: CareerHistoryEvidence;
     documents?: unknown[] | null;
   };
   jobPost: {
@@ -254,10 +254,11 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
   const missingSkillCount = Math.max(0, requiredSkills.length - requiredSkillMatches.length);
   const conditionTerms = applicationConditionTerms(application);
   const conditionFit = applicationConditionFit(application);
+  const hasCareerHistory = hasMeaningfulCareerHistory(application.freelancerProfile.careerHistory);
   const reviewSignals = [
     { done: requiredSkills.length === 0 || requiredSkillMatches.length > 0, nextCheck: "必須スキルの補足" },
     { done: (application.freelancerProfile.documents?.length ?? 0) >= 2, nextCheck: "PDF書類" },
-    { done: Boolean(application.freelancerProfile.careerHistory), nextCheck: "職務経歴" },
+    { done: hasCareerHistory, nextCheck: "職務経歴" },
     { done: Boolean(application.proposalMessage), nextCheck: "応募時の提案" },
     {
       done: Boolean(
@@ -284,7 +285,7 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
     requiredSkillMatches,
     matchPercent,
     interviewReadinessPercent,
-    isInterviewReady: !hasConditionBlocker && interviewReadinessPercent >= 80 && application.status === "applied",
+    isInterviewReady: !hasConditionBlocker && hasCareerHistory && interviewReadinessPercent >= 80 && application.status === "applied",
     nextChecks: reviewSignals.filter((signal) => !signal.done).map((signal) => signal.nextCheck),
     reviewQuestions: [
       ...(missingSkillCount > 0
@@ -319,7 +320,7 @@ export function buildApplicationReview(application: ApplicationReviewInput) {
       ...((application.freelancerProfile.documents?.length ?? 0) < 2
         ? ["履歴書・職務経歴書の不足分を面談前に共有できるか確認する"]
         : []),
-      ...(!application.freelancerProfile.careerHistory
+      ...(!hasCareerHistory
         ? ["直近プロジェクトの役割、担当範囲、成果を確認する"]
         : []),
       ...(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability

@@ -8,7 +8,7 @@ import {
   postInterviewOutcomeLabels,
 } from "@/lib/post-interview-outcomes";
 import { prisma } from "@/lib/prisma";
-import { getFreelancerReadiness } from "@/lib/readiness";
+import { getFreelancerReadiness, hasMeaningfulCareerHistory } from "@/lib/readiness";
 import { getFreelancerReputationSummary } from "@/lib/reputation";
 import {
   applicationStatusLabel,
@@ -60,6 +60,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const hasStartSignal = Boolean(application.proposedStart || application.freelancerProfile.availableFrom || application.freelancerProfile.availability);
   const hasRateSignal = !["missing", "mismatch", "unconfirmed"].includes(conditionFit.rate.readiness);
   const hasWorkloadSignal = !["missing", "mismatch", "unconfirmed"].includes(conditionFit.workload.readiness);
+  const hasCareerHistoryEvidence = hasMeaningfulCareerHistory(application.freelancerProfile.careerHistory);
   const interviewDecisionItems = [
     {
       label: "必須スキル",
@@ -94,7 +95,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const applicantTrustItems = buildApplicantTrustItems({
     readinessPercent: readiness.percent,
     documentCount: application.freelancerProfile.documents.length,
-    hasCareerHistory: Boolean(application.freelancerProfile.careerHistory),
+    hasCareerHistory: hasCareerHistoryEvidence,
     hasProposal: Boolean(application.proposalMessage),
     proposedStart: application.proposedStart,
     workloadExpectation: application.workloadExpectation,
@@ -132,7 +133,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     matchedSkills: requiredSkillMatches,
     skillGaps: requiredSkillGaps,
     readinessPercent: readiness.percent,
-    hasCareerHistory: Boolean(application.freelancerProfile.careerHistory),
+    hasCareerHistory: hasCareerHistoryEvidence,
     documentCount: application.freelancerProfile.documents.length,
     hasProposal: Boolean(application.proposalMessage),
     proposedStart: application.proposedStart,

@@ -6,6 +6,7 @@ const {
   getApplicationReadiness,
   getFreelancerReadiness,
   getJobPublishingReadiness,
+  hasMeaningfulCareerHistory,
   shouldHoldJobAsDraftForPublishing,
 } = await import("../src/lib/readiness.ts");
 
@@ -48,6 +49,20 @@ test("freelancer can browse before apply readiness is complete", () => {
     readiness.missingRequired.map((item) => item.label),
     ["希望職種", "スキル", "稼働条件・開始時期", "職務経歴フォーム", "履歴書PDF", "職務経歴書PDF"],
   );
+});
+
+test("meaningful career-history readiness requires summary or work experience text", () => {
+  assert.equal(hasMeaningfulCareerHistory(null), false);
+  assert.equal(hasMeaningfulCareerHistory({}), false);
+  assert.equal(hasMeaningfulCareerHistory({ summary: "   ", workExperiences: "" }), false);
+  assert.equal(hasMeaningfulCareerHistory({ summary: "SaaS platform lead" }), true);
+  assert.equal(hasMeaningfulCareerHistory({ workExperiences: "Backend API migration" }), true);
+
+  const blankCareer = getFreelancerReadiness({
+    ...readyProfile,
+    careerHistory: { summary: "   ", workExperiences: "" },
+  });
+  assert.equal(blankCareer.items.find((item) => item.key === "career-history")?.done, false);
 });
 
 test("application readiness requires profile evidence and next-action fields", () => {
