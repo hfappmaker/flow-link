@@ -39,6 +39,25 @@ test("monthly rate band filters use lower-bound policy and exclude non-monthly t
   assert.equal(isMonthlyRateAtLeastText("高単価", 60), false);
 });
 
+test("hourly rate normalization preserves common comparable hourly bounds without monthly conversion", () => {
+  const cases = [
+    ["時給7000円", [7000, 7000]],
+    ["時給7000円から", [7000, 7000]],
+    ["7,000円/1h", [7000, 7000]],
+    ["(6,000~7,000 円/1h)", [6000, 7000]],
+    ["8,000円/h", [8000, 8000]],
+    ["hourly 9000 yen", [9000, 9000]],
+  ];
+
+  for (const [value, bounds] of cases) {
+    const rate = normalizeRateText(value);
+    assert.equal(rate.kind, "hourly", `${value} should be hourly`);
+    assert.equal(rate.lowerMonthlyManYen, null, `${value} should not imply monthly lower bound`);
+    assert.equal(rate.upperMonthlyManYen, null, `${value} should not imply monthly upper bound`);
+    assert.deepEqual([rate.lowerHourlyYen, rate.upperHourlyYen], bounds);
+  }
+});
+
 test("monthly rate filter values map to supported saved-search bands", () => {
   assert.equal(monthlyRateBandFromFilter("60"), 60);
   assert.equal(monthlyRateBandFromFilter("80"), 80);
@@ -54,6 +73,15 @@ test("rate fit compares normalized monthly bounds for recommendation reasons", (
   assert.equal(rateFitTone("月80万円以上", "75〜95万円"), "neutral");
   assert.equal(rateFitTone("月80万円以上", "70万円"), "warn");
   assert.equal(rateFitTone("時給7000円から", "月額120万円"), "neutral");
+});
+
+test("rate fit compares hourly bounds only against hourly job rates", () => {
+  assert.equal(rateFitTone("時給7000円から", "時給8000円"), "good");
+  assert.equal(rateFitTone("時給7000円から", "(7,000〜8,000 円/1h)"), "good");
+  assert.equal(rateFitTone("時給7000円から", "(6,000〜7,000 円/1h)"), "neutral");
+  assert.equal(rateFitTone("時給7000円から", "(5,000〜6,000 円/1h)"), "warn");
+  assert.equal(rateFitTone("月80万円以上", "時給8000円"), "neutral");
+  assert.equal(rateFitTone("時給7000円から", "日給5万円"), "neutral");
 });
 
 function rateBounds(value) {

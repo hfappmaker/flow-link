@@ -5,6 +5,8 @@ export type NormalizedRate = {
   kind: "monthly" | "hourly" | "daily" | "unknown";
   lowerMonthlyManYen: number | null;
   upperMonthlyManYen: number | null;
+  lowerHourlyYen: number | null;
+  upperHourlyYen: number | null;
   policy: "monthly-lower-bound" | "non-monthly-excluded" | "unparseable";
 };
 
@@ -16,10 +18,13 @@ export function normalizeRateText(value: string | null | undefined): NormalizedR
 
   const kind = rateKind(text);
   if (kind !== "monthly") {
+    const hourlyRange = kind === "hourly" ? parseHourlyRange(text) : null;
     return {
       kind,
       lowerMonthlyManYen: null,
       upperMonthlyManYen: null,
+      lowerHourlyYen: hourlyRange?.lower ?? null,
+      upperHourlyYen: hourlyRange?.upper ?? null,
       policy: "non-monthly-excluded",
     };
   }
@@ -30,6 +35,8 @@ export function normalizeRateText(value: string | null | undefined): NormalizedR
       kind: "monthly",
       lowerMonthlyManYen: range.lower,
       upperMonthlyManYen: range.upper,
+      lowerHourlyYen: null,
+      upperHourlyYen: null,
       policy: "monthly-lower-bound",
     };
   }
@@ -40,6 +47,8 @@ export function normalizeRateText(value: string | null | undefined): NormalizedR
       kind: "monthly",
       lowerMonthlyManYen: amount,
       upperMonthlyManYen: amount,
+      lowerHourlyYen: null,
+      upperHourlyYen: null,
       policy: "monthly-lower-bound",
     };
   }
@@ -79,6 +88,11 @@ export function rateFitTone(
 ): "good" | "neutral" | "warn" {
   const target = normalizeRateText(targetRate);
   const job = normalizeRateText(jobRate);
+  if (target.kind === "hourly" && job.kind === "hourly" && target.lowerHourlyYen !== null && job.lowerHourlyYen !== null) {
+    if (job.lowerHourlyYen >= target.lowerHourlyYen) return "good";
+    if (job.upperHourlyYen !== null && job.upperHourlyYen < target.lowerHourlyYen) return "warn";
+    return "neutral";
+  }
   if (target.kind !== "monthly" || job.kind !== "monthly" || target.lowerMonthlyManYen === null || job.lowerMonthlyManYen === null) {
     return "neutral";
   }
@@ -97,7 +111,7 @@ function normalizeText(value: string | null | undefined) {
 
 function rateKind(text: string): NormalizedRate["kind"] {
   const hasMonthly = /(月額|月単価|月給|月[\/あたり]?|\/月|毎月)/i.test(text);
-  if (!hasMonthly && /(時給|時間単価|時間あたり|\/h|\/hour|hourly)/i.test(text)) return "hourly";
+  if (!hasMonthly && /(時給|時間単価|時間あたり|\/(?:1)?h|\/hour|hourly)/i.test(text)) return "hourly";
   if (!hasMonthly && /(日給|日額|日単価|日あたり|\/日|daily)/i.test(text)) return "daily";
   if (/(万円|円|¥|￥)/.test(text) || hasMonthly) return "monthly";
   return "unknown";
@@ -117,6 +131,36 @@ function parseRange(text: string) {
   return lower <= upper ? { lower, upper } : { lower: upper, upper: lower };
 }
 
+function parseHourlyRange(text: string) {
+  const range = parseYenRange(text);
+  if (range) return range;
+  const amount = parseHourlySingleAmount(text);
+  return amount === null ? null : { lower: amount, upper: amount };
+}
+
+function parseYenRange(text: string) {
+  const rangePattern = new RegExp(
+    `(¥|￥)?(\\d[\\d,]*(?:\\.\\d+)?)(?:円|yen)?${RANGE_SEPARATOR}(¥|￥)?(\\d[\\d,]*(?:\\.\\d+)?)(?:円|yen)?`,
+    "i",
+  );
+  const match = text.match(rangePattern);
+  if (!match) return null;
+
+  const lower = amountToYen(match[2]);
+  const upper = amountToYen(match[4]);
+  if (lower === null || upper === null) return null;
+  return lower <= upper ? { lower, upper } : { lower: upper, upper: lower };
+}
+
+function parseHourlySingleAmount(text: string) {
+  const tokenPattern = /(¥|￥)?(\d[\d,]*(?:\.\d+)?)(?:円|yen)?/gi;
+  for (const match of text.matchAll(tokenPattern)) {
+    const amount = amountToYen(match[2]);
+    if (amount !== null) return amount;
+  }
+  return null;
+}
+
 function parseSingleAmount(text: string) {
   const tokenPattern = /(¥|￥)?(\d[\d,]*(?:\.\d+)?)(万)?(円|yen)?/gi;
   for (const match of text.matchAll(tokenPattern)) {
@@ -131,6 +175,13 @@ function parseSingleAmount(text: string) {
     if (amount !== null) return amount;
   }
   return null;
+}
+
+function amountToYen(rawValue: string | undefined) {
+  if (!rawValue) return null;
+  const value = Number(rawValue.replace(/,/g, ""));
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
 }
 
 function amountToManYen(
@@ -155,6 +206,8 @@ function unknownRate(policy: "non-monthly-excluded" | "unparseable"): Normalized
     kind: "unknown",
     lowerMonthlyManYen: null,
     upperMonthlyManYen: null,
+    lowerHourlyYen: null,
+    upperHourlyYen: null,
     policy,
   };
 }

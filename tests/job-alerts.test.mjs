@@ -376,6 +376,14 @@ test("saved feed alerts use selected monthly rate bands with normalized lower bo
   assert.equal(hourlyDb.notifications.length, 0);
 });
 
+test("saved feed alerts can explain hourly work-preference rate fit", async () => {
+  const db = alertDb({ fit: "", query: "", remote: false, skills: "", targetRate: "時給7000円から" });
+  await evaluateSavedFeedJobAlerts(db, { job: job({ rate: "時給8000円" }) });
+
+  assert.equal(db.notifications.length, 1);
+  assert.match(db.matches[0].fitReasons, /単価条件に近い/);
+});
+
 test("legacy high-rate saved feed alerts continue to mean monthly 80万円以上", async () => {
   const highDb = alertDb({ rate: "high" });
   await evaluateSavedFeedJobAlerts(highDb, { job: job({ rate: "月額120万円" }) });
@@ -650,7 +658,7 @@ function job(overrides = {}) {
   };
 }
 
-function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", freshOnly = false, readiness = "complete", remote = true } = {}) {
+function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], appliedJobIds = [], feedback = [], rate = "", workload = "", query = "React", skills = "React, TypeScript", targetRate = "80万円", directReadyOnly = false, excludedConditions = null, failNotifications = false, fit = "skill", freshOnly = false, readiness = "complete", remote = true } = {}) {
   const state = {
     dispatches: [],
     matches: [],
@@ -666,7 +674,7 @@ function alertDb({ cadence = JobAlertCadence.immediate, savedJobIds = [], applie
       status: "active",
       targetRole: "React",
       preferredSkills: "React, TypeScript",
-      targetRate: "80万円",
+      targetRate,
       workload: "週3日",
       locationMode: "remote",
       excludedConditions,
