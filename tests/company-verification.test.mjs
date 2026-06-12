@@ -52,3 +52,14 @@ test("company profile payment verification guidance names the gated action and f
   assert.match(pageSource, /missing-payment-policy-evidence/);
   assert.match(actionsSource, /redirect\("\/company\/profile\?verification=missing-payment-policy-evidence"\)/);
 });
+
+test("company profile trust preview uses concrete freelancer-visible status instead of score copy", async () => {
+  const pageSource = await readFile("src/app/company/profile/page.tsx", "utf8");
+
+  assert.doesNotMatch(pageSource, /信頼スコア/);
+  for (const label of ["Flow Link確認済み", "確認リクエスト中", "自己申告", "未記載", "更新確認が必要", "再提出が必要"]) {
+    assert.match(pageSource, new RegExp(label));
+  }
+  assert.match(pageSource, /次の対応:/);
+  assert.match(pageSource, /支払い保証や法務確認ではありません/);
+});
